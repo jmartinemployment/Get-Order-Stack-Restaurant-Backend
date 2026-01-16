@@ -1,5 +1,5 @@
 {
-  "name": "get-order-stack-restaurant-site-platform",
+  "name": "get-order-stack-restaurant-api",
   "version": "1.0.0",
   "description": "GetOrderStack Restaurant API Platform",
   "main": "dist/main.js",
