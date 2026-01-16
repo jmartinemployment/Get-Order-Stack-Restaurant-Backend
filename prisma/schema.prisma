@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Restaurant {
+  id               String   @id @default(uuid())
+  slug             String   @unique
+  name             String
+  description      String?
+  logo             String?
+  phone            String?
+  email            String?
+  address          String?
+  city             String?
+  state            String?
+  zip              String?
+  cuisineType      String?  @map("cuisine_type")
+  tier             Int      @default(1)
+  monthlyRevenue   Decimal? @db.Decimal(10, 2) @map("monthly_revenue")
+  deliveryPercent  Int?     @map("delivery_percentage")
+  platformsUsed    String[] @default([]) @map("platforms_used")
+  posSystem        String?  @map("pos_system")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  menuCategories MenuCategory[]
+  menuItems      MenuItem[]
+  customers      Customer[]
+  orders         Order[]
+  reservations   Reservation[]
+
+  @@map("restaurants")
+}
+
+model MenuCategory {
+  id           String   @id @default(uuid())
+  restaurantId String   @map("restaurant_id")
+  name         String
+  description  String?
+  displayOrder Int      @default(0) @map("display_order")
+  image        String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItems  MenuItem[]
+
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id              String   @id @default(uuid())
+  restaurantId    String   @map("restaurant_id")
+  categoryId      String   @map("category_id")
+  name            String
+  description     String
+  price           Decimal  @db.Decimal(10, 2)
+  cost            Decimal? @db.Decimal(10, 2)
+  image           String?
+  available       Boolean  @default(true)
+  eightySixed     Boolean  @default(false) @map("eighty_sixed")
+  eightySixReason String?  @map("eighty_six_reason")
+  popular         Boolean  @default(false)
+  dietary         String[] @default([])
+  displayOrder    Int      @default(0) @map("display_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  category   MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@map("menu_items")
+}
+
+model Customer {
+  id              String    @id @default(uuid())
+  restaurantId    String    @map("restaurant_id")
+  firstName       String?   @map("first_name")
+  lastName        String?   @map("last_name")
+  email           String?
+  phone           String?
+  totalOrders     Int       @default(0) @map("total_orders")
+  totalSpent      Decimal   @default(0) @db.Decimal(10, 2) @map("total_spent")
+  avgOrderValue   Decimal?  @db.Decimal(10, 2) @map("average_order_value")
+  lastOrderDate   DateTime? @map("last_order_date")
+  loyaltyPoints   Int       @default(0) @map("loyalty_points")
+  tags            String[]  @default([])
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders       Order[]
+  reservations Reservation[]
+
+  @@map("customers")
+}
+
+model Order {
+  id                    String    @id @default(uuid())
+  restaurantId          String    @map("restaurant_id")
+  customerId            String?   @map("customer_id")
+  orderNumber           String    @unique @map("order_number")
+  orderType             String    @map("order_type") // pickup, delivery, dine-in
+  status                String    @default("pending") // pending, confirmed, preparing, ready, completed, cancelled
+  subtotal              Decimal   @db.Decimal(10, 2)
+  tax                   Decimal   @db.Decimal(10, 2)
+  tip                   Decimal   @default(0) @db.Decimal(10, 2)
+  total                 Decimal   @db.Decimal(10, 2)
+  paymentMethod         String?   @map("payment_method")
+  paymentStatus         String    @default("pending") @map("payment_status")
+  stripePaymentIntentId String?   @map("stripe_payment_intent_id")
+  specialInstructions   String?   @map("special_instructions")
+  scheduledTime         DateTime? @map("scheduled_time")
+  completedAt           DateTime? @map("completed_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  restaurant Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  customer   Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  orderItems OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id                  String   @id @default(uuid())
+  orderId             String   @map("order_id")
+  menuItemId          String?  @map("menu_item_id")
+  menuItemName        String   @map("menu_item_name")
+  quantity            Int
+  unitPrice           Decimal  @db.Decimal(10, 2) @map("unit_price")
+  totalPrice          Decimal  @db.Decimal(10, 2) @map("total_price")
+  specialInstructions String?  @map("special_instructions")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+
+  @@map("order_items")
+}
+
+model Reservation {
+  id               String    @id @default(uuid())
+  restaurantId     String    @map("restaurant_id")
+  customerId       String?   @map("customer_id")
+  customerName     String    @map("customer_name")
+  customerPhone    String    @map("customer_phone")
+  customerEmail    String?   @map("customer_email")
+  partySize        Int       @map("party_size")
+  reservationTime  DateTime  @map("reservation_time")
+  tableNumber      String?   @map("table_number")
+  status           String    @default("pending") // pending, confirmed, seated, completed, no-show, cancelled
+  specialRequests  String?   @map("special_requests")
+  confirmationSent Boolean   @default(false) @map("confirmation_sent")
+  reminderSent     Boolean   @default(false) @map("reminder_sent")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  customer   Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@map("reservations")
+}
