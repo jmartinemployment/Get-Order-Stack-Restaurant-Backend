@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Restaurant {
@@ -25,29 +26,37 @@ model Restaurant {
   deliveryPercent  Int?     @map("delivery_percentage")
   platformsUsed    String[] @default([]) @map("platforms_used")
   posSystem        String?  @map("pos_system")
+  taxRate          Decimal  @default(0) @db.Decimal(5, 4) @map("tax_rate")
+  deliveryEnabled  Boolean  @default(true) @map("delivery_enabled")
+  pickupEnabled    Boolean  @default(true) @map("pickup_enabled")
+  dineInEnabled    Boolean  @default(true) @map("dine_in_enabled")
   active           Boolean  @default(true)
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
-  menuCategories MenuCategory[]
-  menuItems      MenuItem[]
-  customers      Customer[]
-  orders         Order[]
-  reservations   Reservation[]
+  menuCategories  MenuCategory[]
+  menuItems       MenuItem[]
+  modifierGroups  ModifierGroup[]
+  customers       Customer[]
+  orders          Order[]
+  reservations    Reservation[]
+  tables          RestaurantTable[]
 
   @@map("restaurants")
 }
 
 model MenuCategory {
-  id           String   @id @default(uuid())
-  restaurantId String   @map("restaurant_id")
-  name         String
-  description  String?
-  displayOrder Int      @default(0) @map("display_order")
-  image        String?
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(uuid())
+  restaurantId  String   @map("restaurant_id")
+  name          String
+  nameEn        String?  @map("name_en")
+  description   String?
+  descriptionEn String?  @map("description_en")
+  displayOrder  Int      @default(0) @map("display_order")
+  image         String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   menuItems  MenuItem[]
@@ -56,29 +65,120 @@ model MenuCategory {
 }
 
 model MenuItem {
+  id               String    @id @default(uuid())
+  restaurantId     String    @map("restaurant_id")
+  categoryId       String    @map("category_id")
+  name             String
+  nameEn           String?   @map("name_en")
+  description      String
+  descriptionEn    String?   @map("description_en")
+  price            Decimal   @db.Decimal(10, 2)
+  cost             Decimal?  @db.Decimal(10, 2)
+  image            String?
+  available        Boolean   @default(true)
+  eightySixed      Boolean   @default(false) @map("eighty_sixed")
+  eightySixReason  String?   @map("eighty_six_reason")
+  popular          Boolean   @default(false)
+  dietary          String[]  @default([])
+  displayOrder     Int       @default(0) @map("display_order")
+  prepTimeMinutes  Int?      @map("prep_time_minutes")
+  taxCategory      String    @default("prepared_food") @map("tax_category")
+  aiEstimatedCost  Decimal?  @db.Decimal(10, 2) @map("ai_estimated_cost")
+  aiSuggestedPrice Decimal?  @db.Decimal(10, 2) @map("ai_suggested_price")
+  aiProfitMargin   Decimal?  @db.Decimal(5, 2) @map("ai_profit_margin")
+  aiConfidence     String?   @map("ai_confidence")
+  aiLastUpdated    DateTime? @map("ai_last_updated")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  restaurant      Restaurant              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  category        MenuCategory            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orderItems      OrderItem[]
+  modifierGroups  MenuItemModifierGroup[]
+
+  @@map("menu_items")
+}
+
+// === MODIFIER SYSTEM ===
+
+model ModifierGroup {
+  id            String   @id @default(uuid())
+  restaurantId  String   @map("restaurant_id")
+  name          String
+  nameEn        String?  @map("name_en")
+  description   String?
+  descriptionEn String?  @map("description_en")
+  required      Boolean  @default(false)
+  multiSelect   Boolean  @default(false) @map("multi_select")
+  minSelections Int      @default(0) @map("min_selections")
+  maxSelections Int?     @map("max_selections")
+  displayOrder  Int      @default(0) @map("display_order")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  modifiers  Modifier[]
+  menuItems  MenuItemModifierGroup[]
+
+  @@map("modifier_groups")
+}
+
+model Modifier {
   id              String   @id @default(uuid())
-  restaurantId    String   @map("restaurant_id")
-  categoryId      String   @map("category_id")
+  modifierGroupId String   @map("modifier_group_id")
   name            String
-  description     String
-  price           Decimal  @db.Decimal(10, 2)
-  cost            Decimal? @db.Decimal(10, 2)
-  image           String?
+  nameEn          String?  @map("name_en")
+  priceAdjustment Decimal  @default(0) @db.Decimal(10, 2) @map("price_adjustment")
+  isDefault       Boolean  @default(false) @map("is_default")
   available       Boolean  @default(true)
-  eightySixed     Boolean  @default(false) @map("eighty_sixed")
-  eightySixReason String?  @map("eighty_six_reason")
-  popular         Boolean  @default(false)
-  dietary         String[] @default([])
   displayOrder    Int      @default(0) @map("display_order")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  restaurant Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  category   MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  orderItems OrderItem[]
+  modifierGroup      ModifierGroup       @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+  orderItemModifiers OrderItemModifier[]
 
-  @@map("menu_items")
+  @@map("modifiers")
 }
+
+model MenuItemModifierGroup {
+  id              String @id @default(uuid())
+  menuItemId      String @map("menu_item_id")
+  modifierGroupId String @map("modifier_group_id")
+  displayOrder    Int    @default(0) @map("display_order")
+
+  menuItem      MenuItem      @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  modifierGroup ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, modifierGroupId])
+  @@map("menu_item_modifier_groups")
+}
+
+// === TABLE MANAGEMENT ===
+
+model RestaurantTable {
+  id           String   @id @default(uuid())
+  restaurantId String   @map("restaurant_id")
+  tableNumber  String   @map("table_number")
+  tableName    String?  @map("table_name")
+  capacity     Int      @default(4)
+  section      String?
+  status       String   @default("available")
+  posX         Int?     @map("pos_x")
+  posY         Int?     @map("pos_y")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders     Order[]
+
+  @@unique([restaurantId, tableNumber])
+  @@map("restaurant_tables")
+}
+
+// === CUSTOMERS ===
 
 model Customer {
   id              String    @id @default(uuid())
@@ -103,29 +203,50 @@ model Customer {
   @@map("customers")
 }
 
+// === ORDERS ===
+
 model Order {
   id                    String    @id @default(uuid())
   restaurantId          String    @map("restaurant_id")
   customerId            String?   @map("customer_id")
+  tableId               String?   @map("table_id")
+  serverId              String?   @map("server_id")
   orderNumber           String    @unique @map("order_number")
-  orderType             String    @map("order_type") // pickup, delivery, dine-in
-  status                String    @default("pending") // pending, confirmed, preparing, ready, completed, cancelled
+  orderType             String    @map("order_type")
+  orderSource           String    @default("online") @map("order_source")
+  status                String    @default("pending")
   subtotal              Decimal   @db.Decimal(10, 2)
   tax                   Decimal   @db.Decimal(10, 2)
   tip                   Decimal   @default(0) @db.Decimal(10, 2)
+  discount              Decimal   @default(0) @db.Decimal(10, 2)
+  deliveryFee           Decimal   @default(0) @db.Decimal(10, 2) @map("delivery_fee")
   total                 Decimal   @db.Decimal(10, 2)
   paymentMethod         String?   @map("payment_method")
   paymentStatus         String    @default("pending") @map("payment_status")
   stripePaymentIntentId String?   @map("stripe_payment_intent_id")
   specialInstructions   String?   @map("special_instructions")
+  deliveryAddress       String?   @map("delivery_address")
+  deliveryLat           Decimal?  @db.Decimal(10, 7) @map("delivery_lat")
+  deliveryLng           Decimal?  @db.Decimal(10, 7) @map("delivery_lng")
+  deliveryProvider      String?   @map("delivery_provider")
+  deliveryTrackingUrl   String?   @map("delivery_tracking_url")
   scheduledTime         DateTime? @map("scheduled_time")
+  sentToKitchenAt       DateTime? @map("sent_to_kitchen_at")
+  confirmedAt           DateTime? @map("confirmed_at")
+  preparingAt           DateTime? @map("preparing_at")
+  readyAt               DateTime? @map("ready_at")
   completedAt           DateTime? @map("completed_at")
+  cancelledAt           DateTime? @map("cancelled_at")
+  cancellationReason    String?   @map("cancellation_reason")
+  cancelledBy           String?   @map("cancelled_by")
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
-  restaurant Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  customer   Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  orderItems OrderItem[]
+  restaurant    Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  customer      Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  table         RestaurantTable?     @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  orderItems    OrderItem[]
+  statusHistory OrderStatusHistory[]
 
   @@map("orders")
 }
@@ -137,15 +258,35 @@ model OrderItem {
   menuItemName        String   @map("menu_item_name")
   quantity            Int
   unitPrice           Decimal  @db.Decimal(10, 2) @map("unit_price")
+  modifiersPrice      Decimal  @default(0) @db.Decimal(10, 2) @map("modifiers_price")
   totalPrice          Decimal  @db.Decimal(10, 2) @map("total_price")
   specialInstructions String?  @map("special_instructions")
+  status              String   @default("pending")
+  sentToKitchenAt     DateTime? @map("sent_to_kitchen_at")
+  completedAt         DateTime? @map("completed_at")
   createdAt           DateTime @default(now()) @map("created_at")
 
-  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  menuItem MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  order     Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem  MenuItem?           @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  modifiers OrderItemModifier[]
 
   @@map("order_items")
 }
+
+model OrderItemModifier {
+  id              String  @id @default(uuid())
+  orderItemId     String  @map("order_item_id")
+  modifierId      String? @map("modifier_id")
+  modifierName    String  @map("modifier_name")
+  priceAdjustment Decimal @db.Decimal(10, 2) @map("price_adjustment")
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  modifier  Modifier? @relation(fields: [modifierId], references: [id], onDelete: SetNull)
+
+  @@map("order_item_modifiers")
+}
+
+// === RESERVATIONS ===
 
 model Reservation {
   id               String    @id @default(uuid())
@@ -157,7 +298,7 @@ model Reservation {
   partySize        Int       @map("party_size")
   reservationTime  DateTime  @map("reservation_time")
   tableNumber      String?   @map("table_number")
-  status           String    @default("pending") // pending, confirmed, seated, completed, no-show, cancelled
+  status           String    @default("pending")
   specialRequests  String?   @map("special_requests")
   confirmationSent Boolean   @default(false) @map("confirmation_sent")
   reminderSent     Boolean   @default(false) @map("reminder_sent")
@@ -168,4 +309,41 @@ model Reservation {
   customer   Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@map("reservations")
+}
+
+// === TAX JURISDICTIONS (AI-populated lookup table) ===
+
+model TaxJurisdiction {
+  id           String    @id @default(uuid())
+  zipCode      String    @map("zip_code")
+  city         String?
+  county       String?
+  state        String    @default("FL")
+  taxRate      Decimal   @db.Decimal(5, 4) @map("tax_rate")
+  breakdown    Json?
+  source       String    @default("ai")
+  verifiedAt   DateTime? @map("verified_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@unique([zipCode, state])
+  @@map("tax_jurisdictions")
+}
+
+// === ORDER STATUS TRACKING ===
+
+model OrderStatusHistory {
+  id         String   @id @default(uuid())
+  orderId    String   @map("order_id")
+  fromStatus String?  @map("from_status")
+  toStatus   String   @map("to_status")
+  changedBy  String?  @map("changed_by")
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("order_status_history")
 }
