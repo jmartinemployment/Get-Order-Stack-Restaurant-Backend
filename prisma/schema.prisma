@@ -45,6 +45,7 @@ model Restaurant {
   orders            Order[]
   reservations      Reservation[]
   tables            RestaurantTable[]
+  inventoryItems    InventoryItem[]
 
   @@map("restaurants")
 }
@@ -122,10 +123,11 @@ model MenuItem {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  restaurant      Restaurant              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  category        MenuCategory            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  orderItems      OrderItem[]
-  modifierGroups  MenuItemModifierGroup[]
+  restaurant        Restaurant              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  category          MenuCategory            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orderItems        OrderItem[]
+  modifierGroups    MenuItemModifierGroup[]
+  recipeIngredients RecipeIngredient[]
 
   @@map("menu_items")
 }
@@ -377,4 +379,69 @@ model OrderStatusHistory {
   @@index([orderId])
   @@index([createdAt])
   @@map("order_status_history")
+}
+
+// === INVENTORY MANAGEMENT ===
+
+model InventoryItem {
+  id            String    @id @default(uuid())
+  restaurantId  String    @map("restaurant_id")
+  name          String    @db.VarChar(255)
+  nameEn        String?   @map("name_en") @db.VarChar(255)
+  unit          String    @default("units") @db.VarChar(50)
+  currentStock  Decimal   @default(0) @db.Decimal(10, 2) @map("current_stock")
+  minStock      Decimal   @default(0) @db.Decimal(10, 2) @map("min_stock")
+  maxStock      Decimal   @default(100) @db.Decimal(10, 2) @map("max_stock")
+  costPerUnit   Decimal   @default(0) @db.Decimal(10, 4) @map("cost_per_unit")
+  supplier      String?   @db.VarChar(255)
+  category      String    @default("general") @db.VarChar(100)
+  lastRestocked DateTime? @map("last_restocked")
+  lastCountDate DateTime? @map("last_count_date")
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  restaurant        Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  logs              InventoryLog[]
+  recipeIngredients RecipeIngredient[]
+
+  @@index([restaurantId])
+  @@index([restaurantId, category])
+  @@map("inventory_items")
+}
+
+model InventoryLog {
+  id              String   @id @default(uuid())
+  inventoryItemId String   @map("inventory_item_id")
+  previousStock   Decimal  @db.Decimal(10, 2) @map("previous_stock")
+  newStock        Decimal  @db.Decimal(10, 2) @map("new_stock")
+  changeAmount    Decimal  @db.Decimal(10, 2) @map("change_amount")
+  reason          String?  @db.VarChar(255)
+  createdBy       String?  @map("created_by") @db.VarChar(255)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryItemId])
+  @@index([createdAt])
+  @@map("inventory_logs")
+}
+
+model RecipeIngredient {
+  id              String   @id @default(uuid())
+  menuItemId      String   @map("menu_item_id")
+  inventoryItemId String   @map("inventory_item_id")
+  quantity        Decimal  @db.Decimal(10, 4)
+  unit            String   @db.VarChar(50)
+  notes           String?  @db.VarChar(255)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  menuItem      MenuItem      @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, inventoryItemId])
+  @@index([menuItemId])
+  @@index([inventoryItemId])
+  @@map("recipe_ingredients")
 }

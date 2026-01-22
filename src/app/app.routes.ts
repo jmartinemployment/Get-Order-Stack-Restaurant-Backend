@@ -971,7 +971,8 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
     const { 
-      customerInfo, orderType, orderSource = 'online', tableId, serverId,
+      customerInfo, customerName, customerPhone, customerEmail,
+      orderType, orderSource = 'online', tableId, tableNumber, serverId,
       items, specialInstructions, scheduledTime,
       deliveryAddress, deliveryLat, deliveryLng
     } = req.body;
@@ -986,16 +987,44 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
       return;
     }
 
-    // Create or find customer
+    // Resolve table ID from tableNumber if provided
+    let resolvedTableId = tableId;
+    if (!tableId && tableNumber) {
+      const table = await prisma.restaurantTable.findFirst({
+        where: { 
+          restaurantId, 
+          tableNumber: String(tableNumber)
+        }
+      });
+      if (table) {
+        resolvedTableId = table.id;
+      }
+    }
+
+    // Handle customer info - support both formats
     let customerId = null;
-    if (customerInfo?.email || customerInfo?.phone) {
+    const resolvedCustomerName = customerInfo?.firstName 
+      ? `${customerInfo.firstName}${customerInfo.lastName ? ' ' + customerInfo.lastName : ''}`
+      : customerName;
+    const resolvedPhone = customerInfo?.phone || customerPhone;
+    const resolvedEmail = customerInfo?.email || customerEmail;
+
+    if (resolvedEmail || resolvedPhone || resolvedCustomerName) {
+      let firstName = customerInfo?.firstName;
+      let lastName = customerInfo?.lastName;
+      if (!firstName && resolvedCustomerName) {
+        const nameParts = resolvedCustomerName.trim().split(' ');
+        firstName = nameParts[0];
+        lastName = nameParts.slice(1).join(' ') || null;
+      }
+
       const customer = await prisma.customer.create({
         data: {
           restaurantId,
-          firstName: customerInfo.firstName,
-          lastName: customerInfo.lastName,
-          email: customerInfo.email,
-          phone: customerInfo.phone
+          firstName,
+          lastName,
+          email: resolvedEmail,
+          phone: resolvedPhone
         }
       });
       customerId = customer.id;
@@ -1062,7 +1091,7 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
       data: {
         restaurantId,
         customerId,
-        tableId,
+        tableId: resolvedTableId,
         serverId,
         orderNumber: generateOrderNumber(),
         orderType,

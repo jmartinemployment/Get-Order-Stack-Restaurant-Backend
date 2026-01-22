@@ -3,6 +3,7 @@ import cors from 'cors';
 import { config } from './app.config';
 import menuRoutes from './app.routes';
 import primaryCategoryRoutes from './primary-category.routes';
+import analyticsRoutes from './analytics.routes';
 import { stripeService } from '../services/stripe.service';
 
 const app = express();
@@ -48,5 +49,6 @@ app.get('/health', (_req, res) => {
 // Routes
 app.use('/api/restaurant', menuRoutes);
 app.use('/api/restaurant', primaryCategoryRoutes);
+app.use('/api/restaurant', analyticsRoutes);
 
 export default app;
