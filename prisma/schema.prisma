@@ -20,6 +20,9 @@ model Restaurant {
   city             String?
   state            String?
   zip              String?
+  location         String?
+  latitude         Decimal?  @db.Decimal(10, 7)
+  longitude        Decimal?  @db.Decimal(10, 7)
   cuisineType      String?  @map("cuisine_type")
   tier             Int      @default(1)
   monthlyRevenue   Decimal? @db.Decimal(10, 2) @map("monthly_revenue")
