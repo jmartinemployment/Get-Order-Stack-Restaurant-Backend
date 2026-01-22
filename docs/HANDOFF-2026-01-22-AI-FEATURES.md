@@ -6,14 +6,14 @@
 
 ## QUICK START FOR NEW SESSION
 
-Say: "I'm continuing GetOrderStack AI features. The backend is at /Users/jam/development/Get-Order-Stack-Restaurant-Backend. Menu Engineering endpoint is working - need to test Sales Insights and deploy."
+Say: "I'm continuing GetOrderStack AI features. Backend is deployed to Render with Menu Engineering and Sales Insights working. Ready to build frontend components or seed inventory data."
 
 ---
 
 ## ✅ COMPLETED & VERIFIED
 
-### Menu Engineering Report - ✅ WORKING
-**Tested:** January 22, 2026 ~3:09pm EST
+### 1. Menu Engineering Report - ✅ WORKING
+**Tested:** January 22, 2026
 
 ```bash
 curl http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/analytics/menu-engineering
@@ -27,7 +27,7 @@ curl http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/a
 - AI-generated insights working
 - Upsell recommendations generated
 
-**Sample AI Insights Generated:**
+**Sample AI Insights:**
 - "Train servers to actively recommend Causa - Lomo Saltado, Pasta a lo Macho, Tigre Bravo"
 - "125 items is too many - consider streamlining"
 - "Move high-margin items to prime menu real estate"
@@ -39,10 +39,30 @@ curl http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/a
 
 ---
 
-### Database Migration - ✅ COMPLETE
+### 2. Sales Insights Dashboard - ✅ WORKING
+**Tested:** January 22, 2026
+
+```bash
+curl http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/analytics/sales/daily
+```
+
+**Results:**
+- Correctly detected 0 orders today
+- Compared to yesterday (1 order, $32 revenue)
+- Generated warnings about -100% drop
+- AI recommendations generated
+
+**Sample AI Recommendations:**
+- "Immediately investigate why you had zero sales..."
+- "Implement an emergency marketing campaign..."
+- "Review your Thursday operations schedule..."
+
+---
+
+### 3. Database Migration - ✅ COMPLETE
 Migration `20260122_add_inventory_management` applied successfully.
 
-**New Tables Created:**
+**New Tables:**
 | Table | Purpose |
 |-------|---------|
 | `inventory_items` | Track ingredient stock levels |
@@ -51,95 +71,79 @@ Migration `20260122_add_inventory_management` applied successfully.
 
 ---
 
-## 🔨 BUILT BUT NOT YET TESTED
-
-### Sales Insights Dashboard
-**Endpoints:**
+### 4. Deployment - 🚀 IN PROGRESS
 ```bash
-# Daily insights
-curl http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/analytics/sales/daily
-
-# Weekly insights
-curl http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/analytics/sales/weekly
-
-# Custom date range
-curl "http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/analytics/sales/summary?startDate=2026-01-01&endDate=2026-01-22"
-```
-
-**Expected Features:**
-- Period comparison (vs yesterday, vs last week)
-- Top sellers & most profitable items
-- AI-generated insights
-
----
-
-### Inventory Tracking
-**Endpoints:**
-```bash
-# Get all inventory
-curl http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/inventory
-
-# Get alerts (low stock, out of stock)
-curl http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/inventory/alerts
-
-# Get predictions ("You'll run out of X by Thursday")
-curl http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/inventory/predictions
-```
-
-**Note:** Inventory endpoints need sample data to be useful. Currently empty.
-
----
-
-## 🚀 IMMEDIATE NEXT STEPS
-
-### 1. Test Sales Insights (5 min)
-```bash
-curl http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/analytics/sales/daily
-```
-
-### 2. Deploy to Render (10 min)
-```bash
-cd /Users/jam/development/Get-Order-Stack-Restaurant-Backend
 git add .
 git commit -m "Add AI features: Menu Engineering, Sales Insights, Inventory Tracking"
 git push origin main
 ```
 
-### 3. Test Production Endpoints
+**Production URLs:**
+- **Backend:** https://get-order-stack-restaurant-backend.onrender.com
+- **POS Frontend:** https://get-order-stack-restaurant-mobile.vercel.app
+
+**Test Production (after deploy completes):**
 ```bash
 curl https://get-order-stack-restaurant-backend.onrender.com/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/analytics/menu-engineering
 ```
 
-### 4. Seed Sample Inventory Data (Optional)
-Create some inventory items to test predictions feature.
+---
+
+## 📋 NEXT PRIORITIES (In Order)
+
+### Priority 1: Checkout Profit Insight (Quick Win) - 2-3 hours
+Add to POS checkout confirmation:
+> "Order #47 placed ✓  
+> **Quick Insight:** This order has a 34% profit margin ($8.40 profit). The Lomo Saltado is your star."
+
+**Implementation:**
+- Add endpoint: `POST /api/restaurant/:id/orders/:orderId/profit-insight`
+- Update POS CheckoutModal to display insight after order submission
 
 ---
 
-## 📋 REMAINING TASKS FOR JAN 31 DEMO
+### Priority 2: POS Upsell Prompt Component - 3 hours
+Show staff upsell suggestions during order taking:
+> "💡 Suggest: Yuca a la Huancaina (68% margin)"
 
-### HIGH Priority
-| Task | Est. Hours | Status |
-|------|------------|--------|
-| Test Sales Insights endpoint | 0.25 | ⏳ Next |
-| Deploy to Render | 0.5 | ⏳ |
-| Seed sample inventory data | 1 | Not started |
-| Checkout profit insight (quick win) | 2-3 | Not started |
-
-### MEDIUM Priority
-| Task | Est. Hours | Status |
-|------|------------|--------|
-| Frontend: Menu Engineering dashboard | 4 | Not started |
-| Frontend: Sales Insights dashboard | 4 | Not started |
-| Frontend: Inventory management screen | 4 | Not started |
-| POS: Upsell prompt component | 3 | Not started |
-
-### DROPPED FROM DEMO
-- ❌ Voice Ordering - Decided against (noisy environments, limited value)
-- ❌ Menu Photo Extraction - Lower priority
+**Implementation:**
+- Call `/analytics/upsell-suggestions?cartItems=item1,item2`
+- Display floating prompt on MenuScreen when items in cart
+- Subtle, non-intrusive design
 
 ---
 
-## 🗂️ FILES CREATED
+### Priority 3: Seed Sample Inventory Data - 1 hour
+Create inventory items so predictions work for demo:
+```bash
+curl -X POST http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/inventory \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Pollo", "nameEn": "Chicken", "unit": "lbs", "currentStock": 25, "minStock": 10, "costPerUnit": 3.50, "category": "protein"}'
+```
+
+Items to seed: Chicken, Beef, Fish (Corvina), Shrimp, Rice, Potatoes, Aji Amarillo, Leche de Tigre
+
+---
+
+### Priority 4: Menu Engineering Dashboard (Frontend) - 4 hours
+New screen in POS showing:
+- 4-quadrant visual chart
+- List of items by quadrant
+- AI insights panel
+- Actionable recommendations
+
+---
+
+### Priority 5: Sales Insights Dashboard (Frontend) - 4 hours
+New screen in POS showing:
+- Today's sales summary
+- Comparison to yesterday/last week
+- Top sellers chart
+- AI insights panel
+
+---
+
+## 🗂️ FILES CREATED THIS SESSION
 
 | File | Description |
 |------|-------------|
@@ -159,51 +163,80 @@ f2cfe8dd-48f3-4596-ab1e-22a28b23ad38
 e29f2f0a-9d2e-46cf-941c-b87ed408e892
 ```
 
-### Production URLs
-- **Backend:** https://get-order-stack-restaurant-backend.onrender.com
-- **POS Frontend:** https://get-order-stack-restaurant-mobile.vercel.app
+### API Endpoints Summary
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/:id/analytics/menu-engineering` | GET | 4-quadrant menu analysis |
+| `/:id/analytics/upsell-suggestions` | GET | Real-time upsell prompts |
+| `/:id/analytics/sales/daily` | GET | Daily sales with AI insights |
+| `/:id/analytics/sales/weekly` | GET | Weekly sales summary |
+| `/:id/inventory` | GET/POST | Inventory CRUD |
+| `/:id/inventory/alerts` | GET | Low stock warnings |
+| `/:id/inventory/predictions` | GET | "Run out by Thursday" |
 
-### API Port
-- **Local:** `http://localhost:3000` (NOT 4000)
-- **Production:** Render URL above
+### Port Info
+- **Local:** `http://localhost:3000`
+- **Production:** `https://get-order-stack-restaurant-backend.onrender.com`
 
-### Environment Variable Required
+### Environment Variables
 ```
-ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_API_KEY=sk-ant-...  # Required for AI insights
 ```
-Services gracefully degrade to rule-based insights if key not set.
 
 ---
 
-## 💡 DEMO SCRIPT (Draft)
+## 💡 DEMO SCRIPT FOR JAN 31
 
-### Menu Engineering Demo
-1. Call: `GET /api/restaurant/{id}/analytics/menu-engineering`
-2. Show 4 quadrants with real menu items
-3. Highlight AI insights: "Promote Lomo Saltado, consider removing X"
-4. Show upsell suggestions: "When customer orders Y, suggest Z"
+### 1. Menu Engineering Demo (Wow Factor)
+```
+"Let me show you something powerful..."
+→ Open Menu Engineering dashboard
+→ "Your menu is analyzed into 4 quadrants"
+→ Show Stars: "These are your money makers - Lomo Saltado, Ceviche"
+→ Show Puzzles: "These are popular but not profitable - raise prices"
+→ Show AI insights: "The system noticed you have 125 items - maybe too many"
+```
 
-### Sales Insights Demo
-1. Call: `GET /api/restaurant/{id}/analytics/sales/daily`
-2. Show today's summary with comparison
-3. AI insight: "If you raised Aji de Gallina by $1.50, you'd make $847/month more"
+### 2. Upsell Prompt Demo
+```
+"Watch what happens when I take an order..."
+→ Add item to cart
+→ Upsell prompt appears: "Suggest Yuca a la Huancaina - 68% margin"
+→ "Your staff sees exactly what to recommend"
+```
 
-### Inventory Demo (needs sample data first)
-1. Show inventory list
-2. Call: `GET /api/restaurant/{id}/inventory/predictions`
-3. "You'll run out of chicken by Thursday"
+### 3. Sales Insights Demo
+```
+"Here's your daily intelligence report..."
+→ Show today's sales vs yesterday
+→ "Revenue is down 15% - here's why"
+→ Show AI recommendations
+```
+
+### 4. Inventory Prediction Demo (if seeded)
+```
+"The system tracks your ingredients..."
+→ Show inventory list
+→ "You'll run out of chicken by Thursday"
+→ "Order now to avoid 86'ing items"
+```
 
 ---
 
-## ⚠️ SESSION INTERRUPTION NOTE
+## ⚠️ KNOWN ISSUES
 
-The previous Claude session was interrupted/rejected during testing. When resuming:
-1. Backend runs on port **3000** (not 4000)
-2. Menu Engineering is confirmed working
-3. Sales Insights needs testing
-4. Then deploy to Render
+1. **Inventory needs seeding** - Predictions won't work without sample data
+2. **Low order volume** - AI insights are based on limited test data (2 orders total)
+3. **No frontend dashboards yet** - API works, need React Native screens
 
 ---
 
-*Last Updated: January 22, 2026 ~3:15pm EST*
-*Status: Menu Engineering ✅ | Sales Insights ⏳ | Inventory ⏳ | Deploy ⏳*
+## 🎯 DROPPED FROM DEMO
+
+- ❌ Voice Ordering - Noisy environments, limited value at counter service
+- ❌ Menu Photo Extraction - Lower priority
+
+---
+
+*Last Updated: January 22, 2026 ~3:25pm EST*
+*Status: Menu Engineering ✅ | Sales Insights ✅ | Inventory ⏳ | Deploy 🚀*

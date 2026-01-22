@@ -78,6 +78,28 @@ export class InventoryService {
   }
 
   /**
+   * Convert Prisma Decimal fields to numbers
+   */
+  private convertToInventoryItem(item: any): InventoryItem {
+    return {
+      id: item.id,
+      restaurantId: item.restaurantId,
+      name: item.name,
+      nameEn: item.nameEn,
+      unit: item.unit,
+      currentStock: Number(item.currentStock),
+      minStock: Number(item.minStock),
+      maxStock: Number(item.maxStock),
+      costPerUnit: Number(item.costPerUnit),
+      supplier: item.supplier,
+      category: item.category,
+      lastRestocked: item.lastRestocked,
+      lastCountDate: item.lastCountDate,
+      active: item.active
+    };
+  }
+
+  /**
    * Get all inventory items for a restaurant
    */
   async getInventory(restaurantId: string): Promise<InventoryItem[]> {
@@ -85,7 +107,7 @@ export class InventoryService {
       where: { restaurantId, active: true },
       orderBy: [{ category: 'asc' }, { name: 'asc' }]
     });
-    return items as InventoryItem[];
+    return items.map(item => this.convertToInventoryItem(item));
   }
 
   /**
@@ -95,7 +117,7 @@ export class InventoryService {
     const item = await prisma.inventoryItem.findUnique({
       where: { id: itemId }
     });
-    return item as InventoryItem | null;
+    return item ? this.convertToInventoryItem(item) : null;
   }
 
   /**
@@ -120,7 +142,7 @@ export class InventoryService {
         lastCountDate: new Date()
       }
     });
-    return item as InventoryItem;
+    return this.convertToInventoryItem(item);
   }
 
   /**
@@ -159,7 +181,7 @@ export class InventoryService {
       }
     });
 
-    return updated as InventoryItem;
+    return this.convertToInventoryItem(updated);
   }
 
   /**
@@ -196,7 +218,7 @@ export class InventoryService {
       data: { currentStock: newStock }
     });
 
-    return updated as InventoryItem;
+    return this.convertToInventoryItem(updated);
   }
 
   /**
@@ -236,7 +258,7 @@ export class InventoryService {
       }
     });
 
-    return updated as InventoryItem;
+    return this.convertToInventoryItem(updated);
   }
 
   /**
