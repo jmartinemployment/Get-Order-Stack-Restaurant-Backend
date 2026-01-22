@@ -46,9 +46,9 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Routes
-app.use('/api/restaurant', menuRoutes);
+// Routes - ORDER MATTERS! More specific routes first
+app.use('/api/restaurant', analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
 app.use('/api/restaurant', primaryCategoryRoutes);
-app.use('/api/restaurant', analyticsRoutes);
+app.use('/api/restaurant', menuRoutes);
 
 export default app;

@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import { menuEngineeringService } from '../services/menu-engineering.service';
 import { salesInsightsService } from '../services/sales-insights.service';
 import { inventoryService } from '../services/inventory.service';
+import { orderProfitService } from '../services/order-profit.service';
 
 const router = Router();
 
@@ -335,6 +336,50 @@ router.get('/:restaurantId/inventory/:itemId/predict', async (req: Request, res:
   } catch (error) {
     console.error('Error predicting runout:', error);
     res.status(500).json({ error: 'Failed to predict runout' });
+  }
+});
+
+// ============ Order Profit Insights ============
+
+/**
+ * GET /:restaurantId/orders/:orderId/profit-insight
+ * Get profit insight for a specific order (for checkout confirmation)
+ */
+router.get('/:restaurantId/orders/:orderId/profit-insight', async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const insight = await orderProfitService.getOrderProfitInsight(orderId);
+
+    if (!insight) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+
+    res.json(insight);
+  } catch (error) {
+    console.error('Error getting order profit insight:', error);
+    res.status(500).json({ error: 'Failed to get profit insight' });
+  }
+});
+
+/**
+ * GET /:restaurantId/orders/recent-profit
+ * Get profit insights for recent orders (for dashboard)
+ */
+router.get('/:restaurantId/orders/recent-profit', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { limit = '10' } = req.query;
+
+    const result = await orderProfitService.getRecentOrdersProfit(
+      restaurantId,
+      parseInt(limit as string)
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error getting recent orders profit:', error);
+    res.status(500).json({ error: 'Failed to get recent orders profit' });
   }
 });
 
