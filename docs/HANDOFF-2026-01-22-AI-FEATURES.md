@@ -6,141 +6,112 @@
 
 ## QUICK START FOR NEW SESSION
 
-Say: "I'm continuing GetOrderStack. All AI backend features deployed including Checkout Profit Insight. Ready to integrate into POS frontend or build upsell prompts."
+Say: "I'm continuing GetOrderStack. Profit insight is live in POS checkout. Next: redesign MenuScreen layout to add upsell suggestions before order placement."
 
 ---
 
-## ✅ ALL BACKEND AI FEATURES DEPLOYED
+## ✅ COMPLETED THIS SESSION
 
-### 1. Menu Engineering Report - ✅ LIVE
+### 1. Checkout Profit Insight - ✅ LIVE & TESTED!
+**Screenshot confirmed working:** Shows after order placement
+- 💰 65% margin | $27.90 profit
+- ⭐ Star item: Pescado a lo Macho - Fish
+- Quick tip for staff
+
+**Endpoints:**
 ```bash
-curl "https://get-order-stack-restaurant-backend.onrender.com/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/analytics/menu-engineering"
+# Single order insight
+GET /api/restaurant/:id/orders/:orderId/profit-insight
+
+# Recent orders summary  
+GET /api/restaurant/:id/orders/recent-profit
 ```
-- 125 menu items analyzed into 4 quadrants
-- AI-generated insights & upsell recommendations
+
+### 2. Table Handling Fix - ✅
+- Fixed foreign key constraint error for manual table numbers
+- Dine-in now works with or without configured tables
+
+### 3. All Backend AI Features - ✅ DEPLOYED
+- Menu Engineering Report
+- Sales Insights Dashboard
+- Inventory Tracking
+- Order Profit Insight
 
 ---
 
-### 2. Sales Insights Dashboard - ✅ LIVE
-```bash
-curl "https://get-order-stack-restaurant-backend.onrender.com/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/analytics/sales/daily"
+## 📋 NEXT PRIORITY: MenuScreen Redesign + Upsell Suggestions
+
+### Current Layout Problem
 ```
-- Daily/weekly sales summaries with AI recommendations
-
----
-
-### 3. Inventory Tracking - ✅ LIVE (Needs Data)
-```bash
-curl "https://get-order-stack-restaurant-backend.onrender.com/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/inventory"
-```
-- Stock tracking, alerts, "run out by Thursday" predictions
-
----
-
-### 4. Checkout Profit Insight - ✅ LIVE (NEW!)
-```bash
-# Single order insight (for checkout confirmation)
-curl "https://get-order-stack-restaurant-backend.onrender.com/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/orders/ORDER_ID/profit-insight"
-
-# Recent orders summary (for dashboard)
-curl "https://get-order-stack-restaurant-backend.onrender.com/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/orders/recent-profit"
+[Primary Category Pills]
+[Subcategory Pills] ←── Takes horizontal space, limits visibility
+[Items Grid - only shows ONE subcategory at a time]
+[Cart Sidebar]
 ```
 
-**Sample Response:**
-```json
-{
-  "orderId": "da114622-a122-4753-8757-4138693ccff4",
-  "orderNumber": "ORD-MKO42QYJ-I8KB",
-  "subtotal": 32,
-  "estimatedCost": 10.5,
-  "estimatedProfit": 21.5,
-  "profitMargin": 67,
-  "starItem": {
-    "name": "Jalea Mixta",
-    "profit": 14.75,
-    "margin": 67
-  },
-  "insightText": "✅ Order ORD-MKO42QYJ-I8KB placed - 67% margin ($21.50 profit). Jalea Mixta performed well.",
-  "quickTip": "Solid order. Try suggesting appetizers or drinks for even better margins."
+### Proposed New Layout
+```
+[Primary Category Pills]
+[Scrollable Menu Area]
+  ═══ Subcategory Name (highlight ribbon) ═══
+  [Item] [Item] [Item]
+  ═══ Next Subcategory ═══
+  [Item] [Item] [Item]
+  ... (ALL items from primary category visible)
+  
+[🔥 Upsell Bar] ←── NEW!
+  "💡 Suggest: Yuca a la Huancaina - 68% margin"
+  [+ Add]
+  
+[Cart Sidebar]
+```
+
+### Benefits
+1. **Better browsing** - All items visible in one scroll, not hidden behind subcategory tabs
+2. **Subcategory headers** - Highlighted ribbon separators instead of tabs
+3. **Upsell suggestions** - Fixed bar shows AI recommendations based on cart
+4. **More selling** - Staff sees what to suggest BEFORE completing order
+
+### Implementation Plan (3-4 hours)
+
+**Step 1: Flatten Menu Display**
+- Remove subcategory tabs
+- Show all subcategories as sections with header ribbons
+- Scrollable list shows everything from selected primary category
+
+**Step 2: Add Upsell Bar Component**
+```tsx
+// New component: UpsellBar.tsx
+interface UpsellBarProps {
+  restaurantId: string;
+  cartItemIds: string[];
+  onAddItem: (item: MenuItem) => void;
 }
 ```
 
----
+**Step 3: Fetch Upsell Suggestions**
+```typescript
+// When cart changes, call:
+GET /api/restaurant/:id/analytics/upsell-suggestions?cartItems=id1,id2
 
-## 📋 TO-DO PRIORITY LIST
-
-### Priority 1: POS Checkout Integration (2 hrs) - FRONTEND
-**Goal:** Show profit insight after order is placed
-
-**Files to modify:**
-- `/apps/pos/src/components/CheckoutModal.tsx`
-
-**Implementation:**
-1. After successful order submission, call `/orders/:orderId/profit-insight`
-2. Display insight in a success toast or modal:
-   ```
-   ✅ Order #ORD-MKO42QYJ-I8KB placed!
-   💰 67% margin ($21.50 profit)
-   ⭐ Star item: Jalea Mixta
-   ```
-3. Auto-dismiss after 5 seconds or on tap
-
----
-
-### Priority 2: POS Upsell Prompt Component (3 hrs) - FRONTEND
-**Goal:** Show staff upsell suggestions while taking orders
-
-**Endpoint:** `GET /:restaurantId/analytics/upsell-suggestions?cartItems=item1,item2`
-
-**Implementation:**
-1. Create `UpsellPrompt.tsx` component
-2. Call endpoint when cart changes
-3. Display floating prompt: "💡 Suggest: Yuca a la Huancaina (68% margin)"
-4. Subtle, non-intrusive design
-
----
-
-### Priority 3: Seed Sample Inventory Data (1 hr) - BACKEND
-**Goal:** Make inventory predictions work for demo
-
-```bash
-curl -X POST "http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28b23ad38/inventory" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Pollo", "nameEn": "Chicken", "unit": "lbs", "currentStock": 25, "minStock": 10, "costPerUnit": 3.50, "category": "protein"}'
+// Response:
+{
+  suggestions: [
+    { menuItemId: "xxx", name: "Yuca a la Huancaina", margin: 68, reason: "High margin appetizer" }
+  ]
+}
 ```
 
-**Items to seed:** Chicken, Beef, Fish (Corvina), Shrimp, Rice, Potatoes, Aji Amarillo, Leche de Tigre
+**Step 4: Display in Fixed Bar**
+- Subtle green/gold bar above cart
+- Shows 1-2 suggestions max
+- Tap to add directly to cart
+- Auto-hides when cart is empty
 
----
-
-### Priority 4: Menu Engineering Dashboard (4 hrs) - FRONTEND
-**Goal:** Visual display of menu quadrants
-
-**New screen:** `MenuEngineeringScreen.tsx`
-- 4-quadrant chart (Stars, Cash Cows, Puzzles, Dogs)
-- List items by quadrant
-- AI insights panel
-- Tap item for details
-
----
-
-### Priority 5: Sales Insights Dashboard (4 hrs) - FRONTEND
-**Goal:** Daily sales intelligence
-
-**New screen:** `SalesInsightsScreen.tsx`
-- Today's sales vs yesterday
-- Top sellers chart
-- AI insights panel
-- Trend indicators
-
----
-
-### Priority 6: Recent Profit Dashboard Widget (2 hrs) - FRONTEND
-**Goal:** Show profit summary on main POS screen
-
-**Endpoint:** `GET /:restaurantId/orders/recent-profit`
-- Display: "Today: $215 profit (67% avg margin)"
-- Last 10 orders breakdown
+### Files to Modify
+- `/apps/pos/src/screens/MenuScreen.tsx` - Flatten subcategory display
+- `/apps/pos/src/components/UpsellBar.tsx` - NEW component
+- Backend endpoint already exists: `/analytics/upsell-suggestions`
 
 ---
 
@@ -149,7 +120,6 @@ curl -X POST "http://localhost:3000/api/restaurant/f2cfe8dd-48f3-4596-ab1e-22a28
 ### Restaurant IDs (Taipa)
 ```
 f2cfe8dd-48f3-4596-ab1e-22a28b23ad38
-e29f2f0a-9d2e-46cf-941c-b87ed408e892
 ```
 
 ### Production URLs
@@ -158,66 +128,9 @@ e29f2f0a-9d2e-46cf-941c-b87ed408e892
 
 ### Local Development
 - **Backend Port:** `http://localhost:3000`
+- **POS:** `npm run pos` (runs on localhost:8081)
 - **Mobile Path:** `/Users/jam/development/Get-Order-Stack-Restaurant-Mobile`
 - **Backend Path:** `/Users/jam/development/Get-Order-Stack-Restaurant-Backend`
-
----
-
-## 🗂️ FILES CREATED THIS SESSION
-
-| File | Description |
-|------|-------------|
-| `/src/services/menu-engineering.service.ts` | 4-quadrant analysis |
-| `/src/services/sales-insights.service.ts` | Sales analysis with AI |
-| `/src/services/inventory.service.ts` | Stock tracking |
-| `/src/services/order-profit.service.ts` | **NEW** - Checkout profit insight |
-| `/src/app/analytics.routes.ts` | All AI API routes |
-
----
-
-## ⚠️ IMPORTANT: Route Order Fix
-
-In `app.ts`, analytics routes must be registered BEFORE menu routes:
-```typescript
-// Routes - ORDER MATTERS! More specific routes first
-app.use('/api/restaurant', analyticsRoutes);  // Must be first
-app.use('/api/restaurant', primaryCategoryRoutes);
-app.use('/api/restaurant', menuRoutes);
-```
-
-This prevents `/orders/:orderId` from catching `/orders/recent-profit`.
-
----
-
-## 💡 DEMO SCRIPT FOR JAN 31
-
-### 1. Take Order → Show Profit (WOW moment!)
-```
-→ Ring up Jalea Mixta + Yuca a la Huancaina
-→ Complete checkout
-→ Screen shows: "67% margin - $21.50 profit! ⭐ Jalea Mixta is your star"
-→ "Your staff knows instantly if it was a good sale"
-```
-
-### 2. Upsell Prompts
-```
-→ Add item to cart
-→ Prompt appears: "💡 Suggest Chicha Sour - 67% margin"
-→ "Real-time coaching for your staff"
-```
-
-### 3. Menu Engineering
-```
-→ Open analytics dashboard
-→ "Here's your menu in 4 quadrants"
-→ "Stars = promote, Puzzles = raise prices"
-```
-
-### 4. Daily Insights
-```
-→ "Here's your daily intelligence report"
-→ Show AI recommendations
-```
 
 ---
 
@@ -229,13 +142,59 @@ This prevents `/orders/:orderId` from catching `/orders/recent-profit`.
 | `/:id/analytics/upsell-suggestions` | GET | Real-time upsell prompts |
 | `/:id/analytics/sales/daily` | GET | Daily sales with AI |
 | `/:id/analytics/sales/weekly` | GET | Weekly sales summary |
-| `/:id/orders/:orderId/profit-insight` | GET | **NEW** Single order profit |
-| `/:id/orders/recent-profit` | GET | **NEW** Recent orders summary |
+| `/:id/orders/:orderId/profit-insight` | GET | Single order profit |
+| `/:id/orders/recent-profit` | GET | Recent orders summary |
 | `/:id/inventory` | GET/POST | Inventory CRUD |
 | `/:id/inventory/alerts` | GET | Low stock warnings |
 | `/:id/inventory/predictions` | GET | Stock runout predictions |
 
 ---
 
-*Last Updated: January 22, 2026 ~4:15pm EST*
-*Status: All Backend AI Features ✅ DEPLOYED | Frontend Integration Next*
+## 🗂️ FILES MODIFIED THIS SESSION
+
+### Backend
+| File | Change |
+|------|--------|
+| `/src/services/order-profit.service.ts` | NEW - Profit insight service |
+| `/src/app/analytics.routes.ts` | Added profit insight endpoints |
+| `/src/app/app.ts` | Fixed route ordering (analytics before menu routes) |
+
+### Frontend (Mobile)
+| File | Change |
+|------|--------|
+| `/apps/pos/src/screens/MenuScreen.tsx` | Added profit insight display in success modal |
+| `/apps/pos/src/components/CheckoutModal.tsx` | Added orderId to receipt data, fixed table handling |
+
+---
+
+## 💡 DEMO SCRIPT FOR JAN 31
+
+### Demo Flow (with new features)
+1. **Browse menu** - "See how all items are organized by category"
+2. **Add items to cart** - Upsell bar appears: "💡 Try the Yuca - 68% margin!"
+3. **Tap upsell suggestion** - Item added instantly
+4. **Complete checkout** - Order placed!
+5. **See profit insight** - "65% margin, $27.90 profit! Star item: Pescado"
+6. **WOW moment** - "Your staff knows what to sell AND how profitable each order is"
+
+### Key Talking Points
+- "This isn't just a POS - it's a profit optimization system"
+- "Your staff gets real-time coaching on what to recommend"
+- "Every order shows you the profit instantly"
+- "No more guessing which items make money"
+
+---
+
+## ⚠️ REMAINING TASKS
+
+| # | Task | Est. Hours | Status |
+|---|------|------------|--------|
+| 1 | **MenuScreen redesign + Upsell bar** | 3-4 | 🎯 NEXT |
+| 2 | Seed sample inventory data | 1 | Not started |
+| 3 | Menu Engineering Dashboard | 4 | Not started |
+| 4 | Sales Insights Dashboard | 4 | Not started |
+
+---
+
+*Last Updated: January 22, 2026 ~3:50pm EST*
+*Status: Checkout Profit Insight ✅ LIVE | Upsell Redesign 🎯 NEXT*
