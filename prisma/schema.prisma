@@ -47,6 +47,7 @@ model Restaurant {
   tables            RestaurantTable[]
   inventoryItems    InventoryItem[]
   userAccess        UserRestaurantAccess[]
+  devices           Device[]
   restaurantGroupId String? @map("restaurant_group_id")
   restaurantGroup   RestaurantGroup? @relation(fields: [restaurantGroupId], references: [id], onDelete: SetNull)
 
@@ -560,6 +561,8 @@ model Device {
   lastSeenAt   DateTime? @map("last_seen_at")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@index([restaurantId])
   @@map("devices")
