@@ -1139,8 +1139,8 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
     // Log sourceDeviceId for debugging
     console.log(`[Order Create] Order ${order.orderNumber} created with sourceDeviceId: ${order.sourceDeviceId || 'NONE'}`);
 
-    // Broadcast new order to all connected KDS devices
-    broadcastOrderEvent(restaurantId, 'order:new', order);
+    // Broadcast new order to KDS devices + source POS only (not other POS devices)
+    broadcastToSourceAndKDS(restaurantId, order.sourceDeviceId, 'order:new', order);
 
     res.status(201).json(order);
   } catch (error) {
