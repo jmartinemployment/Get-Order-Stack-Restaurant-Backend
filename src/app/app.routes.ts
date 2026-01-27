@@ -5,7 +5,7 @@ import { aiCostService } from '../services/ai-cost.service';
 import { taxService } from '../services/tax.service';
 import { updateOrderStatus, getOrderStatusHistory } from '../services/order-status.service';
 import { stripeService } from '../services/stripe.service';
-import { broadcastOrderEvent } from '../services/socket.service';
+import { broadcastOrderEvent, sendOrderEventToDevice } from '../services/socket.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -978,9 +978,10 @@ router.get('/:restaurantId/orders/:orderId', async (req: Request, res: Response)
 router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
-    const { 
+    const {
       customerInfo, customerName, customerPhone, customerEmail,
       orderType, orderSource = 'online', tableId, tableNumber, serverId,
+      sourceDeviceId,
       items, specialInstructions, scheduledTime,
       deliveryAddress, deliveryLat, deliveryLng
     } = req.body;
@@ -1101,6 +1102,7 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
         customerId,
         tableId: resolvedTableId,
         serverId,
+        sourceDeviceId,
         orderNumber: generateOrderNumber(),
         orderType,
         orderSource,
@@ -1170,9 +1172,16 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
       }
     });
 
-    // Broadcast status update to all connected devices
+    // Broadcast status update
     if (order) {
-      broadcastOrderEvent(order.restaurantId, 'order:updated', order);
+      // For 'ready' status, only notify the device that placed the order
+      // Other devices (KDS) don't need ready notifications
+      if (status === 'ready' && order.sourceDeviceId) {
+        sendOrderEventToDevice(order.restaurantId, order.sourceDeviceId, 'order:updated', order);
+      } else {
+        // For other statuses (confirmed, preparing, etc.), broadcast to all
+        broadcastOrderEvent(order.restaurantId, 'order:updated', order);
+      }
     }
 
     res.json(order);

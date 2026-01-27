@@ -169,6 +169,69 @@ export function broadcastOrderEvent(restaurantId: string, eventType: string, ord
   });
 }
 
+// Send an order event to a specific device only
+export function sendOrderEventToDevice(restaurantId: string, targetDeviceId: string, eventType: string, order: any) {
+  if (!io) {
+    console.warn('[Socket.io] Server not initialized, cannot send');
+    return false;
+  }
+
+  // Find the socket ID for the target device
+  const sockets = restaurantSockets.get(restaurantId);
+  if (!sockets) {
+    console.log(`[Socket.io] No sockets found for restaurant ${restaurantId}`);
+    return false;
+  }
+
+  let targetSocketId: string | null = null;
+  for (const socketId of sockets) {
+    const info = socketInfo.get(socketId);
+    if (info && info.deviceId === targetDeviceId) {
+      targetSocketId = socketId;
+      break;
+    }
+  }
+
+  if (!targetSocketId) {
+    console.log(`[Socket.io] Device ${targetDeviceId} not found in restaurant ${restaurantId}`);
+    return false;
+  }
+
+  console.log(`[Socket.io] Sending ${eventType} to device ${targetDeviceId} (socket ${targetSocketId})`);
+
+  io.to(targetSocketId).emit(eventType, {
+    order,
+    timestamp: new Date().toISOString()
+  });
+
+  return true;
+}
+
+// Broadcast to all devices EXCEPT a specific one (useful for new orders - notify KDS but not source)
+export function broadcastOrderEventExcept(restaurantId: string, excludeDeviceId: string, eventType: string, order: any) {
+  if (!io) {
+    console.warn('[Socket.io] Server not initialized, cannot broadcast');
+    return;
+  }
+
+  const sockets = restaurantSockets.get(restaurantId);
+  if (!sockets) return;
+
+  let sentCount = 0;
+  for (const socketId of sockets) {
+    const info = socketInfo.get(socketId);
+    if (info && info.deviceId !== excludeDeviceId) {
+      io.to(socketId).emit(eventType, {
+        order,
+        timestamp: new Date().toISOString()
+      });
+      sentCount++;
+    }
+  }
+
+  console.log(`[Socket.io] Broadcast ${eventType} to ${sentCount} devices (excluding ${excludeDeviceId})`);
+}
+
 // Get count of connected devices for a restaurant
 export function getConnectedDeviceCount(restaurantId: string): number {
   return restaurantSockets.get(restaurantId)?.size || 0;

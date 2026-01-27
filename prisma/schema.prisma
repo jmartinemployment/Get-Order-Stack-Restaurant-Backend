@@ -248,6 +248,7 @@ model Order {
   customerId            String?   @map("customer_id")
   tableId               String?   @map("table_id")
   serverId              String?   @map("server_id")
+  sourceDeviceId        String?   @map("source_device_id")
   orderNumber           String    @unique @map("order_number")
   orderType             String    @map("order_type")
   orderSource           String    @default("online") @map("order_source")
