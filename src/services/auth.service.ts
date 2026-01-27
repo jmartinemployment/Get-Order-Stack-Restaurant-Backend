@@ -50,6 +50,11 @@ export interface PinAuthResult {
   error?: string;
 }
 
+export interface ServiceResult {
+  success: boolean;
+  error?: string;
+}
+
 class AuthService {
   // ============ Password Hashing ============
 
@@ -243,7 +248,7 @@ class AuthService {
 
   // ============ Session Management ============
 
-  async logout(sessionId: string): Promise<{ success: boolean; error?: string }> {
+  async logout(sessionId: string): Promise<ServiceResult> {
     try {
       await prisma.userSession.update({
         where: { id: sessionId },
@@ -256,7 +261,7 @@ class AuthService {
     }
   }
 
-  async logoutAllSessions(userId: string): Promise<{ success: boolean; error?: string }> {
+  async logoutAllSessions(userId: string): Promise<ServiceResult> {
     try {
       await prisma.userSession.updateMany({
         where: { userId },
@@ -390,7 +395,7 @@ class AuthService {
     }
   }
 
-  async deleteStaffPin(pinId: string): Promise<{ success: boolean; error?: string }> {
+  async deleteStaffPin(pinId: string): Promise<ServiceResult> {
     try {
       await prisma.staffPin.update({
         where: { id: pinId },
