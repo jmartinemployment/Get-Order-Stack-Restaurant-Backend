@@ -87,6 +87,13 @@ class AuthService {
       const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
       return decoded;
     } catch (error) {
+      if (error instanceof jwt.TokenExpiredError) {
+        console.debug('[Auth] Token expired');
+      } else if (error instanceof jwt.JsonWebTokenError) {
+        console.debug('[Auth] Invalid token:', error.message);
+      } else {
+        console.error('[Auth] Unexpected token verification error:', error);
+      }
       return null;
     }
   }
@@ -236,29 +243,29 @@ class AuthService {
 
   // ============ Session Management ============
 
-  async logout(sessionId: string): Promise<boolean> {
+  async logout(sessionId: string): Promise<{ success: boolean; error?: string }> {
     try {
       await prisma.userSession.update({
         where: { id: sessionId },
         data: { isActive: false }
       });
-      return true;
+      return { success: true };
     } catch (error) {
       console.error('[Auth] Logout error:', error);
-      return false;
+      return { success: false, error: 'Failed to logout session' };
     }
   }
 
-  async logoutAllSessions(userId: string): Promise<boolean> {
+  async logoutAllSessions(userId: string): Promise<{ success: boolean; error?: string }> {
     try {
       await prisma.userSession.updateMany({
         where: { userId },
         data: { isActive: false }
       });
-      return true;
+      return { success: true };
     } catch (error) {
       console.error('[Auth] Logout all error:', error);
-      return false;
+      return { success: false, error: 'Failed to logout all sessions' };
     }
   }
 
@@ -283,6 +290,7 @@ class AuthService {
 
       return true;
     } catch (error) {
+      console.error('[Auth] Session validation error:', error);
       return false;
     }
   }
@@ -382,16 +390,16 @@ class AuthService {
     }
   }
 
-  async deleteStaffPin(pinId: string): Promise<boolean> {
+  async deleteStaffPin(pinId: string): Promise<{ success: boolean; error?: string }> {
     try {
       await prisma.staffPin.update({
         where: { id: pinId },
         data: { isActive: false }
       });
-      return true;
+      return { success: true };
     } catch (error) {
       console.error('[Auth] Delete staff PIN error:', error);
-      return false;
+      return { success: false, error: 'Failed to delete staff PIN' };
     }
   }
 
@@ -445,7 +453,8 @@ class AuthService {
       return { hasAccess: false };
     } catch (error) {
       console.error('[Auth] Check access error:', error);
-      return { hasAccess: false };
+      // Re-throw to let caller handle - don't silently deny access on DB errors
+      throw new Error('Unable to verify restaurant access');
     }
   }
 }

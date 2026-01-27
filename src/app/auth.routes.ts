@@ -55,7 +55,11 @@ router.post('/logout', async (req: Request, res: Response) => {
       return;
     }
 
-    await authService.logout(payload.sessionId);
+    const result = await authService.logout(payload.sessionId);
+    if (!result.success) {
+      res.status(500).json({ error: result.error });
+      return;
+    }
     res.json({ success: true, message: 'Logged out successfully' });
   } catch (error) {
     console.error('Logout error:', error);
@@ -268,7 +272,11 @@ router.delete('/:restaurantId/pins/:pinId', async (req: Request, res: Response) 
 
     // TODO: Add auth middleware to verify admin access
 
-    await authService.deleteStaffPin(pinId);
+    const result = await authService.deleteStaffPin(pinId);
+    if (!result.success) {
+      res.status(500).json({ error: result.error });
+      return;
+    }
     res.status(204).send();
   } catch (error) {
     console.error('Delete staff PIN error:', error);

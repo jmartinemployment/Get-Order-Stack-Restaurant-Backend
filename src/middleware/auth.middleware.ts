@@ -73,6 +73,8 @@ export const optionalAuth = async (req: Request, res: Response, next: NextFuncti
     next();
   } catch (error) {
     // Don't fail on optional auth errors, just continue without user
+    // But log for debugging visibility
+    console.debug('[Auth Middleware] Optional auth error (continuing without user):', error);
     next();
   }
 };

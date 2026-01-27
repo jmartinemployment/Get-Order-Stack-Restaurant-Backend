@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -60,6 +60,18 @@ router.post('/:restaurantId/devices/register', async (req: Request, res: Respons
     });
   } catch (error) {
     console.error('Error registering device:', error);
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        res.status(409).json({ error: 'Device ID conflict - device may already be registered' });
+        return;
+      }
+      if (error.code === 'P2003') {
+        res.status(400).json({ error: 'Invalid restaurant ID' });
+        return;
+      }
+    }
+
     res.status(500).json({ error: 'Failed to register device' });
   }
 });
@@ -80,6 +92,14 @@ router.post('/:restaurantId/devices/:deviceId/heartbeat', async (req: Request, r
     res.json({ success: true, lastSeenAt: device.lastSeenAt });
   } catch (error) {
     console.error('Error updating device heartbeat:', error);
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2025') {
+        res.status(404).json({ error: 'Device not found' });
+        return;
+      }
+    }
+
     res.status(500).json({ error: 'Failed to update heartbeat' });
   }
 });
@@ -110,6 +130,12 @@ router.get('/:restaurantId/devices', async (req: Request, res: Response) => {
     res.json(devicesWithStatus);
   } catch (error) {
     console.error('Error fetching devices:', error);
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      res.status(400).json({ error: 'Invalid query parameters' });
+      return;
+    }
+
     res.status(500).json({ error: 'Failed to fetch devices' });
   }
 });
@@ -132,6 +158,14 @@ router.patch('/:restaurantId/devices/:deviceId', async (req: Request, res: Respo
     res.json(device);
   } catch (error) {
     console.error('Error updating device:', error);
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2025') {
+        res.status(404).json({ error: 'Device not found' });
+        return;
+      }
+    }
+
     res.status(500).json({ error: 'Failed to update device' });
   }
 });
@@ -151,6 +185,14 @@ router.post('/:restaurantId/devices/:deviceId/disconnect', async (req: Request, 
     res.json({ success: true, message: 'Device disconnected' });
   } catch (error) {
     console.error('Error disconnecting device:', error);
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2025') {
+        res.status(404).json({ error: 'Device not found' });
+        return;
+      }
+    }
+
     res.status(500).json({ error: 'Failed to disconnect device' });
   }
 });
@@ -167,6 +209,14 @@ router.delete('/:restaurantId/devices/:deviceId', async (req: Request, res: Resp
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting device:', error);
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2025') {
+        res.status(404).json({ error: 'Device not found' });
+        return;
+      }
+    }
+
     res.status(500).json({ error: 'Failed to delete device' });
   }
 });
