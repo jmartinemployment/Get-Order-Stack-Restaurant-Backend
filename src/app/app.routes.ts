@@ -1135,6 +1135,9 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
       });
     }
 
+    // Log sourceDeviceId for debugging
+    console.log(`[Order Create] Order ${order.orderNumber} created with sourceDeviceId: ${order.sourceDeviceId || 'NONE'}`);
+
     // Broadcast new order to all connected KDS devices
     broadcastOrderEvent(restaurantId, 'order:new', order);
 
@@ -1174,12 +1177,16 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
 
     // Broadcast status update
     if (order) {
+      console.log(`[Order Status] Order ${order.orderNumber} -> ${status}, sourceDeviceId: ${order.sourceDeviceId || 'NONE'}`);
+
       // For 'ready' status, only notify the device that placed the order
       // Other devices (KDS) don't need ready notifications
       if (status === 'ready' && order.sourceDeviceId) {
+        console.log(`[Order Status] Sending targeted notification to device: ${order.sourceDeviceId}`);
         sendOrderEventToDevice(order.restaurantId, order.sourceDeviceId, 'order:updated', order);
       } else {
         // For other statuses (confirmed, preparing, etc.), broadcast to all
+        console.log(`[Order Status] Broadcasting to all devices (status=${status}, hasSourceDevice=${!!order.sourceDeviceId})`);
         broadcastOrderEvent(order.restaurantId, 'order:updated', order);
       }
     }
