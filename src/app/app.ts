@@ -4,6 +4,8 @@ import { config } from './app.config';
 import menuRoutes from './app.routes';
 import primaryCategoryRoutes from './primary-category.routes';
 import analyticsRoutes from './analytics.routes';
+import deviceRoutes from './device.routes';
+import authRoutes from './auth.routes';
 import { stripeService } from '../services/stripe.service';
 
 const app = express();
@@ -47,8 +49,10 @@ app.get('/health', (_req, res) => {
 });
 
 // Routes - ORDER MATTERS! More specific routes first
+app.use('/api/auth', authRoutes);  // Authentication routes
 app.use('/api/restaurant', analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
 app.use('/api/restaurant', primaryCategoryRoutes);
+app.use('/api/restaurant', deviceRoutes);  // Device registration routes
 app.use('/api/restaurant', menuRoutes);
 
 export default app;

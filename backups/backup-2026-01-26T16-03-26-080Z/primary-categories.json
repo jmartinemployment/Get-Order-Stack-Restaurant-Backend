@@ -1,0 +1,122 @@
+[
+  {
+    "id": "322a9129-dc5f-4b55-8630-03efc18e21ca",
+    "restaurantId": "e29f2f0a-9d2e-46cf-941c-b87ed408e892",
+    "slug": "appetizers",
+    "name": "Aperitivos",
+    "nameEn": "Appetizers",
+    "icon": "🥗",
+    "displayOrder": 1,
+    "active": true,
+    "createdAt": "2026-01-21T20:49:51.279Z",
+    "updatedAt": "2026-01-21T20:49:51.279Z"
+  },
+  {
+    "id": "5ca8d75f-17d6-4aa1-a718-e870ba6c2756",
+    "restaurantId": "f2cfe8dd-48f3-4596-ab1e-22a28b23ad38",
+    "slug": "appetizers",
+    "name": "Aperitivos",
+    "nameEn": "Appetizers",
+    "icon": "🥗",
+    "displayOrder": 1,
+    "active": true,
+    "createdAt": "2026-01-21T20:50:00.522Z",
+    "updatedAt": "2026-01-21T20:50:00.522Z"
+  },
+  {
+    "id": "4d564cc6-1ae1-4462-8060-980ec4d94932",
+    "restaurantId": "e29f2f0a-9d2e-46cf-941c-b87ed408e892",
+    "slug": "beverages",
+    "name": "Bebidas",
+    "nameEn": "Beverages",
+    "icon": "🥤",
+    "displayOrder": 3,
+    "active": true,
+    "createdAt": "2026-01-21T20:49:52.093Z",
+    "updatedAt": "2026-01-21T20:49:52.093Z"
+  },
+  {
+    "id": "d0707712-1283-4a9c-9150-bf6982fec433",
+    "restaurantId": "f2cfe8dd-48f3-4596-ab1e-22a28b23ad38",
+    "slug": "beverages",
+    "name": "Bebidas",
+    "nameEn": "Beverages",
+    "icon": "🥤",
+    "displayOrder": 3,
+    "active": true,
+    "createdAt": "2026-01-21T20:50:01.266Z",
+    "updatedAt": "2026-01-21T20:50:01.266Z"
+  },
+  {
+    "id": "5fb68e4f-313b-4f5e-bc81-97cf40b4ca80",
+    "restaurantId": "e29f2f0a-9d2e-46cf-941c-b87ed408e892",
+    "slug": "desserts",
+    "name": "Postres",
+    "nameEn": "Desserts",
+    "icon": "🍰",
+    "displayOrder": 4,
+    "active": true,
+    "createdAt": "2026-01-21T20:49:52.421Z",
+    "updatedAt": "2026-01-21T20:49:52.421Z"
+  },
+  {
+    "id": "46027cf3-64af-4a0d-9073-82c0bef86483",
+    "restaurantId": "f2cfe8dd-48f3-4596-ab1e-22a28b23ad38",
+    "slug": "desserts",
+    "name": "Postres",
+    "nameEn": "Desserts",
+    "icon": "🍰",
+    "displayOrder": 4,
+    "active": true,
+    "createdAt": "2026-01-21T20:50:01.686Z",
+    "updatedAt": "2026-01-21T20:50:01.686Z"
+  },
+  {
+    "id": "230bf9e4-6e04-47b0-9e1c-8a44c9320d3e",
+    "restaurantId": "e29f2f0a-9d2e-46cf-941c-b87ed408e892",
+    "slug": "sides",
+    "name": "Acompañamientos",
+    "nameEn": "Sides",
+    "icon": "🥕",
+    "displayOrder": 5,
+    "active": true,
+    "createdAt": "2026-01-21T20:49:52.821Z",
+    "updatedAt": "2026-01-21T20:49:52.821Z"
+  },
+  {
+    "id": "5e0aa441-fa55-427f-8703-f110e0310df5",
+    "restaurantId": "f2cfe8dd-48f3-4596-ab1e-22a28b23ad38",
+    "slug": "sides",
+    "name": "Acompañamientos",
+    "nameEn": "Sides",
+    "icon": "🥕",
+    "displayOrder": 5,
+    "active": true,
+    "createdAt": "2026-01-21T20:50:02.093Z",
+    "updatedAt": "2026-01-21T20:50:02.093Z"
+  },
+  {
+    "id": "87334cf4-074f-465d-bf1f-360b293ba5ce",
+    "restaurantId": "e29f2f0a-9d2e-46cf-941c-b87ed408e892",
+    "slug": "entrees",
+    "name": "Entradas",
+    "nameEn": "Entrees",
+    "icon": "🍽️",
+    "displayOrder": 2,
+    "active": true,
+    "createdAt": "2026-01-21T20:49:51.676Z",
+    "updatedAt": "2026-01-21T20:49:51.676Z"
+  },
+  {
+    "id": "baa9e9fe-b85f-46fd-816f-79a16ba00d55",
+    "restaurantId": "f2cfe8dd-48f3-4596-ab1e-22a28b23ad38",
+    "slug": "entrees",
+    "name": "Entradas",
+    "nameEn": "Entrees",
+    "icon": "🍽️",
+    "displayOrder": 2,
+    "active": true,
+    "createdAt": "2026-01-21T20:50:00.939Z",
+    "updatedAt": "2026-01-21T20:50:00.939Z"
+  }
+]

@@ -5,6 +5,7 @@ import { aiCostService } from '../services/ai-cost.service';
 import { taxService } from '../services/tax.service';
 import { updateOrderStatus, getOrderStatusHistory } from '../services/order-status.service';
 import { stripeService } from '../services/stripe.service';
+import { broadcastOrderEvent } from '../services/socket.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1125,6 +1126,9 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
       });
     }
 
+    // Broadcast new order to all connected KDS devices
+    broadcastOrderEvent(restaurantId, 'order:new', order);
+
     res.status(201).json(order);
   } catch (error) {
     console.error('Error creating order:', error);
@@ -1158,6 +1162,11 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
         statusHistory: { orderBy: { createdAt: 'asc' } }
       }
     });
+
+    // Broadcast status update to all connected devices
+    if (order) {
+      broadcastOrderEvent(order.restaurantId, 'order:updated', order);
+    }
 
     res.json(order);
   } catch (error) {

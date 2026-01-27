@@ -46,6 +46,9 @@ model Restaurant {
   reservations      Reservation[]
   tables            RestaurantTable[]
   inventoryItems    InventoryItem[]
+  userAccess        UserRestaurantAccess[]
+  restaurantGroupId String? @map("restaurant_group_id")
+  restaurantGroup   RestaurantGroup? @relation(fields: [restaurantGroupId], references: [id], onDelete: SetNull)
 
   @@map("restaurants")
 }
@@ -444,4 +447,120 @@ model RecipeIngredient {
   @@index([menuItemId])
   @@index([inventoryItemId])
   @@map("recipe_ingredients")
+}
+
+// === AUTHENTICATION & AUTHORIZATION ===
+
+model RestaurantGroup {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  logo        String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users       User[]
+  restaurants Restaurant[]
+
+  @@map("restaurant_groups")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  restaurantGroupId String?   @map("restaurant_group_id")
+  email             String    @unique
+  passwordHash      String    @map("password_hash")
+  firstName         String?   @map("first_name")
+  lastName          String?   @map("last_name")
+  role              String    @default("staff") // super_admin, owner, manager, staff
+  isActive          Boolean   @default(true) @map("is_active")
+  lastLoginAt       DateTime? @map("last_login_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  restaurantGroup  RestaurantGroup?       @relation(fields: [restaurantGroupId], references: [id], onDelete: SetNull)
+  restaurantAccess UserRestaurantAccess[]
+  sessions         UserSession[]
+
+  @@index([restaurantGroupId])
+  @@map("users")
+}
+
+model UserRestaurantAccess {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  restaurantId String   @map("restaurant_id")
+  role         String   @default("staff") // owner, manager, staff
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, restaurantId])
+  @@index([restaurantId])
+  @@map("user_restaurant_access")
+}
+
+model UserSession {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  token      String   @unique
+  deviceInfo String?  @map("device_info")
+  ipAddress  String?  @map("ip_address")
+  isActive   Boolean  @default(true) @map("is_active")
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
+}
+
+model StaffPin {
+  id           String   @id @default(uuid())
+  restaurantId String   @map("restaurant_id")
+  pin          String   // hashed 4-6 digit PIN
+  name         String   // display name
+  role         String   @default("staff")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([restaurantId])
+  @@map("staff_pins")
+}
+
+model Station {
+  id           String   @id @default(uuid())
+  restaurantId String   @map("restaurant_id")
+  name         String   // e.g., "Grill", "Fry", "Cold", "Expo"
+  displayOrder Int      @default(0) @map("display_order")
+  isExpo       Boolean  @default(false) @map("is_expo")
+  color        String?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([restaurantId, name])
+  @@index([restaurantId])
+  @@map("stations")
+}
+
+model Device {
+  id           String   @id @default(uuid())
+  restaurantId String   @map("restaurant_id")
+  deviceId     String   @unique @map("device_id")
+  deviceType   String   @map("device_type") // 'kds', 'pos', 'tablet'
+  deviceName   String?  @map("device_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  lastSeenAt   DateTime? @map("last_seen_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([restaurantId])
+  @@map("devices")
 }

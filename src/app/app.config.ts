@@ -2,7 +2,9 @@
 const allowedOrigins = process.env.CORS_ORIGINS?.split(',') || [
   'http://localhost:4200',
   'http://localhost:8081',
+  'http://localhost:8082',
   'http://127.0.0.1:8081',
+  'http://127.0.0.1:8082',
   // Vercel deployments
   'https://get-order-stack-restaurant-mobile-j.vercel.app',
   'https://get-order-stack-restaurant-mobile.vercel.app',
