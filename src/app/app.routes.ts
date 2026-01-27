@@ -917,7 +917,7 @@ router.post('/:restaurantId/menu/generate-all-descriptions', async (req: Request
 router.get('/:restaurantId/orders', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
-    const { status, orderType, limit = '50' } = req.query;
+    const { status, orderType, sourceDeviceId, limit = '50' } = req.query;
 
     // Support comma-separated status values (e.g., "pending,confirmed,preparing,ready")
     let statusFilter: any = undefined;
@@ -930,7 +930,8 @@ router.get('/:restaurantId/orders', async (req: Request, res: Response) => {
       where: {
         restaurantId,
         ...(statusFilter && { status: statusFilter }),
-        ...(orderType && { orderType: orderType as string })
+        ...(orderType && { orderType: orderType as string }),
+        ...(sourceDeviceId && { sourceDeviceId: sourceDeviceId as string })
       },
       include: {
         orderItems: {
