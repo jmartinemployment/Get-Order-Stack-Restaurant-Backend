@@ -245,14 +245,27 @@ export function broadcastToSourceAndKDS(restaurantId: string, sourceDeviceId: st
     return;
   }
 
+  console.log(`[Socket.io] broadcastToSourceAndKDS: restaurantId=${restaurantId}, sourceDeviceId=${sourceDeviceId}, event=${eventType}`);
+  console.log(`[Socket.io] Connected sockets for restaurant: ${sockets.size}`);
+
   let sentCount = 0;
+  let skippedCount = 0;
   for (const socketId of sockets) {
     const info = socketInfo.get(socketId);
     if (!info) continue;
 
-    // Send to: KDS devices OR the source POS device
+    // Send to: KDS devices always, POS only if it's the source device
     const isKDS = info.deviceType === 'kds';
+    const isPOS = info.deviceType === 'pos';
     const isSourceDevice = sourceDeviceId && info.deviceId === sourceDeviceId;
+
+    // POS devices only get notified if they created the order
+    // No sourceDeviceId = no POS notifications
+    if (isPOS && !isSourceDevice) {
+      skippedCount++;
+      console.log(`[Socket.io] SKIPPED POS ${info.deviceId} (not source device)`);
+      continue;
+    }
 
     if (isKDS || isSourceDevice) {
       io.to(socketId).emit(eventType, {
@@ -260,11 +273,14 @@ export function broadcastToSourceAndKDS(restaurantId: string, sourceDeviceId: st
         timestamp: new Date().toISOString()
       });
       sentCount++;
-      console.log(`[Socket.io] Sent ${eventType} to ${info.deviceType}:${info.deviceId}`);
+      console.log(`[Socket.io] SENT ${eventType} to ${info.deviceType}:${info.deviceId}`);
+    } else {
+      skippedCount++;
+      console.log(`[Socket.io] SKIPPED ${info.deviceType}:${info.deviceId} (not KDS and not source device)`);
     }
   }
 
-  console.log(`[Socket.io] Broadcast ${eventType} to ${sentCount} devices (source + KDS)`);
+  console.log(`[Socket.io] Broadcast complete: sent=${sentCount}, skipped=${skippedCount}`);
 }
 
 // Get count of connected devices for a restaurant

@@ -987,6 +987,12 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
       deliveryAddress, deliveryLat, deliveryLng
     } = req.body;
 
+    // Require sourceDeviceId for all POS orders
+    if (orderSource === 'pos' && !sourceDeviceId) {
+      res.status(400).json({ error: 'sourceDeviceId is required for POS orders' });
+      return;
+    }
+
     // Get restaurant for tax rate
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId }
