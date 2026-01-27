@@ -232,6 +232,41 @@ export function broadcastOrderEventExcept(restaurantId: string, excludeDeviceId:
   console.log(`[Socket.io] Broadcast ${eventType} to ${sentCount} devices (excluding ${excludeDeviceId})`);
 }
 
+// Send order event to source device AND all KDS devices (not other POS devices)
+export function broadcastToSourceAndKDS(restaurantId: string, sourceDeviceId: string | null, eventType: string, order: any) {
+  if (!io) {
+    console.warn('[Socket.io] Server not initialized, cannot broadcast');
+    return;
+  }
+
+  const sockets = restaurantSockets.get(restaurantId);
+  if (!sockets) {
+    console.log(`[Socket.io] No sockets for restaurant ${restaurantId}`);
+    return;
+  }
+
+  let sentCount = 0;
+  for (const socketId of sockets) {
+    const info = socketInfo.get(socketId);
+    if (!info) continue;
+
+    // Send to: KDS devices OR the source POS device
+    const isKDS = info.deviceType === 'kds';
+    const isSourceDevice = sourceDeviceId && info.deviceId === sourceDeviceId;
+
+    if (isKDS || isSourceDevice) {
+      io.to(socketId).emit(eventType, {
+        order,
+        timestamp: new Date().toISOString()
+      });
+      sentCount++;
+      console.log(`[Socket.io] Sent ${eventType} to ${info.deviceType}:${info.deviceId}`);
+    }
+  }
+
+  console.log(`[Socket.io] Broadcast ${eventType} to ${sentCount} devices (source + KDS)`);
+}
+
 // Get count of connected devices for a restaurant
 export function getConnectedDeviceCount(restaurantId: string): number {
   return restaurantSockets.get(restaurantId)?.size || 0;

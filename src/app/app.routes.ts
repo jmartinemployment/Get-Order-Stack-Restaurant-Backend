@@ -5,7 +5,7 @@ import { aiCostService } from '../services/ai-cost.service';
 import { taxService } from '../services/tax.service';
 import { updateOrderStatus, getOrderStatusHistory } from '../services/order-status.service';
 import { stripeService } from '../services/stripe.service';
-import { broadcastOrderEvent, sendOrderEventToDevice } from '../services/socket.service';
+import { broadcastOrderEvent, sendOrderEventToDevice, broadcastToSourceAndKDS } from '../services/socket.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1175,20 +1175,11 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
       }
     });
 
-    // Broadcast status update
+    // Broadcast status update to source device + KDS devices only
+    // Other POS devices don't need updates for orders they didn't create
     if (order) {
       console.log(`[Order Status] Order ${order.orderNumber} -> ${status}, sourceDeviceId: ${order.sourceDeviceId || 'NONE'}`);
-
-      // For 'ready' status, only notify the device that placed the order
-      // Other devices (KDS) don't need ready notifications
-      if (status === 'ready' && order.sourceDeviceId) {
-        console.log(`[Order Status] Sending targeted notification to device: ${order.sourceDeviceId}`);
-        sendOrderEventToDevice(order.restaurantId, order.sourceDeviceId, 'order:updated', order);
-      } else {
-        // For other statuses (confirmed, preparing, etc.), broadcast to all
-        console.log(`[Order Status] Broadcasting to all devices (status=${status}, hasSourceDevice=${!!order.sourceDeviceId})`);
-        broadcastOrderEvent(order.restaurantId, 'order:updated', order);
-      }
+      broadcastToSourceAndKDS(order.restaurantId, order.sourceDeviceId, 'order:updated', order);
     }
 
     res.json(order);
