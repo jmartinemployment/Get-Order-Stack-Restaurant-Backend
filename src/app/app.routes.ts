@@ -919,10 +919,17 @@ router.get('/:restaurantId/orders', async (req: Request, res: Response) => {
     const { restaurantId } = req.params;
     const { status, orderType, limit = '50' } = req.query;
 
+    // Support comma-separated status values (e.g., "pending,confirmed,preparing,ready")
+    let statusFilter: any = undefined;
+    if (status) {
+      const statuses = (status as string).split(',').map(s => s.trim());
+      statusFilter = statuses.length === 1 ? statuses[0] : { in: statuses };
+    }
+
     const orders = await prisma.order.findMany({
       where: {
         restaurantId,
-        ...(status && { status: status as string }),
+        ...(statusFilter && { status: statusFilter }),
         ...(orderType && { orderType: orderType as string })
       },
       include: {
