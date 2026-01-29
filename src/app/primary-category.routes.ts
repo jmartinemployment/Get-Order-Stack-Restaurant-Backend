@@ -332,7 +332,8 @@ router.get('/:restaurantId/menu/grouped', async (req: Request, res: Response) =>
       name: lang === 'en' && item.nameEn ? item.nameEn : item.name,
       nameEs: item.name,
       nameEn: item.nameEn,
-      description: lang === 'en' && item.descriptionEn ? item.descriptionEn : item.description,
+      description: item.description,
+      descriptionEn: item.descriptionEn,
       price: item.price,
       image: item.image,
       popular: item.popular,
@@ -361,7 +362,8 @@ router.get('/:restaurantId/menu/grouped', async (req: Request, res: Response) =>
       name: lang === 'en' && cat.nameEn ? cat.nameEn : cat.name,
       nameEs: cat.name,
       nameEn: cat.nameEn,
-      description: lang === 'en' && cat.descriptionEn ? cat.descriptionEn : cat.description,
+      description: cat.description,
+      descriptionEn: cat.descriptionEn,
       image: cat.image,
       items: cat.menuItems.map(transformItem)
     });
