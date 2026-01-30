@@ -1,14 +1,20 @@
-// Allowed origins for CORS
-const allowedOrigins = process.env.CORS_ORIGINS?.split(',') || [
-  'http://localhost:4200',
-  'http://localhost:8081',
-  'http://localhost:8082',
-  'http://127.0.0.1:8081',
-  'http://127.0.0.1:8082',
-  // Vercel deployments
-  'https://get-order-stack-restaurant-mobile-j.vercel.app',
-  'https://get-order-stack-restaurant-mobile.vercel.app',
-];
+// Allowed origins for CORS - trim whitespace from env var values
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim()).filter(o => o)
+  : [
+    'http://localhost:4200',
+    'http://localhost:4201',
+    'http://localhost:8081',
+    'http://localhost:8082',
+    'http://127.0.0.1:8081',
+    'http://127.0.0.1:8082',
+    // Production deployments
+    'https://geekatyourspot.com',
+    'https://www.geekatyourspot.com',
+    // Vercel deployments
+    'https://get-order-stack-restaurant-mobile-j.vercel.app',
+    'https://get-order-stack-restaurant-mobile.vercel.app',
+  ];
 
 // Dynamic CORS origin checker - allows Expo dev servers and listed origins
 const corsOriginChecker = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
@@ -36,8 +42,9 @@ const corsOriginChecker = (origin: string | undefined, callback: (err: Error | n
     return;
   }
 
-  // Reject other origins
-  callback(new Error('Not allowed by CORS'));
+  // Reject other origins (return false instead of error to avoid 500)
+  console.log(`CORS rejected origin: ${origin}`);
+  callback(null, false);
 };
 
 export const config = {
