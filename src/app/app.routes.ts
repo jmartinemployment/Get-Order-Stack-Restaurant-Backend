@@ -764,6 +764,124 @@ router.delete('/:restaurantId/tables/:tableId', async (req: Request, res: Respon
   }
 });
 
+// ============ Reservations ============
+
+router.get('/:restaurantId/reservations', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { status, date } = req.query;
+
+    const where: Record<string, unknown> = { restaurantId };
+    if (status) {
+      where.status = { in: (status as string).split(',') };
+    }
+    if (date) {
+      const dayStart = new Date(date as string);
+      const dayEnd = new Date(date as string);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      where.reservationTime = { gte: dayStart, lt: dayEnd };
+    }
+
+    const reservations = await prisma.reservation.findMany({
+      where,
+      include: { customer: true },
+      orderBy: { reservationTime: 'asc' }
+    });
+    res.json(reservations);
+  } catch (error) {
+    console.error('Error fetching reservations:', error);
+    res.status(500).json({ error: 'Failed to fetch reservations' });
+  }
+});
+
+router.post('/:restaurantId/reservations', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const {
+      customerName, customerPhone, customerEmail,
+      partySize, reservationTime, tableNumber, specialRequests
+    } = req.body;
+
+    if (!customerName || !customerPhone || !partySize || !reservationTime) {
+      res.status(400).json({ error: 'customerName, customerPhone, partySize, and reservationTime are required' });
+      return;
+    }
+
+    const reservation = await prisma.reservation.create({
+      data: {
+        restaurantId,
+        customerName,
+        customerPhone,
+        customerEmail,
+        partySize,
+        reservationTime: new Date(reservationTime),
+        tableNumber,
+        specialRequests
+      },
+      include: { customer: true }
+    });
+    res.status(201).json(reservation);
+  } catch (error) {
+    console.error('Error creating reservation:', error);
+    res.status(500).json({ error: 'Failed to create reservation' });
+  }
+});
+
+router.get('/:restaurantId/reservations/:reservationId', async (req: Request, res: Response) => {
+  try {
+    const { reservationId } = req.params;
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: { customer: true }
+    });
+    if (!reservation) {
+      res.status(404).json({ error: 'Reservation not found' });
+      return;
+    }
+    res.json(reservation);
+  } catch (error) {
+    console.error('Error fetching reservation:', error);
+    res.status(500).json({ error: 'Failed to fetch reservation' });
+  }
+});
+
+router.patch('/:restaurantId/reservations/:reservationId', async (req: Request, res: Response) => {
+  try {
+    const { reservationId } = req.params;
+    const { status, tableNumber, partySize, reservationTime, specialRequests, customerName, customerPhone, customerEmail } = req.body;
+
+    const reservation = await prisma.reservation.update({
+      where: { id: reservationId },
+      data: {
+        ...(status !== undefined && { status }),
+        ...(tableNumber !== undefined && { tableNumber }),
+        ...(partySize !== undefined && { partySize }),
+        ...(reservationTime !== undefined && { reservationTime: new Date(reservationTime) }),
+        ...(specialRequests !== undefined && { specialRequests }),
+        ...(customerName !== undefined && { customerName }),
+        ...(customerPhone !== undefined && { customerPhone }),
+        ...(customerEmail !== undefined && { customerEmail })
+      },
+      include: { customer: true }
+    });
+    res.json(reservation);
+  } catch (error) {
+    console.error('Error updating reservation:', error);
+    res.status(500).json({ error: 'Failed to update reservation' });
+  }
+});
+
+router.delete('/:restaurantId/reservations/:reservationId', async (req: Request, res: Response) => {
+  try {
+    const { reservationId } = req.params;
+    await prisma.reservation.delete({ where: { id: reservationId } });
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting reservation:', error);
+    res.status(500).json({ error: 'Failed to delete reservation' });
+  }
+});
+
 // ============ AI Endpoints ============
 
 router.post('/:restaurantId/menu/items/:itemId/estimate-cost', async (req: Request, res: Response) => {
