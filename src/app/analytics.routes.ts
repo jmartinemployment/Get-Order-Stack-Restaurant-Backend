@@ -4,12 +4,14 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
 import { menuEngineeringService } from '../services/menu-engineering.service';
 import { salesInsightsService } from '../services/sales-insights.service';
 import { inventoryService } from '../services/inventory.service';
 import { orderProfitService } from '../services/order-profit.service';
 
 const router = Router();
+const prisma = new PrismaClient();
 
 // ============ Menu Engineering ============
 
@@ -161,27 +163,6 @@ router.get('/:restaurantId/inventory', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /:restaurantId/inventory/:itemId
- * Get a single inventory item
- */
-router.get('/:restaurantId/inventory/:itemId', async (req: Request, res: Response) => {
-  try {
-    const { itemId } = req.params;
-    const item = await inventoryService.getInventoryItem(itemId);
-
-    if (!item) {
-      res.status(404).json({ error: 'Inventory item not found' });
-      return;
-    }
-
-    res.json(item);
-  } catch (error) {
-    console.error('Error getting inventory item:', error);
-    res.status(500).json({ error: 'Failed to get inventory item' });
-  }
-});
-
-/**
  * POST /:restaurantId/inventory
  * Create a new inventory item
  */
@@ -325,6 +306,27 @@ router.get('/:restaurantId/inventory/report', async (req: Request, res: Response
 });
 
 /**
+ * GET /:restaurantId/inventory/:itemId
+ * Get a single inventory item (must be after /alerts, /predictions, /report)
+ */
+router.get('/:restaurantId/inventory/:itemId', async (req: Request, res: Response) => {
+  try {
+    const { itemId } = req.params;
+    const item = await inventoryService.getInventoryItem(itemId);
+
+    if (!item) {
+      res.status(404).json({ error: 'Inventory item not found' });
+      return;
+    }
+
+    res.json(item);
+  } catch (error) {
+    console.error('Error getting inventory item:', error);
+    res.status(500).json({ error: 'Failed to get inventory item' });
+  }
+});
+
+/**
  * GET /:restaurantId/inventory/:itemId/predict
  * AI prediction: When will we run out of this item?
  */
@@ -380,6 +382,62 @@ router.get('/:restaurantId/orders/recent-profit', async (req: Request, res: Resp
   } catch (error) {
     console.error('Error getting recent orders profit:', error);
     res.status(500).json({ error: 'Failed to get recent orders profit' });
+  }
+});
+
+// ============ Customers ============
+
+/**
+ * GET /:restaurantId/customers
+ * Get all customers for a restaurant
+ */
+router.get('/:restaurantId/customers', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { search } = req.query;
+
+    const where: Record<string, unknown> = { restaurantId };
+
+    if (search) {
+      const term = String(search);
+      where.OR = [
+        { firstName: { contains: term, mode: 'insensitive' } },
+        { lastName: { contains: term, mode: 'insensitive' } },
+        { email: { contains: term, mode: 'insensitive' } },
+        { phone: { contains: term } },
+      ];
+    }
+
+    const customers = await prisma.customer.findMany({
+      where,
+      orderBy: { lastOrderDate: 'desc' },
+    });
+
+    res.json(customers);
+  } catch (error) {
+    console.error('Error getting customers:', error);
+    res.status(500).json({ error: 'Failed to get customers' });
+  }
+});
+
+/**
+ * PATCH /:restaurantId/customers/:customerId
+ * Update customer tags
+ */
+router.patch('/:restaurantId/customers/:customerId', async (req: Request, res: Response) => {
+  try {
+    const { customerId } = req.params;
+    const { tags } = req.body;
+
+    const customer = await prisma.customer.update({
+      where: { id: customerId },
+      data: { tags },
+    });
+
+    res.json(customer);
+  } catch (error) {
+    console.error('Error updating customer:', error);
+    res.status(500).json({ error: 'Failed to update customer' });
   }
 });
 
