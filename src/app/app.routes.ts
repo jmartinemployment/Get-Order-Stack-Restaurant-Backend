@@ -6,6 +6,9 @@ import { taxService } from '../services/tax.service';
 import { updateOrderStatus, getOrderStatusHistory } from '../services/order-status.service';
 import { stripeService } from '../services/stripe.service';
 import { broadcastOrderEvent, sendOrderEventToDevice, broadcastToSourceAndKDS } from '../services/socket.service';
+import { printService } from '../services/print.service';
+import { enrichOrderResponse } from '../utils/order-enrichment';
+import { validateDiningData } from '../validators/dining.validator';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1035,7 +1038,14 @@ router.post('/:restaurantId/menu/generate-all-descriptions', async (req: Request
 router.get('/:restaurantId/orders', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
-    const { status, orderType, sourceDeviceId, limit = '50' } = req.query;
+    const {
+      status,
+      orderType,
+      sourceDeviceId,
+      deliveryStatus,
+      approvalStatus,
+      limit = '50'
+    } = req.query;
 
     // Support comma-separated status values (e.g., "pending,confirmed,preparing,ready")
     let statusFilter: any = undefined;
@@ -1049,7 +1059,9 @@ router.get('/:restaurantId/orders', async (req: Request, res: Response) => {
         restaurantId,
         ...(statusFilter && { status: statusFilter }),
         ...(orderType && { orderType: orderType as string }),
-        ...(sourceDeviceId && { sourceDeviceId: sourceDeviceId as string })
+        ...(sourceDeviceId && { sourceDeviceId: sourceDeviceId as string }),
+        ...(deliveryStatus && { deliveryStatus: deliveryStatus as string }),
+        ...(approvalStatus && { approvalStatus: approvalStatus as string }),
       },
       include: {
         orderItems: {
@@ -1059,9 +1071,9 @@ router.get('/:restaurantId/orders', async (req: Request, res: Response) => {
         table: true
       },
       orderBy: { createdAt: 'desc' },
-      take: parseInt(limit as string)
+      take: Number.parseInt(limit as string, 10)
     });
-    res.json(orders);
+    res.json(orders.map(enrichOrderResponse));
   } catch (error) {
     console.error('Error fetching orders:', error);
     res.status(500).json({ error: 'Failed to fetch orders' });
@@ -1087,7 +1099,7 @@ router.get('/:restaurantId/orders/:orderId', async (req: Request, res: Response)
       res.status(404).json({ error: 'Order not found' });
       return;
     }
-    res.json(order);
+    res.json(enrichOrderResponse(order));
   } catch (error) {
     console.error('Error fetching order:', error);
     res.status(500).json({ error: 'Failed to fetch order' });
@@ -1102,7 +1114,8 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
       orderType, orderSource = 'online', tableId, tableNumber, serverId,
       sourceDeviceId,
       items, specialInstructions, scheduledTime,
-      deliveryAddress, deliveryLat, deliveryLng
+      deliveryAddress, deliveryLat, deliveryLng,
+      deliveryInfo, curbsideInfo, cateringInfo
     } = req.body;
 
     // Require sourceDeviceId for all POS orders
@@ -1125,14 +1138,40 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
     let resolvedTableId = tableId;
     if (!tableId && tableNumber) {
       const table = await prisma.restaurantTable.findFirst({
-        where: { 
-          restaurantId, 
+        where: {
+          restaurantId,
           tableNumber: String(tableNumber)
         }
       });
       if (table) {
         resolvedTableId = table.id;
       }
+    }
+
+    // Build customer info object for validation
+    const customerData = customerInfo ?? (customerName ? {
+      firstName: customerName.split(' ')[0],
+      lastName: customerName.split(' ').slice(1).join(' '),
+      phone: customerPhone,
+      email: customerEmail,
+    } : undefined);
+
+    // Validate dining requirements
+    const validation = validateDiningData(orderType, {
+      customerInfo: customerData,
+      deliveryInfo,
+      curbsideInfo,
+      cateringInfo,
+      tableId: resolvedTableId,
+      tableNumber,
+    });
+
+    if (!validation.valid) {
+      res.status(400).json({
+        error: 'Invalid dining option data',
+        details: validation.errors,
+      });
+      return;
     }
 
     // Handle customer info - support both formats
@@ -1236,9 +1275,26 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
         tax,
         total,
         specialInstructions,
-        deliveryAddress,
+        deliveryAddress: deliveryInfo?.address ?? deliveryAddress,
         deliveryLat,
         deliveryLng,
+        deliveryAddress2: deliveryInfo?.address2,
+        deliveryCity: deliveryInfo?.city,
+        deliveryStateUs: deliveryInfo?.state,
+        deliveryZip: deliveryInfo?.zip,
+        deliveryNotes: deliveryInfo?.deliveryNotes,
+        deliveryStatus: orderType === 'delivery' ? 'PREPARING' : null,
+        deliveryEstimatedAt: deliveryInfo?.estimatedDeliveryTime ? new Date(deliveryInfo.estimatedDeliveryTime) : null,
+        vehicleDescription: curbsideInfo?.vehicleDescription,
+        eventDate: cateringInfo?.eventDate ? new Date(cateringInfo.eventDate) : null,
+        eventTime: cateringInfo?.eventTime,
+        headcount: cateringInfo?.headcount,
+        eventType: cateringInfo?.eventType,
+        setupRequired: cateringInfo?.setupRequired ?? false,
+        depositAmount: cateringInfo?.depositAmount,
+        depositPaid: cateringInfo?.depositPaid ?? false,
+        cateringInstructions: cateringInfo?.specialInstructions,
+        approvalStatus: orderType === 'catering' ? 'NEEDS_APPROVAL' : null,
         scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
         orderItems: { create: orderItemsData }
       },
@@ -1264,9 +1320,10 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
     console.log(`[Order Create] Order ${order.orderNumber} created with sourceDeviceId: ${order.sourceDeviceId || 'NONE'}`);
 
     // Broadcast new order to KDS devices + source POS only (not other POS devices)
-    broadcastToSourceAndKDS(restaurantId, order.sourceDeviceId, 'order:new', order);
+    const enrichedOrder = enrichOrderResponse(order);
+    broadcastToSourceAndKDS(restaurantId, order.sourceDeviceId, 'order:new', enrichedOrder);
 
-    res.status(201).json(order);
+    res.status(201).json(enrichedOrder);
   } catch (error) {
     console.error('Error creating order:', error);
     res.status(500).json({ error: 'Failed to create order' });
@@ -1304,10 +1361,18 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
     // Other POS devices don't need updates for orders they didn't create
     if (order) {
       console.log(`[Order Status] Order ${order.orderNumber} -> ${status}, sourceDeviceId: ${order.sourceDeviceId || 'NONE'}`);
-      broadcastToSourceAndKDS(order.restaurantId, order.sourceDeviceId, 'order:updated', order);
+      const enrichedOrder = enrichOrderResponse(order);
+      broadcastToSourceAndKDS(order.restaurantId, order.sourceDeviceId, 'order:updated', enrichedOrder);
+
+      // Queue print job when order becomes ready
+      if (status === 'ready') {
+        printService.queuePrintJob(orderId, order.restaurantId).catch((error: unknown) => {
+          console.error(`[Order Status] Failed to queue print job for order ${order.orderNumber}:`, error);
+        });
+      }
     }
 
-    res.json(order);
+    res.json(enrichOrderResponse(order));
   } catch (error) {
     console.error('Error updating order status:', error);
     res.status(500).json({ error: 'Failed to update order status' });
@@ -1323,6 +1388,18 @@ router.get('/:restaurantId/orders/:orderId/history', async (req: Request, res: R
   } catch (error) {
     console.error('Error getting order status history:', error);
     res.status(500).json({ error: 'Failed to get order status history' });
+  }
+});
+
+// Reprint order receipt
+router.post('/:restaurantId/orders/:orderId/reprint', async (req: Request, res: Response) => {
+  try {
+    const { orderId, restaurantId } = req.params;
+    const jobId = await printService.queuePrintJob(orderId, restaurantId);
+    res.json({ success: true, jobId });
+  } catch (error) {
+    console.error('Error reprinting order:', error);
+    res.status(500).json({ error: 'Failed to reprint order' });
   }
 });
 
