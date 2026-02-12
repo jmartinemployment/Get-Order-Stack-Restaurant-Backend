@@ -48,6 +48,7 @@ model Restaurant {
   inventoryItems    InventoryItem[]
   userAccess        UserRestaurantAccess[]
   devices           Device[]
+  printers          Printer[]
   restaurantGroupId String? @map("restaurant_group_id")
   restaurantGroup   RestaurantGroup? @relation(fields: [restaurantGroupId], references: [id], onDelete: SetNull)
 
@@ -269,6 +270,36 @@ model Order {
   deliveryProvider      String?   @map("delivery_provider")
   deliveryTrackingUrl   String?   @map("delivery_tracking_url")
   scheduledTime         DateTime? @map("scheduled_time")
+
+  // Structured delivery address
+  deliveryAddress2      String?   @map("delivery_address_2")
+  deliveryCity          String?   @map("delivery_city")
+  deliveryStateUs       String?   @map("delivery_state_us")
+  deliveryZip           String?   @map("delivery_zip")
+  deliveryNotes         String?   @map("delivery_notes")
+  deliveryStatus        String?   @map("delivery_status")
+  deliveryEstimatedAt   DateTime? @map("delivery_estimated_at")
+  dispatchedAt          DateTime? @map("dispatched_at")
+  deliveredAt           DateTime? @map("delivered_at")
+
+  // Curbside
+  vehicleDescription    String?   @map("vehicle_description")
+  arrivalNotified       Boolean   @default(false) @map("arrival_notified")
+
+  // Catering
+  eventDate             DateTime? @map("event_date")
+  eventTime             String?   @map("event_time")
+  headcount             Int?
+  eventType             String?   @map("event_type")
+  setupRequired         Boolean   @default(false) @map("setup_required")
+  depositAmount         Decimal?  @db.Decimal(10, 2) @map("deposit_amount")
+  depositPaid           Boolean   @default(false) @map("deposit_paid")
+  cateringInstructions  String?   @map("catering_instructions")
+
+  // Approval (catering)
+  approvalStatus        String?   @map("approval_status")
+  approvedBy            String?   @map("approved_by")
+  approvedAt            DateTime? @map("approved_at")
   sentToKitchenAt       DateTime? @map("sent_to_kitchen_at")
   confirmedAt           DateTime? @map("confirmed_at")
   preparingAt           DateTime? @map("preparing_at")
@@ -285,6 +316,7 @@ model Order {
   table         RestaurantTable?     @relation(fields: [tableId], references: [id], onDelete: SetNull)
   orderItems    OrderItem[]
   statusHistory OrderStatusHistory[]
+  printJobs     PrintJob[]
 
   @@map("orders")
 }
@@ -567,4 +599,51 @@ model Device {
 
   @@index([restaurantId])
   @@map("devices")
+}
+
+// === RECEIPT PRINTING ===
+
+model Printer {
+  id           String    @id @default(uuid())
+  restaurantId String    @map("restaurant_id")
+  name         String
+  model        String    // 'Star mC-Print3', 'Star mC-Print2', 'Star TSP654II', 'Star TSP743II'
+  macAddress   String    @unique @map("mac_address")
+  ipAddress    String?   @map("ip_address")
+  cloudPrntId  String    @unique @default(uuid()) @map("cloudprnt_id")
+  registrationToken String @unique @default(uuid()) @map("registration_token")
+  printWidth   Int       @default(48) @map("print_width")
+  isDefault    Boolean   @default(false) @map("is_default")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastPollAt   DateTime? @map("last_poll_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  printJobs  PrintJob[]
+
+  @@index([restaurantId])
+  @@index([macAddress])
+  @@index([restaurantId, isDefault])
+  @@map("printers")
+}
+
+model PrintJob {
+  id            String    @id @default(uuid())
+  orderId       String    @map("order_id")
+  printerId     String    @map("printer_id")
+  status        String    @default("pending") // 'pending' | 'printing' | 'completed' | 'failed'
+  jobData       Json      @map("job_data")
+  attemptCount  Int       @default(0) @map("attempt_count")
+  errorMessage  String?   @map("error_message")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  completedAt   DateTime? @map("completed_at")
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  printer Printer @relation(fields: [printerId], references: [id], onDelete: Cascade)
+
+  @@index([printerId, status])
+  @@index([orderId])
+  @@index([status, createdAt])
+  @@map("print_jobs")
 }
