@@ -13,6 +13,7 @@ import { validateDiningData } from '../validators/dining.validator';
 import { AISettingsPatchSchema } from '../validators/settings.validator';
 import { loyaltyService } from '../services/loyalty.service';
 import { coursePacingService } from '../services/course-pacing.service';
+import { orderThrottlingService } from '../services/order-throttling.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -21,6 +22,23 @@ const ORDER_INCLUDE = {
   customer: true,
   table: true,
 } as const;
+
+async function loadOrderWithRelations(orderId: string) {
+  return prisma.order.findUnique({
+    where: { id: orderId },
+    include: ORDER_INCLUDE,
+  });
+}
+
+async function broadcastUpdatedOrders(orderIds: string[]): Promise<void> {
+  const uniqueOrderIds = [...new Set(orderIds)];
+  for (const orderId of uniqueOrderIds) {
+    const order = await loadOrderWithRelations(orderId);
+    if (!order) continue;
+    const enriched = enrichOrderResponse(order);
+    broadcastToSourceAndKDS(order.restaurantId, order.sourceDeviceId, 'order:updated', enriched);
+  }
+}
 
 function generateOrderNumber(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
@@ -1456,11 +1474,22 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
       }
     }
 
+    const isRushOrder = Boolean((req.body as Record<string, unknown>)['isRush'])
+      || /(^|\W)rush(\W|$)/i.test(String(specialInstructions ?? ''));
+    await orderThrottlingService.applyAutoThrottleForNewOrder(restaurantId, order.id, { isRush: isRushOrder });
+
+    const throttlingEvaluation = await orderThrottlingService.evaluateAndRelease(restaurantId);
+    if (throttlingEvaluation.releasedOrderIds.length > 0) {
+      await broadcastUpdatedOrders(throttlingEvaluation.releasedOrderIds.filter(id => id !== order.id));
+    }
+
+    const latestOrder = await loadOrderWithRelations(order.id);
+
     // Log sourceDeviceId for debugging
     console.log(`[Order Create] Order ${order.orderNumber} created with sourceDeviceId: ${order.sourceDeviceId || 'NONE'}`);
 
     // Broadcast new order to KDS devices + source POS only (not other POS devices)
-    const enrichedOrder = enrichOrderResponse(order);
+    const enrichedOrder = enrichOrderResponse(latestOrder ?? order);
     broadcastToSourceAndKDS(restaurantId, order.sourceDeviceId, 'order:new', enrichedOrder);
 
     res.status(201).json(enrichedOrder);
@@ -1502,6 +1531,10 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
       await loyaltyService.reverseOrder(order.id, order.restaurantId);
     }
 
+    const releasedOrderIds = order
+      ? (await orderThrottlingService.evaluateAndRelease(order.restaurantId)).releasedOrderIds
+      : [];
+
     // Broadcast status update to source device + KDS devices only
     // Other POS devices don't need updates for orders they didn't create
     if (order) {
@@ -1515,6 +1548,10 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
           console.error(`[Order Status] Failed to queue print job for order ${order.orderNumber}:`, error);
         });
       }
+    }
+
+    if (releasedOrderIds.length > 0) {
+      await broadcastUpdatedOrders(releasedOrderIds.filter(id => id !== orderId));
     }
 
     res.json(enrichOrderResponse(order));
@@ -1661,6 +1698,69 @@ router.get('/:restaurantId/course-pacing/metrics', async (req: Request, res: Res
   }
 });
 
+router.get('/:restaurantId/throttling/status', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const evaluation = await orderThrottlingService.evaluateAndRelease(restaurantId);
+    if (evaluation.releasedOrderIds.length > 0) {
+      await broadcastUpdatedOrders(evaluation.releasedOrderIds);
+    }
+    const status = await orderThrottlingService.getStatus(restaurantId);
+    res.json(status);
+  } catch (error) {
+    console.error('[Order Throttling] Error loading throttling status:', error);
+    res.status(500).json({ error: 'Failed to load order throttling status' });
+  }
+});
+
+router.post('/:restaurantId/orders/:orderId/throttle/hold', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, orderId } = req.params;
+    const held = await orderThrottlingService.holdOrderManually(restaurantId, orderId);
+    if (!held) {
+      res.status(404).json({ error: 'Order not found or cannot be held' });
+      return;
+    }
+
+    const updatedOrder = await loadOrderWithRelations(orderId);
+    if (!updatedOrder) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+
+    const enriched = enrichOrderResponse(updatedOrder);
+    broadcastToSourceAndKDS(updatedOrder.restaurantId, updatedOrder.sourceDeviceId, 'order:updated', enriched);
+    res.json(enriched);
+  } catch (error) {
+    console.error('[Order Throttling] Error holding order:', error);
+    res.status(500).json({ error: 'Failed to hold order' });
+  }
+});
+
+router.post('/:restaurantId/orders/:orderId/throttle/release', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, orderId } = req.params;
+    const released = await orderThrottlingService.releaseOrderManually(restaurantId, orderId);
+    if (!released) {
+      res.status(404).json({ error: 'Order not found or not in held state' });
+      return;
+    }
+
+    const updatedOrder = await loadOrderWithRelations(orderId);
+    if (!updatedOrder) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+
+    const enriched = enrichOrderResponse(updatedOrder);
+    broadcastToSourceAndKDS(updatedOrder.restaurantId, updatedOrder.sourceDeviceId, 'order:updated', enriched);
+    res.json(enriched);
+  } catch (error) {
+    console.error('[Order Throttling] Error releasing order:', error);
+    res.status(500).json({ error: 'Failed to release order' });
+  }
+});
+
 // Get order status history
 router.get('/:restaurantId/orders/:orderId/history', async (req: Request, res: Response) => {
   try {
@@ -1732,6 +1832,8 @@ router.patch('/:restaurantId/orders/:orderId/items/:itemId/status', async (req: 
       }
     }
 
+    const throttlingEvaluation = await orderThrottlingService.evaluateAndRelease(restaurantId);
+
     const updatedOrder = await prisma.order.findFirst({
       where: { id: orderId, restaurantId },
       include: ORDER_INCLUDE,
@@ -1740,6 +1842,10 @@ router.patch('/:restaurantId/orders/:orderId/items/:itemId/status', async (req: 
     if (updatedOrder) {
       const enriched = enrichOrderResponse(updatedOrder);
       broadcastToSourceAndKDS(updatedOrder.restaurantId, updatedOrder.sourceDeviceId, 'order:updated', enriched);
+    }
+
+    if (throttlingEvaluation.releasedOrderIds.length > 0) {
+      await broadcastUpdatedOrders(throttlingEvaluation.releasedOrderIds.filter(id => id !== orderId));
     }
 
     res.json(orderItem);

@@ -283,6 +283,12 @@ model Order {
   deliveryExternalId    String?   @map("delivery_external_id")
   deliveryTrackingUrl   String?   @map("delivery_tracking_url")
   dispatchStatus        String?   @map("dispatch_status")
+  throttleState         String    @default("NONE") @map("throttle_state")
+  throttleReason        String?   @map("throttle_reason")
+  throttleHeldAt        DateTime? @map("throttle_held_at")
+  throttleReleasedAt    DateTime? @map("throttle_released_at")
+  throttleSource        String?   @map("throttle_source")
+  throttleReleaseReason String?   @map("throttle_release_reason")
   scheduledTime         DateTime? @map("scheduled_time")
 
   // Structured delivery address

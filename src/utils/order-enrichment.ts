@@ -153,6 +153,15 @@ export function enrichOrderResponse(order: any): any {
     }
   }
 
+  enriched.throttle = {
+    state: order.throttleState ?? 'NONE',
+    reason: order.throttleReason ?? undefined,
+    heldAt: order.throttleHeldAt ?? undefined,
+    releasedAt: order.throttleReleasedAt ?? undefined,
+    source: order.throttleSource ?? undefined,
+    releaseReason: order.throttleReleaseReason ?? undefined,
+  };
+
   // Build deliveryInfo from flat columns
   if (order.deliveryAddress || order.deliveryCity) {
     // If DaaS dispatchStatus exists, derive the 3-state deliveryState from it
