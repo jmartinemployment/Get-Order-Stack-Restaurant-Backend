@@ -49,8 +49,11 @@ model Restaurant {
   userAccess        UserRestaurantAccess[]
   devices           Device[]
   printers          Printer[]
-  restaurantGroupId String? @map("restaurant_group_id")
-  restaurantGroup   RestaurantGroup? @relation(fields: [restaurantGroupId], references: [id], onDelete: SetNull)
+  restaurantGroupId    String? @map("restaurant_group_id")
+  restaurantGroup      RestaurantGroup? @relation(fields: [restaurantGroupId], references: [id], onDelete: SetNull)
+  loyaltyConfig        RestaurantLoyaltyConfig?
+  loyaltyRewards       LoyaltyReward[]
+  loyaltyTransactions  LoyaltyTransaction[]
 
   @@map("restaurants")
 }
@@ -234,10 +237,16 @@ model Customer {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  orders       Order[]
-  reservations Reservation[]
+  loyaltyTier         String    @default("bronze") @map("loyalty_tier")
+  totalPointsEarned   Int       @default(0) @map("total_points_earned")
+  totalPointsRedeemed Int       @default(0) @map("total_points_redeemed")
 
+  restaurant           Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders               Order[]
+  reservations         Reservation[]
+  loyaltyTransactions  LoyaltyTransaction[]
+
+  @@unique([restaurantId, phone])
   @@map("customers")
 }
 
@@ -270,7 +279,9 @@ model Order {
   deliveryLat           Decimal?  @db.Decimal(10, 7) @map("delivery_lat")
   deliveryLng           Decimal?  @db.Decimal(10, 7) @map("delivery_lng")
   deliveryProvider      String?   @map("delivery_provider")
+  deliveryExternalId    String?   @map("delivery_external_id")
   deliveryTrackingUrl   String?   @map("delivery_tracking_url")
+  dispatchStatus        String?   @map("dispatch_status")
   scheduledTime         DateTime? @map("scheduled_time")
 
   // Structured delivery address
@@ -313,12 +324,16 @@ model Order {
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
-  restaurant    Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  customer      Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  table         RestaurantTable?     @relation(fields: [tableId], references: [id], onDelete: SetNull)
-  orderItems    OrderItem[]
-  statusHistory OrderStatusHistory[]
-  printJobs     PrintJob[]
+  loyaltyPointsEarned   Int     @default(0) @map("loyalty_points_earned")
+  loyaltyPointsRedeemed Int     @default(0) @map("loyalty_points_redeemed")
+
+  restaurant           Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  customer             Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  table                RestaurantTable?     @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  orderItems           OrderItem[]
+  statusHistory        OrderStatusHistory[]
+  printJobs            PrintJob[]
+  loyaltyTransactions  LoyaltyTransaction[]
 
   @@map("orders")
 }
@@ -565,9 +580,59 @@ model StaffPin {
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
+  shifts       Shift[]
+  timeEntries  TimeEntry[]
 
   @@index([restaurantId])
   @@map("staff_pins")
+}
+
+model Shift {
+  id            String   @id @default(uuid())
+  restaurantId  String   @map("restaurant_id")
+  staffPinId    String   @map("staff_pin_id")
+  date          DateTime @db.Date
+  startTime     String   @db.VarChar(5)   // "HH:mm" 24h
+  endTime       String   @db.VarChar(5)   // "HH:mm" 24h
+  position      String   @default("server")
+  breakMinutes  Int      @default(0) @map("break_minutes")
+  notes         String?
+  isPublished   Boolean  @default(false) @map("is_published")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  staffPin      StaffPin @relation(fields: [staffPinId], references: [id], onDelete: Cascade)
+  @@index([restaurantId, date])
+  @@index([staffPinId])
+  @@map("shifts")
+}
+
+model TimeEntry {
+  id            String    @id @default(uuid())
+  restaurantId  String    @map("restaurant_id")
+  staffPinId    String    @map("staff_pin_id")
+  shiftId       String?   @map("shift_id")
+  clockIn       DateTime  @map("clock_in")
+  clockOut      DateTime? @map("clock_out")
+  breakMinutes  Int       @default(0) @map("break_minutes")
+  notes         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  staffPin      StaffPin  @relation(fields: [staffPinId], references: [id], onDelete: Cascade)
+  @@index([restaurantId, clockIn])
+  @@index([staffPinId])
+  @@map("time_entries")
+}
+
+model LaborTarget {
+  id            String   @id @default(uuid())
+  restaurantId  String   @map("restaurant_id")
+  dayOfWeek     Int      // 0=Sunday .. 6=Saturday
+  targetPercent Decimal  @db.Decimal(5,2) @map("target_percent")
+  targetCost    Decimal? @db.Decimal(10,2) @map("target_cost")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  @@unique([restaurantId, dayOfWeek])
+  @@map("labor_targets")
 }
 
 model Station {
@@ -648,4 +713,64 @@ model PrintJob {
   @@index([orderId])
   @@index([status, createdAt])
   @@map("print_jobs")
+}
+
+// === LOYALTY PROGRAM ===
+
+model LoyaltyTransaction {
+  id            String   @id @default(uuid())
+  restaurantId  String   @map("restaurant_id")
+  customerId    String   @map("customer_id")
+  orderId       String?  @map("order_id")
+  type          String   // 'earn' | 'redeem' | 'adjustment' | 'expire' | 'reversal'
+  points        Int      // positive for earn, negative for redeem/reversal
+  balanceAfter  Int      @map("balance_after")
+  description   String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  order      Order?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([customerId])
+  @@index([restaurantId])
+  @@map("loyalty_transactions")
+}
+
+model LoyaltyReward {
+  id            String   @id @default(uuid())
+  restaurantId  String   @map("restaurant_id")
+  name          String
+  description   String?
+  pointsCost    Int      @map("points_cost")
+  discountType  String   @map("discount_type")  // 'fixed' | 'percentage'
+  discountValue Decimal  @db.Decimal(10, 2) @map("discount_value")
+  minTier       String   @default("bronze") @map("min_tier")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@map("loyalty_rewards")
+}
+
+model RestaurantLoyaltyConfig {
+  id                   String   @id @default(uuid())
+  restaurantId         String   @unique @map("restaurant_id")
+  enabled              Boolean  @default(false)
+  pointsPerDollar      Int      @default(1) @map("points_per_dollar")
+  pointsRedemptionRate Decimal  @db.Decimal(5, 2) @default(0.01) @map("points_redemption_rate")
+  tierSilverMin        Int      @default(500) @map("tier_silver_min")
+  tierGoldMin          Int      @default(2000) @map("tier_gold_min")
+  tierPlatinumMin      Int      @default(5000) @map("tier_platinum_min")
+  silverMultiplier     Decimal  @db.Decimal(3, 2) @default(1.25) @map("silver_multiplier")
+  goldMultiplier       Decimal  @db.Decimal(3, 2) @default(1.50) @map("gold_multiplier")
+  platinumMultiplier   Decimal  @db.Decimal(3, 2) @default(2.00) @map("platinum_multiplier")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("restaurant_loyalty_config")
 }

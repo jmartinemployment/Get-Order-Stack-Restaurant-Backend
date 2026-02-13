@@ -10,6 +10,7 @@ import { broadcastOrderEvent, sendOrderEventToDevice, broadcastToSourceAndKDS } 
 import { cloudPrntService } from '../services/cloudprnt.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
 import { validateDiningData } from '../validators/dining.validator';
+import { loyaltyService } from '../services/loyalty.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1116,7 +1117,8 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
       sourceDeviceId,
       items, specialInstructions, scheduledTime,
       deliveryAddress, deliveryLat, deliveryLng,
-      deliveryInfo, curbsideInfo, cateringInfo
+      deliveryInfo, curbsideInfo, cateringInfo,
+      loyaltyPointsRedeemed: reqLoyaltyPointsRedeemed = 0,
     } = req.body;
 
     // Require sourceDeviceId for all POS orders
@@ -1183,7 +1185,7 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
     const resolvedPhone = customerInfo?.phone || customerPhone;
     const resolvedEmail = customerInfo?.email || customerEmail;
 
-    if (resolvedEmail || resolvedPhone || resolvedCustomerName) {
+    {
       let firstName = customerInfo?.firstName;
       let lastName = customerInfo?.lastName;
       if (!firstName && resolvedCustomerName) {
@@ -1192,16 +1194,39 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
         lastName = nameParts.slice(1).join(' ') || null;
       }
 
-      const customer = await prisma.customer.create({
-        data: {
-          restaurantId,
-          firstName,
-          lastName,
-          email: resolvedEmail,
-          phone: resolvedPhone
-        }
-      });
-      customerId = customer.id;
+      // Dedup by phone when available (loyalty requires stable customer identity)
+      if (resolvedPhone) {
+        const customer = await prisma.customer.upsert({
+          where: {
+            restaurantId_phone: { restaurantId, phone: resolvedPhone }
+          },
+          update: {
+            firstName: firstName ?? undefined,
+            lastName: lastName ?? undefined,
+            email: resolvedEmail ?? undefined,
+          },
+          create: {
+            restaurantId,
+            firstName,
+            lastName,
+            email: resolvedEmail,
+            phone: resolvedPhone,
+          },
+        });
+        customerId = customer.id;
+      } else if (resolvedEmail || resolvedCustomerName) {
+        // No phone — can't dedup, create fresh (guest orders)
+        const customer = await prisma.customer.create({
+          data: {
+            restaurantId,
+            firstName,
+            lastName,
+            email: resolvedEmail,
+            phone: resolvedPhone,
+          }
+        });
+        customerId = customer.id;
+      }
     }
 
     let subtotal = 0;
@@ -1315,6 +1340,36 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
           lastOrderDate: new Date()
         }
       });
+
+      // Award and redeem loyalty points
+      const loyaltyConfig = await loyaltyService.getConfig(restaurantId);
+      if (loyaltyConfig.enabled) {
+        const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+        if (customer) {
+          const tier = loyaltyService.calculateTier(customer.totalPointsEarned, loyaltyConfig);
+          const pointsEarned = loyaltyService.calculatePointsEarned(subtotal, loyaltyConfig, tier);
+
+          let discountFromRedemption = 0;
+          const loyaltyPointsRedeemedInt = Number.parseInt(String(reqLoyaltyPointsRedeemed), 10) || 0;
+          if (loyaltyPointsRedeemedInt > 0) {
+            await loyaltyService.redeemPoints(customerId, order.id, loyaltyPointsRedeemedInt, restaurantId);
+            discountFromRedemption = loyaltyService.calculateDiscount(loyaltyPointsRedeemedInt, loyaltyConfig);
+          }
+
+          if (pointsEarned > 0) {
+            await loyaltyService.awardPoints(customerId, order.id, pointsEarned, restaurantId);
+          }
+
+          await prisma.order.update({
+            where: { id: order.id },
+            data: {
+              loyaltyPointsEarned: pointsEarned,
+              loyaltyPointsRedeemed: loyaltyPointsRedeemedInt,
+              discount: discountFromRedemption,
+            },
+          });
+        }
+      }
     }
 
     // Log sourceDeviceId for debugging
@@ -1357,6 +1412,11 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
         statusHistory: { orderBy: { createdAt: 'asc' } }
       }
     });
+
+    // Reverse loyalty points on cancellation
+    if (status === 'cancelled' && order?.customerId) {
+      await loyaltyService.reverseOrder(order.id, order.restaurantId);
+    }
 
     // Broadcast status update to source device + KDS devices only
     // Other POS devices don't need updates for orders they didn't create
