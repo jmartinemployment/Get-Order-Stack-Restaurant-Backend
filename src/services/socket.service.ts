@@ -232,6 +232,17 @@ export function broadcastOrderEventExcept(restaurantId: string, excludeDeviceId:
   console.log(`[Socket.io] Broadcast ${eventType} to ${sentCount} devices (excluding ${excludeDeviceId})`);
 }
 
+// Emit print events to restaurant (order:printed, order:print_failed)
+export function emitToPrinter(restaurantId: string, eventType: string, data: any) {
+  if (!io) {
+    console.warn('[Socket.io] Server not initialized, cannot emit print event');
+    return;
+  }
+  const room = `restaurant:${restaurantId}`;
+  console.log(`[Socket.io] Emitting ${eventType} to restaurant ${restaurantId}`);
+  io.to(room).emit(eventType, { ...data, timestamp: new Date().toISOString() });
+}
+
 // Send order event to source device AND all KDS devices (not other POS devices)
 export function broadcastToSourceAndKDS(restaurantId: string, sourceDeviceId: string | null, eventType: string, order: any) {
   if (!io) {

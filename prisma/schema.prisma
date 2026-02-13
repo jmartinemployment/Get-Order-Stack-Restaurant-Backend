@@ -263,6 +263,8 @@ model Order {
   paymentMethod         String?   @map("payment_method")
   paymentStatus         String    @default("pending") @map("payment_status")
   stripePaymentIntentId String?   @map("stripe_payment_intent_id")
+  paypalOrderId         String?   @map("paypal_order_id")
+  paypalCaptureId       String?   @map("paypal_capture_id")
   specialInstructions   String?   @map("special_instructions")
   deliveryAddress       String?   @map("delivery_address")
   deliveryLat           Decimal?  @db.Decimal(10, 7) @map("delivery_lat")

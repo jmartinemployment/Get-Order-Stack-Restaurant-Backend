@@ -5,8 +5,9 @@ import { aiCostService } from '../services/ai-cost.service';
 import { taxService } from '../services/tax.service';
 import { updateOrderStatus, getOrderStatusHistory } from '../services/order-status.service';
 import { stripeService } from '../services/stripe.service';
+import { paypalService } from '../services/paypal.service';
 import { broadcastOrderEvent, sendOrderEventToDevice, broadcastToSourceAndKDS } from '../services/socket.service';
-import { printService } from '../services/print.service';
+import { cloudPrntService } from '../services/cloudprnt.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
 import { validateDiningData } from '../validators/dining.validator';
 
@@ -1366,7 +1367,7 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
 
       // Queue print job when order becomes ready
       if (status === 'ready') {
-        printService.queuePrintJob(orderId, order.restaurantId).catch((error: unknown) => {
+        cloudPrntService.queuePrintJob(orderId).catch((error: unknown) => {
           console.error(`[Order Status] Failed to queue print job for order ${order.orderNumber}:`, error);
         });
       }
@@ -1394,8 +1395,8 @@ router.get('/:restaurantId/orders/:orderId/history', async (req: Request, res: R
 // Reprint order receipt
 router.post('/:restaurantId/orders/:orderId/reprint', async (req: Request, res: Response) => {
   try {
-    const { orderId, restaurantId } = req.params;
-    const jobId = await printService.queuePrintJob(orderId, restaurantId);
+    const { orderId } = req.params;
+    const jobId = await cloudPrntService.queuePrintJob(orderId);
     res.json({ success: true, jobId });
   } catch (error) {
     console.error('Error reprinting order:', error);
@@ -1450,7 +1451,7 @@ router.delete('/:restaurantId/orders/:orderId', async (req: Request, res: Respon
   }
 });
 
-// ============ Payments (Stripe) ============
+// ============ Payments ============
 
 // Create payment intent for an order
 router.post('/:restaurantId/orders/:orderId/payment-intent', async (req: Request, res: Response) => {
@@ -1486,6 +1487,85 @@ router.post('/:restaurantId/orders/:orderId/payment-intent', async (req: Request
   }
 });
 
+// Create PayPal order for an order
+router.post('/:restaurantId/orders/:orderId/paypal-create', async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+
+    const result = await paypalService.createOrder({
+      orderId,
+      amount: Number(order.total),
+    });
+
+    if (!result.success) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+
+    res.json({ paypalOrderId: result.paypalOrderId });
+  } catch (error) {
+    console.error('Error creating PayPal order:', error);
+    res.status(500).json({ error: 'Failed to create PayPal order' });
+  }
+});
+
+// Capture PayPal order
+router.post('/:restaurantId/orders/:orderId/paypal-capture', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, orderId } = req.params;
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+
+    if (!order.paypalOrderId) {
+      res.status(400).json({ error: 'No PayPal order found for this order' });
+      return;
+    }
+
+    const result = await paypalService.captureOrder(order.paypalOrderId, orderId);
+
+    if (!result.success) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+
+    const updatedOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        orderItems: { include: { modifiers: true } },
+        customer: true,
+        table: true,
+        restaurant: true,
+      },
+    });
+
+    if (updatedOrder) {
+      const enriched = enrichOrderResponse(updatedOrder);
+      broadcastToSourceAndKDS(restaurantId, updatedOrder.sourceDeviceId, 'order:updated', enriched);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error capturing PayPal order:', error);
+    res.status(500).json({ error: 'Failed to capture PayPal order' });
+  }
+});
+
 // Get payment status for an order
 router.get('/:restaurantId/orders/:orderId/payment-status', async (req: Request, res: Response) => {
   try {
@@ -1499,7 +1579,9 @@ router.get('/:restaurantId/orders/:orderId/payment-status', async (req: Request,
         paymentStatus: true,
         paymentMethod: true,
         stripePaymentIntentId: true,
-        total: true
+        paypalOrderId: true,
+        paypalCaptureId: true,
+        total: true,
       }
     });
 
@@ -1508,14 +1590,24 @@ router.get('/:restaurantId/orders/:orderId/payment-status', async (req: Request,
       return;
     }
 
-    let stripeStatus = null;
+    let processorData = null;
     if (order.stripePaymentIntentId) {
       const result = await stripeService.getPaymentIntent(order.stripePaymentIntentId);
       if (result.success && result.paymentIntent) {
-        stripeStatus = {
+        processorData = {
+          processor: 'stripe',
           status: result.paymentIntent.status,
           amount: result.paymentIntent.amount / 100,
-          currency: result.paymentIntent.currency
+          currency: result.paymentIntent.currency,
+        };
+      }
+    } else if (order.paypalOrderId) {
+      const result = await paypalService.getOrderStatus(order.paypalOrderId);
+      if (result.success) {
+        processorData = {
+          processor: 'paypal',
+          status: result.status,
+          paypalOrderId: result.paypalOrderId,
         };
       }
     }
@@ -1526,7 +1618,7 @@ router.get('/:restaurantId/orders/:orderId/payment-status', async (req: Request,
       paymentStatus: order.paymentStatus,
       paymentMethod: order.paymentMethod,
       total: order.total,
-      stripe: stripeStatus
+      processorData,
     });
   } catch (error) {
     console.error('Error getting payment status:', error);
@@ -1548,12 +1640,16 @@ router.post('/:restaurantId/orders/:orderId/cancel-payment', async (req: Request
       return;
     }
 
-    if (!order.stripePaymentIntentId) {
-      res.status(400).json({ error: 'No payment intent found for this order' });
+    let result: { success: boolean; error?: string };
+
+    if (order.stripePaymentIntentId) {
+      result = await stripeService.cancelPaymentIntent(order.stripePaymentIntentId);
+    } else if (order.paypalOrderId) {
+      result = await paypalService.cancelOrder(order.paypalOrderId);
+    } else {
+      res.status(400).json({ error: 'No payment found for this order' });
       return;
     }
-
-    const result = await stripeService.cancelPaymentIntent(order.stripePaymentIntentId);
 
     if (!result.success) {
       res.status(400).json({ error: result.error });
@@ -1562,7 +1658,7 @@ router.post('/:restaurantId/orders/:orderId/cancel-payment', async (req: Request
 
     await prisma.order.update({
       where: { id: orderId },
-      data: { paymentStatus: 'cancelled' }
+      data: { paymentStatus: 'cancelled' },
     });
 
     res.json({ success: true, message: 'Payment cancelled' });
@@ -1587,23 +1683,38 @@ router.post('/:restaurantId/orders/:orderId/refund', async (req: Request, res: R
       return;
     }
 
-    if (!order.stripePaymentIntentId) {
-      res.status(400).json({ error: 'No payment intent found for this order' });
-      return;
-    }
-
     if (order.paymentStatus !== 'paid') {
       res.status(400).json({ error: 'Order has not been paid' });
       return;
     }
 
-    const result = await stripeService.createRefund(
-      order.stripePaymentIntentId,
-      amount
-    );
+    let refundResponse: { success: boolean; refundId?: string; amount?: number | null; status?: string; error?: string };
 
-    if (!result.success) {
-      res.status(400).json({ error: result.error });
+    if (order.stripePaymentIntentId) {
+      const result = await stripeService.createRefund(order.stripePaymentIntentId, amount);
+      refundResponse = {
+        success: result.success,
+        refundId: result.refund?.id,
+        amount: result.refund?.amount ? result.refund.amount / 100 : null,
+        status: result.refund?.status,
+        error: result.error,
+      };
+    } else if (order.paypalCaptureId) {
+      const result = await paypalService.refundCapture(order.paypalCaptureId, amount);
+      refundResponse = {
+        success: result.success,
+        refundId: result.refundId,
+        amount: result.amount ?? null,
+        status: result.status,
+        error: result.error,
+      };
+    } else {
+      res.status(400).json({ error: 'No refundable payment found for this order' });
+      return;
+    }
+
+    if (!refundResponse.success) {
+      res.status(400).json({ error: refundResponse.error });
       return;
     }
 
@@ -1611,14 +1722,14 @@ router.post('/:restaurantId/orders/:orderId/refund', async (req: Request, res: R
 
     await prisma.order.update({
       where: { id: orderId },
-      data: { paymentStatus: refundStatus }
+      data: { paymentStatus: refundStatus },
     });
 
     res.json({
       success: true,
-      refundId: result.refund?.id,
-      amount: result.refund?.amount ? result.refund.amount / 100 : null,
-      status: result.refund?.status
+      refundId: refundResponse.refundId,
+      amount: refundResponse.amount,
+      status: refundResponse.status,
     });
   } catch (error) {
     console.error('Error processing refund:', error);

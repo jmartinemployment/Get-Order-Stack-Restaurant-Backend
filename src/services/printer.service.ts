@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import type { Logger } from 'winston';
 import { MAC_ADDRESS_REGEX, PRINTER_MODELS } from '../utils/constants';
 import type {
   CreatePrinterDto,
@@ -8,18 +7,20 @@ import type {
   CloudPrntConfigDto,
 } from '../models/printer.dto';
 
+const prisma = new PrismaClient();
+
 export class PrinterService {
-  constructor(
-    private readonly prisma: PrismaClient,
-    private readonly logger: Logger,
-    private readonly baseUrl: string
-  ) {}
+  private readonly baseUrl: string;
+
+  constructor() {
+    this.baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+  }
 
   /**
    * Find all printers for a restaurant
    */
   async findAll(restaurantId: string): Promise<any[]> {
-    const printers = await this.prisma.printer.findMany({
+    const printers = await prisma.printer.findMany({
       where: { restaurantId },
       orderBy: [
         { isDefault: 'desc' },
@@ -27,7 +28,7 @@ export class PrinterService {
       ],
     });
 
-    this.logger.info('Fetched printers for restaurant', {
+    console.log('[PrinterService] Fetched printers for restaurant', {
       restaurantId,
       count: printers.length,
     });
@@ -42,7 +43,7 @@ export class PrinterService {
     restaurantId: string,
     data: CreatePrinterDto
   ): Promise<PrinterResponseDto> {
-    this.logger.info('Creating printer', { restaurantId, data });
+    console.log('[PrinterService] Creating printer', { restaurantId, data });
 
     // Validate MAC address
     if (!MAC_ADDRESS_REGEX.exec(data.macAddress)) {
@@ -62,7 +63,7 @@ export class PrinterService {
 
     // Atomic: Unset previous default if setting this as default
     if (data.isDefault) {
-      await this.prisma.printer.updateMany({
+      await prisma.printer.updateMany({
         where: {
           restaurantId,
           isDefault: true,
@@ -70,11 +71,11 @@ export class PrinterService {
         data: { isDefault: false },
       });
 
-      this.logger.info('Unset previous default printer', { restaurantId });
+      console.log('[PrinterService] Unset previous default printer', { restaurantId });
     }
 
     // Create printer
-    const printer = await this.prisma.printer.create({
+    const printer = await prisma.printer.create({
       data: {
         restaurantId,
         name: data.name,
@@ -87,7 +88,7 @@ export class PrinterService {
       },
     });
 
-    this.logger.info('Printer created', {
+    console.log('[PrinterService] Printer created', {
       printerId: printer.id,
       restaurantId,
       name: printer.name,
@@ -96,7 +97,7 @@ export class PrinterService {
 
     // Generate CloudPRNT configuration
     const cloudPrntConfig: CloudPrntConfigDto = {
-      serverUrl: `${this.baseUrl}/cloudprnt?mac=${macAddress}`,
+      serverUrl: `${this.baseUrl}/api/cloudprnt?mac=${macAddress}`,
       instructions: [
         '1. Access your Star printer web UI (find IP via printer network config)',
         '2. Navigate to CloudPRNT settings',
@@ -120,9 +121,9 @@ export class PrinterService {
     printerId: string,
     data: UpdatePrinterDto
   ): Promise<any> {
-    this.logger.info('Updating printer', { printerId, data });
+    console.log('[PrinterService] Updating printer', { printerId, data });
 
-    const printer = await this.prisma.printer.findUnique({
+    const printer = await prisma.printer.findUnique({
       where: { id: printerId },
     });
 
@@ -132,7 +133,7 @@ export class PrinterService {
 
     // Atomic: Unset previous default if setting this as default
     if (data.isDefault) {
-      await this.prisma.printer.updateMany({
+      await prisma.printer.updateMany({
         where: {
           restaurantId: printer.restaurantId,
           isDefault: true,
@@ -141,18 +142,18 @@ export class PrinterService {
         data: { isDefault: false },
       });
 
-      this.logger.info('Unset previous default printer', {
+      console.log('[PrinterService] Unset previous default printer', {
         restaurantId: printer.restaurantId,
       });
     }
 
     // Update printer
-    const updated = await this.prisma.printer.update({
+    const updated = await prisma.printer.update({
       where: { id: printerId },
       data,
     });
 
-    this.logger.info('Printer updated', {
+    console.log('[PrinterService] Printer updated', {
       printerId,
       changes: Object.keys(data),
     });
@@ -164,9 +165,9 @@ export class PrinterService {
    * Delete a printer
    */
   async delete(printerId: string): Promise<void> {
-    this.logger.info('Deleting printer', { printerId });
+    console.log('[PrinterService] Deleting printer', { printerId });
 
-    const printer = await this.prisma.printer.findUnique({
+    const printer = await prisma.printer.findUnique({
       where: { id: printerId },
     });
 
@@ -175,13 +176,15 @@ export class PrinterService {
     }
 
     // Delete printer (cascade deletes print jobs)
-    await this.prisma.printer.delete({
+    await prisma.printer.delete({
       where: { id: printerId },
     });
 
-    this.logger.info('Printer deleted', {
+    console.log('[PrinterService] Printer deleted', {
       printerId,
       name: printer.name,
     });
   }
 }
+
+export const printerService = new PrinterService();

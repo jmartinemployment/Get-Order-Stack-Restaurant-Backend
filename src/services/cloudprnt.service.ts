@@ -1,24 +1,20 @@
 import { PrismaClient } from '@prisma/client';
-import type { Logger } from 'winston';
 import { generateReceipt, generateTestReceipt } from '../utils/star-line-mode';
 import { PRINT_JOB_TIMEOUT_MS } from '../utils/constants';
 import type { CreatePrintJobDto } from '../models/print-job.dto';
+import { emitToPrinter } from './socket.service';
+
+const prisma = new PrismaClient();
 
 export class CloudPrntService {
-  constructor(
-    private readonly prisma: PrismaClient,
-    private readonly logger: Logger,
-    private readonly socketService: any  // SocketService type
-  ) {}
-
   /**
    * Queue a print job when order is marked ready
    */
-  async queuePrintJob(orderId: string, printerId?: string): Promise<string> {
-    this.logger.info('Queuing print job for order', { orderId, printerId });
+  async queuePrintJob(orderId: string, printerId?: string): Promise<string | null> {
+    console.log('[CloudPRNT] Queuing print job for order', { orderId, printerId });
 
     // Fetch order with all related data
-    const order = await this.prisma.order.findUnique({
+    const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
         restaurant: true,
@@ -44,11 +40,15 @@ export class CloudPrntService {
     );
 
     if (!printer) {
-      throw new Error(`No active printers found for restaurant ${order.restaurantId}`);
+      console.log('[CloudPRNT] No active printers configured for restaurant', {
+        restaurantId: order.restaurantId,
+        orderId,
+      });
+      return null;  // Graceful: don't crash order flow if no printer
     }
 
     // Create print job with cached order data
-    const printJob = await this.prisma.printJob.create({
+    const printJob = await prisma.printJob.create({
       data: {
         orderId,
         printerId: printer.id,
@@ -58,7 +58,7 @@ export class CloudPrntService {
       },
     });
 
-    this.logger.info('Print job queued', {
+    console.log('[CloudPRNT] Print job queued', {
       jobId: printJob.id,
       orderId,
       printerId: printer.id,
@@ -72,9 +72,9 @@ export class CloudPrntService {
    * Queue a test print job
    */
   async queueTestPrint(printerId: string): Promise<string> {
-    this.logger.info('Queuing test print job', { printerId });
+    console.log('[CloudPRNT] Queuing test print job', { printerId });
 
-    const printer = await this.prisma.printer.findUnique({
+    const printer = await prisma.printer.findUnique({
       where: { id: printerId },
       include: { restaurant: true },
     });
@@ -98,7 +98,7 @@ export class CloudPrntService {
       _isTestPrint: true,  // Flag to identify test print
     };
 
-    const printJob = await this.prisma.printJob.create({
+    const printJob = await prisma.printJob.create({
       data: {
         orderId: 'test-print-' + Date.now(),  // Unique ID for test
         printerId: printer.id,
@@ -108,7 +108,7 @@ export class CloudPrntService {
       },
     });
 
-    this.logger.info('Test print job queued', {
+    console.log('[CloudPRNT] Test print job queued', {
       jobId: printJob.id,
       printerId,
       printerName: printer.name,
@@ -122,23 +122,23 @@ export class CloudPrntService {
    */
   async getPendingJob(macAddress: string): Promise<any | null> {
     // Update last poll time
-    await this.prisma.printer.updateMany({
+    await prisma.printer.updateMany({
       where: { macAddress },
       data: { lastPollAt: new Date() },
     });
 
     // Find printer
-    const printer = await this.prisma.printer.findUnique({
+    const printer = await prisma.printer.findUnique({
       where: { macAddress },
     });
 
     if (!printer) {
-      this.logger.warn('Unknown printer MAC address polling', { macAddress });
+      console.warn('[CloudPRNT] Unknown printer MAC address polling', { macAddress });
       return null;
     }
 
     // Find oldest pending job for this printer
-    const job = await this.prisma.printJob.findFirst({
+    const job = await prisma.printJob.findFirst({
       where: {
         printerId: printer.id,
         status: 'pending',
@@ -153,7 +153,7 @@ export class CloudPrntService {
     }
 
     // Mark job as printing and increment attempt count
-    await this.prisma.printJob.update({
+    await prisma.printJob.update({
       where: { id: job.id },
       data: {
         status: 'printing',
@@ -161,7 +161,7 @@ export class CloudPrntService {
       },
     });
 
-    this.logger.info('Print job picked up by printer', {
+    console.log('[CloudPRNT] Print job picked up by printer', {
       jobId: job.id,
       printerId: printer.id,
       printerName: printer.name,
@@ -191,7 +191,7 @@ export class CloudPrntService {
    * Mark job as completed (printer confirms success)
    */
   async markJobCompleted(jobId: string): Promise<void> {
-    const job = await this.prisma.printJob.findUnique({
+    const job = await prisma.printJob.findUnique({
       where: { id: jobId },
       include: {
         order: {
@@ -201,11 +201,11 @@ export class CloudPrntService {
     });
 
     if (!job) {
-      this.logger.warn('Job not found for completion', { jobId });
+      console.warn('[CloudPRNT] Job not found for completion', { jobId });
       return;
     }
 
-    await this.prisma.printJob.update({
+    await prisma.printJob.update({
       where: { id: jobId },
       data: {
         status: 'completed',
@@ -213,15 +213,15 @@ export class CloudPrntService {
       },
     });
 
-    this.logger.info('Print job completed', {
+    console.log('[CloudPRNT] Print job completed', {
       jobId,
       orderId: job.orderId,
       attemptCount: job.attemptCount,
     });
 
     // Emit WebSocket event to frontend
-    if (job.order?.restaurantId && this.socketService.emitToPrinter) {
-      this.socketService.emitToPrinter(
+    if (job.order?.restaurantId) {
+      emitToPrinter(
         job.order.restaurantId,
         'order:printed',
         {
@@ -237,7 +237,7 @@ export class CloudPrntService {
    * Mark job as failed
    */
   async markJobFailed(jobId: string, errorMessage: string): Promise<void> {
-    const job = await this.prisma.printJob.findUnique({
+    const job = await prisma.printJob.findUnique({
       where: { id: jobId },
       include: {
         order: {
@@ -247,11 +247,11 @@ export class CloudPrntService {
     });
 
     if (!job) {
-      this.logger.warn('Job not found for failure', { jobId });
+      console.warn('[CloudPRNT] Job not found for failure', { jobId });
       return;
     }
 
-    await this.prisma.printJob.update({
+    await prisma.printJob.update({
       where: { id: jobId },
       data: {
         status: 'failed',
@@ -260,7 +260,7 @@ export class CloudPrntService {
       },
     });
 
-    this.logger.error('Print job failed', {
+    console.error('[CloudPRNT] Print job failed', {
       jobId,
       orderId: job.orderId,
       attemptCount: job.attemptCount,
@@ -268,8 +268,8 @@ export class CloudPrntService {
     });
 
     // Emit WebSocket event to frontend
-    if (job.order?.restaurantId && this.socketService.emitToPrinter) {
-      this.socketService.emitToPrinter(
+    if (job.order?.restaurantId) {
+      emitToPrinter(
         job.order.restaurantId,
         'order:print_failed',
         {
@@ -283,13 +283,13 @@ export class CloudPrntService {
   }
 
   /**
-   * Cleanup stale print jobs (background job runs every 1 min)
+   * Cleanup stale print jobs (background job runs every 10 min)
    */
   async cleanupStaleJobs(): Promise<number> {
     const cutoffTime = new Date(Date.now() - PRINT_JOB_TIMEOUT_MS);
 
     // Find jobs that have been "printing" for more than 5 minutes
-    const staleJobs = await this.prisma.printJob.findMany({
+    const staleJobs = await prisma.printJob.findMany({
       where: {
         status: 'printing',
         createdAt: {
@@ -307,7 +307,7 @@ export class CloudPrntService {
       return 0;
     }
 
-    this.logger.info('Cleaning up stale print jobs', {
+    console.log('[CloudPRNT] Cleaning up stale print jobs', {
       count: staleJobs.length,
       cutoffTime,
     });
@@ -320,7 +320,7 @@ export class CloudPrntService {
   }
 
   /**
-   * Find printer for restaurant (default > active > error)
+   * Find printer for restaurant (default > active > null)
    */
   private async findPrinterForRestaurant(
     restaurantId: string,
@@ -328,7 +328,7 @@ export class CloudPrntService {
   ): Promise<any | null> {
     // 1. If printerId specified, use that printer
     if (printerId) {
-      const printer = await this.prisma.printer.findFirst({
+      const printer = await prisma.printer.findFirst({
         where: {
           id: printerId,
           restaurantId,
@@ -339,7 +339,7 @@ export class CloudPrntService {
     }
 
     // 2. Find default printer for restaurant
-    const defaultPrinter = await this.prisma.printer.findFirst({
+    const defaultPrinter = await prisma.printer.findFirst({
       where: {
         restaurantId,
         isDefault: true,
@@ -352,7 +352,7 @@ export class CloudPrntService {
     }
 
     // 3. Find any active printer for restaurant
-    const anyPrinter = await this.prisma.printer.findFirst({
+    const anyPrinter = await prisma.printer.findFirst({
       where: {
         restaurantId,
         isActive: true,
@@ -362,3 +362,5 @@ export class CloudPrntService {
     return anyPrinter;
   }
 }
+
+export const cloudPrntService = new CloudPrntService();
