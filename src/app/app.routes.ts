@@ -10,6 +10,7 @@ import { broadcastOrderEvent, sendOrderEventToDevice, broadcastToSourceAndKDS } 
 import { cloudPrntService } from '../services/cloudprnt.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
 import { validateDiningData } from '../validators/dining.validator';
+import { AISettingsPatchSchema } from '../validators/settings.validator';
 import { loyaltyService } from '../services/loyalty.service';
 
 const router = Router();
@@ -98,11 +99,26 @@ router.get('/slug/:slug', async (req: Request, res: Response) => {
 router.patch('/:restaurantId', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
-    const data = req.body;
+    const data = { ...(req.body as Record<string, unknown>) };
+
+    if ('aiSettings' in data && data.aiSettings !== undefined) {
+      const parsedSettings = AISettingsPatchSchema.safeParse(data.aiSettings);
+      if (!parsedSettings.success) {
+        res.status(400).json({
+          error: 'Invalid aiSettings payload',
+          details: parsedSettings.error.issues.map(issue => ({
+            path: issue.path.join('.'),
+            message: issue.message,
+          })),
+        });
+        return;
+      }
+      data.aiSettings = parsedSettings.data;
+    }
 
     const restaurant = await prisma.restaurant.update({
       where: { id: restaurantId },
-      data
+      data: data as any,
     });
     res.json(restaurant);
   } catch (error) {
