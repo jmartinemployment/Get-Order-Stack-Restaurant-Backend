@@ -14,6 +14,11 @@ import { loyaltyService } from '../services/loyalty.service';
 
 const router = Router();
 const prisma = new PrismaClient();
+const ORDER_INCLUDE = {
+  orderItems: { include: { modifiers: true } },
+  customer: true,
+  table: true,
+} as const;
 
 function generateOrderNumber(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
@@ -1118,6 +1123,7 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
       items, specialInstructions, scheduledTime,
       deliveryAddress, deliveryLat, deliveryLng,
       deliveryInfo, curbsideInfo, cateringInfo,
+      courses = [],
       loyaltyPointsRedeemed: reqLoyaltyPointsRedeemed = 0,
     } = req.body;
 
@@ -1232,6 +1238,37 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
     let subtotal = 0;
     const orderItemsData = [];
 
+    const courseByGuid = new Map<string, { name?: string; sortOrder?: number }>();
+    if (Array.isArray(courses)) {
+      for (const course of courses) {
+        if (!course || typeof course !== 'object') continue;
+        const guid = (course as Record<string, unknown>).guid;
+        if (typeof guid !== 'string' || !guid) continue;
+        const name = (course as Record<string, unknown>).name;
+        const sortOrderRaw = (course as Record<string, unknown>).sortOrder;
+        const sortOrder = Number(sortOrderRaw);
+        courseByGuid.set(guid, {
+          name: typeof name === 'string' ? name : undefined,
+          sortOrder: Number.isFinite(sortOrder) ? sortOrder : undefined,
+        });
+      }
+    }
+
+    let firstCourseSortOrder: number | null = null;
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        if (!item?.course?.guid) continue;
+        const courseGuid = String(item.course.guid);
+        const fallbackSort = courseByGuid.get(courseGuid)?.sortOrder;
+        const sortOrderRaw = item.course.sortOrder ?? fallbackSort;
+        const sortOrder = Number(sortOrderRaw);
+        const normalizedSort = Number.isFinite(sortOrder) ? sortOrder : 0;
+        if (firstCourseSortOrder === null || normalizedSort < firstCourseSortOrder) {
+          firstCourseSortOrder = normalizedSort;
+        }
+      }
+    }
+
     for (const item of items) {
       const menuItem = await prisma.menuItem.findUnique({
         where: { id: item.menuItemId }
@@ -1270,6 +1307,29 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
       const itemTotal = (Number(menuItem.price) + modifiersPrice) * item.quantity;
       subtotal += itemTotal;
 
+      const rawCourse = item.course as Record<string, unknown> | undefined;
+      const courseGuid = typeof rawCourse?.guid === 'string' ? rawCourse.guid : undefined;
+      const fallbackCourse = courseGuid ? courseByGuid.get(courseGuid) : undefined;
+      const rawCourseName = rawCourse?.name;
+      const courseName = typeof rawCourseName === 'string'
+        ? rawCourseName
+        : fallbackCourse?.name;
+      const rawSortOrder = rawCourse?.sortOrder ?? fallbackCourse?.sortOrder;
+      const courseSortOrder = Number(rawSortOrder);
+      const normalizedCourseSortOrder = Number.isFinite(courseSortOrder) ? courseSortOrder : 0;
+
+      const isFirstCourseItem = courseGuid
+        ? (firstCourseSortOrder === null || normalizedCourseSortOrder === firstCourseSortOrder)
+        : false;
+      const fulfillmentStatus = courseGuid
+        ? (isFirstCourseItem ? 'SENT' : 'HOLD')
+        : 'SENT';
+      const courseFireStatus = courseGuid
+        ? (isFirstCourseItem ? 'FIRED' : 'PENDING')
+        : null;
+      const courseFiredAt = courseGuid && isFirstCourseItem ? new Date() : null;
+      const sentToKitchenAt = fulfillmentStatus === 'HOLD' ? null : new Date();
+
       orderItemsData.push({
         menuItem: { connect: { id: menuItem.id } },
         menuItemName: menuItem.name,
@@ -1278,6 +1338,13 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
         modifiersPrice,
         totalPrice: itemTotal,
         specialInstructions: item.specialInstructions,
+        fulfillmentStatus,
+        courseGuid: courseGuid ?? null,
+        courseName: courseGuid ? (courseName ?? courseGuid) : null,
+        courseSortOrder: courseGuid ? normalizedCourseSortOrder : null,
+        courseFireStatus,
+        courseFiredAt,
+        sentToKitchenAt,
         modifiers: { create: modifiersData }
       });
     }
@@ -1440,6 +1507,128 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
   }
 });
 
+// Fire a course (HOLD -> SENT) for KDS course pacing.
+router.patch('/:restaurantId/orders/:orderId/fire-course', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, orderId } = req.params;
+    const { courseGuid } = req.body as { courseGuid?: string };
+
+    if (!courseGuid) {
+      res.status(400).json({ error: 'courseGuid is required' });
+      return;
+    }
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, restaurantId },
+      include: ORDER_INCLUDE,
+    });
+
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+
+    const now = new Date();
+    const updatedCount = await prisma.orderItem.updateMany({
+      where: {
+        orderId,
+        courseGuid,
+      },
+      data: {
+        status: 'preparing',
+        fulfillmentStatus: 'SENT',
+        courseFireStatus: 'FIRED',
+        courseFiredAt: now,
+        sentToKitchenAt: now,
+      },
+    });
+
+    if (updatedCount.count === 0) {
+      res.status(404).json({ error: 'Course not found on order' });
+      return;
+    }
+
+    const updatedOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: ORDER_INCLUDE,
+    });
+
+    if (!updatedOrder) {
+      res.status(500).json({ error: 'Failed to load updated order' });
+      return;
+    }
+
+    const enriched = enrichOrderResponse(updatedOrder);
+    broadcastToSourceAndKDS(updatedOrder.restaurantId, updatedOrder.sourceDeviceId, 'order:updated', enriched);
+    res.json(enriched);
+  } catch (error: unknown) {
+    console.error('[Course Pacing] Error firing course:', error);
+    res.status(500).json({ error: 'Failed to fire course' });
+  }
+});
+
+// Fire an individual held item now (prep-time staggering override).
+router.patch('/:restaurantId/orders/:orderId/fire-item', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, orderId } = req.params;
+    const { selectionGuid } = req.body as { selectionGuid?: string };
+
+    if (!selectionGuid) {
+      res.status(400).json({ error: 'selectionGuid is required' });
+      return;
+    }
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, restaurantId },
+    });
+
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+
+    const item = await prisma.orderItem.findFirst({
+      where: { id: selectionGuid, orderId },
+    });
+
+    if (!item) {
+      res.status(404).json({ error: 'Order item not found' });
+      return;
+    }
+
+    const now = new Date();
+    await prisma.orderItem.update({
+      where: { id: selectionGuid },
+      data: {
+        status: 'preparing',
+        fulfillmentStatus: 'ON_THE_FLY',
+        sentToKitchenAt: now,
+        ...(item.courseGuid ? {
+          courseFireStatus: 'FIRED',
+          courseFiredAt: item.courseFiredAt ?? now,
+        } : {}),
+      },
+    });
+
+    const updatedOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: ORDER_INCLUDE,
+    });
+
+    if (!updatedOrder) {
+      res.status(500).json({ error: 'Failed to load updated order' });
+      return;
+    }
+
+    const enriched = enrichOrderResponse(updatedOrder);
+    broadcastToSourceAndKDS(updatedOrder.restaurantId, updatedOrder.sourceDeviceId, 'order:updated', enriched);
+    res.json(enriched);
+  } catch (error: unknown) {
+    console.error('[Course Pacing] Error firing item:', error);
+    res.status(500).json({ error: 'Failed to fire item' });
+  }
+});
+
 // Get order status history
 router.get('/:restaurantId/orders/:orderId/history', async (req: Request, res: Response) => {
   try {
@@ -1468,15 +1657,17 @@ router.post('/:restaurantId/orders/:orderId/reprint', async (req: Request, res: 
 // Update individual order item status (for KDS)
 router.patch('/:restaurantId/orders/:orderId/items/:itemId/status', async (req: Request, res: Response) => {
   try {
-    const { itemId } = req.params;
+    const { restaurantId, orderId, itemId } = req.params;
     const { status } = req.body;
 
     const updateData: any = { status };
     if (status === 'preparing') {
       updateData.sentToKitchenAt = new Date();
+      updateData.fulfillmentStatus = 'SENT';
     }
     if (status === 'completed') {
       updateData.completedAt = new Date();
+      updateData.fulfillmentStatus = 'SENT';
     }
 
     const orderItem = await prisma.orderItem.update({
@@ -1484,6 +1675,39 @@ router.patch('/:restaurantId/orders/:orderId/items/:itemId/status', async (req: 
       data: updateData,
       include: { modifiers: true }
     });
+
+    // Mark the whole course as READY when all items in that course are completed.
+    if (status === 'completed' && orderItem.courseGuid) {
+      const remaining = await prisma.orderItem.count({
+        where: {
+          orderId,
+          courseGuid: orderItem.courseGuid,
+          status: { not: 'completed' },
+        },
+      });
+
+      if (remaining === 0) {
+        await prisma.orderItem.updateMany({
+          where: {
+            orderId,
+            courseGuid: orderItem.courseGuid,
+          },
+          data: {
+            courseFireStatus: 'READY',
+          },
+        });
+      }
+    }
+
+    const updatedOrder = await prisma.order.findFirst({
+      where: { id: orderId, restaurantId },
+      include: ORDER_INCLUDE,
+    });
+
+    if (updatedOrder) {
+      const enriched = enrichOrderResponse(updatedOrder);
+      broadcastToSourceAndKDS(updatedOrder.restaurantId, updatedOrder.sourceDeviceId, 'order:updated', enriched);
+    }
 
     res.json(orderItem);
   } catch (error) {
