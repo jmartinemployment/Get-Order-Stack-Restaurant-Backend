@@ -94,12 +94,21 @@ function buildCourseSummaries(orderItems: any[]): any[] {
         ? 'FIRED'
         : 'PENDING';
 
+    const readyDate = fireStatus === 'READY'
+      ? items
+          .map(i => i.courseReadyAt ?? i.completedAt ?? null)
+          .filter((d): d is Date => Boolean(d))
+          .sort((a, b) => a.getTime() - b.getTime())
+          .at(-1)
+      : undefined;
+
     return {
       guid: courseGuid,
       name: first.courseName ?? courseGuid,
       sortOrder,
       fireStatus,
       firedDate,
+      readyDate,
     };
   });
 
@@ -127,6 +136,7 @@ export function enrichOrderResponse(order: any): any {
             sortOrder: Number(item.courseSortOrder ?? 0),
             fireStatus: courseFireStatus,
             firedDate: item.courseFiredAt ?? undefined,
+            readyDate: item.courseReadyAt ?? ((item.status ?? '').toLowerCase() === 'completed' ? item.completedAt ?? undefined : undefined),
           }
         : undefined;
 

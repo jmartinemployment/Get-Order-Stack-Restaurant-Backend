@@ -12,6 +12,7 @@ import { enrichOrderResponse } from '../utils/order-enrichment';
 import { validateDiningData } from '../validators/dining.validator';
 import { AISettingsPatchSchema } from '../validators/settings.validator';
 import { loyaltyService } from '../services/loyalty.service';
+import { coursePacingService } from '../services/course-pacing.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1555,6 +1556,7 @@ router.patch('/:restaurantId/orders/:orderId/fire-course', async (req: Request, 
         fulfillmentStatus: 'SENT',
         courseFireStatus: 'FIRED',
         courseFiredAt: now,
+        courseReadyAt: null,
         sentToKitchenAt: now,
       },
     });
@@ -1622,6 +1624,7 @@ router.patch('/:restaurantId/orders/:orderId/fire-item', async (req: Request, re
         ...(item.courseGuid ? {
           courseFireStatus: 'FIRED',
           courseFiredAt: item.courseFiredAt ?? now,
+          courseReadyAt: null,
         } : {}),
       },
     });
@@ -1642,6 +1645,19 @@ router.patch('/:restaurantId/orders/:orderId/fire-item', async (req: Request, re
   } catch (error: unknown) {
     console.error('[Course Pacing] Error firing item:', error);
     res.status(500).json({ error: 'Failed to fire item' });
+  }
+});
+
+// Course pacing metrics for adaptive auto-fire timing.
+router.get('/:restaurantId/course-pacing/metrics', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const lookbackDays = Number.parseInt(String(req.query.lookbackDays ?? '30'), 10);
+    const metrics = await coursePacingService.getRestaurantMetrics(restaurantId, lookbackDays);
+    res.json(metrics);
+  } catch (error) {
+    console.error('[Course Pacing] Error loading pacing metrics:', error);
+    res.status(500).json({ error: 'Failed to load course pacing metrics' });
   }
 });
 
@@ -1710,6 +1726,7 @@ router.patch('/:restaurantId/orders/:orderId/items/:itemId/status', async (req: 
           },
           data: {
             courseFireStatus: 'READY',
+            courseReadyAt: new Date(),
           },
         });
       }
