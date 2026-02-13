@@ -109,7 +109,14 @@ app.post('/api/webhooks/paypal', express.raw({ type: 'application/json' }), asyn
 // DoorDash webhook - MUST be before express.json() to get raw body for HMAC verification
 app.post('/api/webhooks/doordash', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
-    const signingSecret = process.env.DOORDASH_SIGNING_SECRET;
+    const event = JSON.parse(req.body.toString()) as Record<string, any>;
+    const externalId = event.external_delivery_id as string | undefined;
+    const ddStatus = event.delivery_status as string | undefined;
+
+    const signingSecret = externalId
+      ? await deliveryService.getWebhookVerificationSecret('doordash', externalId)
+      : null;
+
     if (signingSecret) {
       const signature = req.headers['x-doordash-signature'] as string;
       if (!signature) {
@@ -127,11 +134,9 @@ app.post('/api/webhooks/doordash', express.raw({ type: 'application/json' }), as
         res.status(400).json({ error: 'Invalid signature' });
         return;
       }
+    } else {
+      console.warn('[DoorDash Webhook] No signing secret configured for delivery; skipping signature verification');
     }
-
-    const event = JSON.parse(req.body.toString()) as Record<string, any>;
-    const externalId = event.external_delivery_id as string;
-    const ddStatus = event.delivery_status as string;
 
     if (externalId && ddStatus) {
       const statusMap: Record<string, string> = {
@@ -170,7 +175,14 @@ app.post('/api/webhooks/doordash', express.raw({ type: 'application/json' }), as
 // Uber Direct webhook - MUST be before express.json() to get raw body
 app.post('/api/webhooks/uber', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
-    const signingKey = process.env.UBER_WEBHOOK_SIGNING_KEY;
+    const event = JSON.parse(req.body.toString()) as Record<string, any>;
+    const deliveryId = event.data?.id as string | undefined;
+    const uberStatus = event.data?.status as string | undefined;
+
+    const signingKey = deliveryId
+      ? await deliveryService.getWebhookVerificationSecret('uber', deliveryId)
+      : null;
+
     if (signingKey) {
       const signature = req.headers['x-uber-signature'] as string;
       if (!signature) {
@@ -188,11 +200,9 @@ app.post('/api/webhooks/uber', express.raw({ type: 'application/json' }), async 
         res.status(400).json({ error: 'Invalid signature' });
         return;
       }
+    } else {
+      console.warn('[Uber Webhook] No webhook signing key configured for delivery; skipping signature verification');
     }
-
-    const event = JSON.parse(req.body.toString()) as Record<string, any>;
-    const deliveryId = event.data?.id as string;
-    const uberStatus = event.data?.status as string;
 
     if (deliveryId && uberStatus) {
       const statusMap: Record<string, string> = {

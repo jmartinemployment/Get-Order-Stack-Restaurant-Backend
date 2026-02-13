@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { deliveryService } from '../services/delivery.service';
+import { deliveryCredentialsService } from '../services/delivery-credentials.service';
+import { requireAuth, requireRestaurantManager } from '../middleware/auth.middleware';
 
 const router = Router({ mergeParams: true });
 
@@ -18,6 +20,32 @@ const CancelRequestSchema = z.object({
   orderId: z.string().uuid(),
 });
 
+const DoorDashCredentialSchema = z.object({
+  apiKey: z.string().trim().min(1).optional(),
+  signingSecret: z.string().trim().min(1).optional(),
+  mode: z.enum(['production', 'test']).optional(),
+}).refine(
+  (data) => data.apiKey !== undefined || data.signingSecret !== undefined || data.mode !== undefined,
+  { message: 'At least one field is required to update DoorDash credentials' },
+);
+
+const UberCredentialSchema = z.object({
+  clientId: z.string().trim().min(1).optional(),
+  clientSecret: z.string().trim().min(1).optional(),
+  customerId: z.string().trim().min(1).optional(),
+  webhookSigningKey: z.string().trim().min(1).optional(),
+}).refine(
+  (data) => data.clientId !== undefined
+    || data.clientSecret !== undefined
+    || data.customerId !== undefined
+    || data.webhookSigningKey !== undefined,
+  { message: 'At least one field is required to update Uber credentials' },
+);
+
+function toFieldErrors(error: z.ZodError): Record<string, string[]> {
+  return error.flatten().fieldErrors as Record<string, string[]>;
+}
+
 // GET /:restaurantId/delivery/config-status
 router.get('/config-status', async (req: Request, res: Response) => {
   try {
@@ -27,6 +55,85 @@ router.get('/config-status', async (req: Request, res: Response) => {
   } catch (error: unknown) {
     console.error('[Delivery] Config status error:', error);
     res.status(500).json({ error: 'Failed to get config status' });
+  }
+});
+
+// --- Credential management (admin roles only) ---
+
+router.get('/credentials', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const summary = await deliveryCredentialsService.getSummary(restaurantId);
+    res.json(summary);
+  } catch (error: unknown) {
+    console.error('[Delivery] Credentials status error:', error);
+    res.status(500).json({ error: 'Failed to load delivery credentials' });
+  }
+});
+
+router.put('/credentials/doordash', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const parsed = DoorDashCredentialSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid request', details: toFieldErrors(parsed.error) });
+      return;
+    }
+
+    const summary = await deliveryCredentialsService.upsertDoorDash(restaurantId, parsed.data);
+    res.json(summary);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to save DoorDash credentials';
+    console.error('[Delivery] Save DoorDash credentials error:', message);
+    if (message.includes('require')) {
+      res.status(400).json({ error: message });
+      return;
+    }
+    res.status(500).json({ error: message });
+  }
+});
+
+router.delete('/credentials/doordash', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const summary = await deliveryCredentialsService.clearDoorDash(restaurantId);
+    res.json(summary);
+  } catch (error: unknown) {
+    console.error('[Delivery] Delete DoorDash credentials error:', error);
+    res.status(500).json({ error: 'Failed to delete DoorDash credentials' });
+  }
+});
+
+router.put('/credentials/uber', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const parsed = UberCredentialSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid request', details: toFieldErrors(parsed.error) });
+      return;
+    }
+
+    const summary = await deliveryCredentialsService.upsertUber(restaurantId, parsed.data);
+    res.json(summary);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to save Uber credentials';
+    console.error('[Delivery] Save Uber credentials error:', message);
+    if (message.includes('require')) {
+      res.status(400).json({ error: message });
+      return;
+    }
+    res.status(500).json({ error: message });
+  }
+});
+
+router.delete('/credentials/uber', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const summary = await deliveryCredentialsService.clearUber(restaurantId);
+    res.json(summary);
+  } catch (error: unknown) {
+    console.error('[Delivery] Delete Uber credentials error:', error);
+    res.status(500).json({ error: 'Failed to delete Uber credentials' });
   }
 });
 

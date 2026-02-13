@@ -1,6 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import { broadcastOrderEvent } from './socket.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
+import {
+  deliveryCredentialsService,
+  DoorDashRuntimeCredentials,
+  UberRuntimeCredentials,
+} from './delivery-credentials.service';
 
 const prisma = new PrismaClient();
 
@@ -42,23 +47,20 @@ const ORDER_INCLUDE = {
 
 // --- DoorDash Drive ---
 
-async function doordashRequestQuote(order: any, restaurant: any): Promise<DeliveryQuote> {
-  const apiKey = process.env.DOORDASH_API_KEY;
-  const signingSecret = process.env.DOORDASH_SIGNING_SECRET;
-
-  if (!apiKey || !signingSecret) {
-    throw new Error('DoorDash API credentials not configured');
-  }
-
+async function doordashRequestQuote(
+  order: any,
+  restaurant: any,
+  credentials: DoorDashRuntimeCredentials,
+): Promise<DeliveryQuote> {
   // DoorDash Drive API: Create delivery quote
-  const baseUrl = process.env.DOORDASH_MODE === 'production'
+  const baseUrl = credentials.mode === 'production'
     ? 'https://openapi.doordash.com'
     : 'https://openapi.doordash.com'; // DoorDash uses same URL with test keys
 
   const response = await fetch(`${baseUrl}/drive/v2/deliveries`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${credentials.apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -93,14 +95,11 @@ async function doordashRequestQuote(order: any, restaurant: any): Promise<Delive
   };
 }
 
-async function doordashAcceptQuote(externalDeliveryId: string): Promise<DispatchResult> {
-  const apiKey = process.env.DOORDASH_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('DoorDash API credentials not configured');
-  }
-
-  const baseUrl = process.env.DOORDASH_MODE === 'production'
+async function doordashAcceptQuote(
+  externalDeliveryId: string,
+  credentials: DoorDashRuntimeCredentials,
+): Promise<DispatchResult> {
+  const baseUrl = credentials.mode === 'production'
     ? 'https://openapi.doordash.com'
     : 'https://openapi.doordash.com';
 
@@ -108,7 +107,7 @@ async function doordashAcceptQuote(externalDeliveryId: string): Promise<Dispatch
   const response = await fetch(`${baseUrl}/drive/v2/deliveries/${externalDeliveryId}`, {
     method: 'PATCH',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${credentials.apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ status: 'confirmed' }),
@@ -129,19 +128,16 @@ async function doordashAcceptQuote(externalDeliveryId: string): Promise<Dispatch
   };
 }
 
-async function doordashGetStatus(externalDeliveryId: string): Promise<{ dispatchStatus: DispatchStatus; driver: DriverInfo }> {
-  const apiKey = process.env.DOORDASH_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('DoorDash API credentials not configured');
-  }
-
-  const baseUrl = process.env.DOORDASH_MODE === 'production'
+async function doordashGetStatus(
+  externalDeliveryId: string,
+  credentials: DoorDashRuntimeCredentials,
+): Promise<{ dispatchStatus: DispatchStatus; driver: DriverInfo }> {
+  const baseUrl = credentials.mode === 'production'
     ? 'https://openapi.doordash.com'
     : 'https://openapi.doordash.com';
 
   const response = await fetch(`${baseUrl}/drive/v2/deliveries/${externalDeliveryId}`, {
-    headers: { 'Authorization': `Bearer ${apiKey}` },
+    headers: { 'Authorization': `Bearer ${credentials.apiKey}` },
   });
 
   if (!response.ok) {
@@ -181,19 +177,18 @@ function mapDoordashStatus(ddStatus: string): DispatchStatus {
   }
 }
 
-async function doordashCancel(externalDeliveryId: string): Promise<boolean> {
-  const apiKey = process.env.DOORDASH_API_KEY;
-
-  if (!apiKey) return false;
-
-  const baseUrl = process.env.DOORDASH_MODE === 'production'
+async function doordashCancel(
+  externalDeliveryId: string,
+  credentials: DoorDashRuntimeCredentials,
+): Promise<boolean> {
+  const baseUrl = credentials.mode === 'production'
     ? 'https://openapi.doordash.com'
     : 'https://openapi.doordash.com';
 
   const response = await fetch(`${baseUrl}/drive/v2/deliveries/${externalDeliveryId}`, {
     method: 'PATCH',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${credentials.apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ status: 'cancelled' }),
@@ -204,20 +199,13 @@ async function doordashCancel(externalDeliveryId: string): Promise<boolean> {
 
 // --- Uber Direct ---
 
-async function getUberAccessToken(): Promise<string> {
-  const clientId = process.env.UBER_CLIENT_ID;
-  const clientSecret = process.env.UBER_CLIENT_SECRET;
-
-  if (!clientId || !clientSecret) {
-    throw new Error('Uber Direct API credentials not configured');
-  }
-
+async function getUberAccessToken(credentials: UberRuntimeCredentials): Promise<string> {
   const response = await fetch('https://login.uber.com/oauth/v2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
       grant_type: 'client_credentials',
       scope: 'eats.deliveries',
     }),
@@ -231,13 +219,13 @@ async function getUberAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-async function uberRequestQuote(order: any, restaurant: any): Promise<DeliveryQuote> {
-  const token = await getUberAccessToken();
-  const customerId = process.env.UBER_CUSTOMER_ID;
-
-  if (!customerId) {
-    throw new Error('Uber customer ID not configured');
-  }
+async function uberRequestQuote(
+  order: any,
+  restaurant: any,
+  credentials: UberRuntimeCredentials,
+): Promise<DeliveryQuote> {
+  const token = await getUberAccessToken(credentials);
+  const customerId = credentials.customerId;
 
   const response = await fetch('https://api.uber.com/v1/customers/' + customerId + '/delivery_quotes', {
     method: 'POST',
@@ -281,13 +269,14 @@ async function uberRequestQuote(order: any, restaurant: any): Promise<DeliveryQu
   };
 }
 
-async function uberAcceptQuote(quoteId: string, order: any, restaurant: any): Promise<DispatchResult> {
-  const token = await getUberAccessToken();
-  const customerId = process.env.UBER_CUSTOMER_ID;
-
-  if (!customerId) {
-    throw new Error('Uber customer ID not configured');
-  }
+async function uberAcceptQuote(
+  quoteId: string,
+  order: any,
+  restaurant: any,
+  credentials: UberRuntimeCredentials,
+): Promise<DispatchResult> {
+  const token = await getUberAccessToken(credentials);
+  const customerId = credentials.customerId;
 
   const response = await fetch('https://api.uber.com/v1/customers/' + customerId + '/deliveries', {
     method: 'POST',
@@ -323,13 +312,12 @@ async function uberAcceptQuote(quoteId: string, order: any, restaurant: any): Pr
   };
 }
 
-async function uberGetStatus(deliveryId: string): Promise<{ dispatchStatus: DispatchStatus; driver: DriverInfo }> {
-  const token = await getUberAccessToken();
-  const customerId = process.env.UBER_CUSTOMER_ID;
-
-  if (!customerId) {
-    throw new Error('Uber customer ID not configured');
-  }
+async function uberGetStatus(
+  deliveryId: string,
+  credentials: UberRuntimeCredentials,
+): Promise<{ dispatchStatus: DispatchStatus; driver: DriverInfo }> {
+  const token = await getUberAccessToken(credentials);
+  const customerId = credentials.customerId;
 
   const response = await fetch(`https://api.uber.com/v1/customers/${customerId}/deliveries/${deliveryId}`, {
     headers: { 'Authorization': `Bearer ${token}` },
@@ -369,11 +357,9 @@ function mapUberStatus(uberStatus: string): DispatchStatus {
   }
 }
 
-async function uberCancel(deliveryId: string): Promise<boolean> {
-  const token = await getUberAccessToken();
-  const customerId = process.env.UBER_CUSTOMER_ID;
-
-  if (!customerId) return false;
+async function uberCancel(deliveryId: string, credentials: UberRuntimeCredentials): Promise<boolean> {
+  const token = await getUberAccessToken(credentials);
+  const customerId = credentials.customerId;
 
   const response = await fetch(`https://api.uber.com/v1/customers/${customerId}/deliveries/${deliveryId}/cancel`, {
     method: 'POST',
@@ -390,9 +376,10 @@ async function uberCancel(deliveryId: string): Promise<boolean> {
 
 export const deliveryService = {
   async getConfigStatus(restaurantId: string): Promise<{ doordash: boolean; uber: boolean }> {
+    const summary = await deliveryCredentialsService.getSummary(restaurantId);
     return {
-      doordash: !!(process.env.DOORDASH_API_KEY && process.env.DOORDASH_SIGNING_SECRET),
-      uber: !!(process.env.UBER_CLIENT_ID && process.env.UBER_CLIENT_SECRET),
+      doordash: summary.doordash.configured,
+      uber: summary.uber.configured,
     };
   },
 
@@ -409,9 +396,17 @@ export const deliveryService = {
 
     let quote: DeliveryQuote;
     if (provider === 'doordash') {
-      quote = await doordashRequestQuote(order, restaurant);
+      const credentials = await deliveryCredentialsService.getDoorDashRuntimeCredentials(order.restaurantId);
+      if (!credentials) {
+        throw new Error('DoorDash API credentials not configured for restaurant');
+      }
+      quote = await doordashRequestQuote(order, restaurant, credentials);
     } else if (provider === 'uber') {
-      quote = await uberRequestQuote(order, restaurant);
+      const credentials = await deliveryCredentialsService.getUberRuntimeCredentials(order.restaurantId);
+      if (!credentials) {
+        throw new Error('Uber Direct API credentials not configured for restaurant');
+      }
+      quote = await uberRequestQuote(order, restaurant, credentials);
     } else {
       throw new Error(`Unsupported delivery provider: ${provider}`);
     }
@@ -442,9 +437,17 @@ export const deliveryService = {
 
     let result: DispatchResult;
     if (provider === 'doordash') {
-      result = await doordashAcceptQuote(quoteId);
+      const credentials = await deliveryCredentialsService.getDoorDashRuntimeCredentials(order.restaurantId);
+      if (!credentials) {
+        throw new Error('DoorDash API credentials not configured for restaurant');
+      }
+      result = await doordashAcceptQuote(quoteId, credentials);
     } else if (provider === 'uber') {
-      result = await uberAcceptQuote(quoteId, order, order.restaurant);
+      const credentials = await deliveryCredentialsService.getUberRuntimeCredentials(order.restaurantId);
+      if (!credentials) {
+        throw new Error('Uber Direct API credentials not configured for restaurant');
+      }
+      result = await uberAcceptQuote(quoteId, order, order.restaurant, credentials);
     } else {
       throw new Error(`Unsupported provider: ${provider}`);
     }
@@ -475,9 +478,13 @@ export const deliveryService = {
     if (!order || !order.deliveryExternalId || !order.deliveryProvider) return null;
 
     if (order.deliveryProvider === 'doordash') {
-      return doordashGetStatus(order.deliveryExternalId);
+      const credentials = await deliveryCredentialsService.getDoorDashRuntimeCredentials(order.restaurantId);
+      if (!credentials) return null;
+      return doordashGetStatus(order.deliveryExternalId, credentials);
     } else if (order.deliveryProvider === 'uber') {
-      return uberGetStatus(order.deliveryExternalId);
+      const credentials = await deliveryCredentialsService.getUberRuntimeCredentials(order.restaurantId);
+      if (!credentials) return null;
+      return uberGetStatus(order.deliveryExternalId, credentials);
     }
 
     return null;
@@ -490,9 +497,13 @@ export const deliveryService = {
 
     let cancelled = false;
     if (order.deliveryProvider === 'doordash') {
-      cancelled = await doordashCancel(order.deliveryExternalId);
+      const credentials = await deliveryCredentialsService.getDoorDashRuntimeCredentials(order.restaurantId);
+      if (!credentials) return false;
+      cancelled = await doordashCancel(order.deliveryExternalId, credentials);
     } else if (order.deliveryProvider === 'uber') {
-      cancelled = await uberCancel(order.deliveryExternalId);
+      const credentials = await deliveryCredentialsService.getUberRuntimeCredentials(order.restaurantId);
+      if (!credentials) return false;
+      cancelled = await uberCancel(order.deliveryExternalId, credentials);
     }
 
     if (cancelled) {
@@ -555,5 +566,12 @@ export const deliveryService = {
         estimatedDeliveryAt: driverInfo.estimatedDeliveryAt,
       });
     }
+  },
+
+  async getWebhookVerificationSecret(
+    provider: 'doordash' | 'uber',
+    deliveryExternalId: string,
+  ): Promise<string | null> {
+    return deliveryCredentialsService.getWebhookSecretByExternalDeliveryId(provider, deliveryExternalId);
   },
 };

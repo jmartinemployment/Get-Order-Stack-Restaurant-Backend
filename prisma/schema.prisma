@@ -55,8 +55,27 @@ model Restaurant {
   loyaltyConfig        RestaurantLoyaltyConfig?
   loyaltyRewards       LoyaltyReward[]
   loyaltyTransactions  LoyaltyTransaction[]
+  deliveryCredentials  RestaurantDeliveryCredentials?
 
   @@map("restaurants")
+}
+
+model RestaurantDeliveryCredentials {
+  id                                String    @id @default(uuid())
+  restaurantId                      String    @unique @map("restaurant_id")
+  doordashApiKeyEncrypted           String?   @map("doordash_api_key_encrypted")
+  doordashSigningSecretEncrypted    String?   @map("doordash_signing_secret_encrypted")
+  doordashMode                      String?   @map("doordash_mode")
+  uberClientIdEncrypted             String?   @map("uber_client_id_encrypted")
+  uberClientSecretEncrypted         String?   @map("uber_client_secret_encrypted")
+  uberCustomerIdEncrypted           String?   @map("uber_customer_id_encrypted")
+  uberWebhookSigningKeyEncrypted    String?   @map("uber_webhook_signing_key_encrypted")
+  createdAt                         DateTime  @default(now()) @map("created_at")
+  updatedAt                         DateTime  @updatedAt @map("updated_at")
+
+  restaurant                        Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("restaurant_delivery_credentials")
 }
 
 // === PRIMARY CATEGORIES (Top-level nav grouping) ===
