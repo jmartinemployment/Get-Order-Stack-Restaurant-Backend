@@ -13,9 +13,11 @@ import orderActionRoutes from './order-actions.routes';
 import loyaltyRoutes from './loyalty.routes';
 import deliveryRoutes from './delivery.routes';
 import laborRoutes from './labor.routes';
+import marketplaceRoutes from './marketplace.routes';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
+import { marketplaceService } from '../services/marketplace.service';
 
 const app = express();
 
@@ -237,6 +239,51 @@ app.post('/api/webhooks/uber', express.raw({ type: 'application/json' }), async 
   }
 });
 
+// DoorDash Marketplace webhook - MUST be before express.json() to preserve raw body
+app.post('/api/webhooks/doordash-marketplace', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const result = await marketplaceService.handleWebhook(
+      'doordash_marketplace',
+      req.body as Buffer,
+      req.headers as Record<string, unknown>,
+    );
+    res.json({ received: true, ...result });
+  } catch (error: unknown) {
+    console.error('[DoorDash Marketplace Webhook] Error:', error);
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Webhook processing failed' });
+  }
+});
+
+// Uber Eats webhook - MUST be before express.json() to preserve raw body
+app.post('/api/webhooks/ubereats', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const result = await marketplaceService.handleWebhook(
+      'ubereats',
+      req.body as Buffer,
+      req.headers as Record<string, unknown>,
+    );
+    res.json({ received: true, ...result });
+  } catch (error: unknown) {
+    console.error('[Uber Eats Webhook] Error:', error);
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Webhook processing failed' });
+  }
+});
+
+// Grubhub webhook (conditional integration)
+app.post('/api/webhooks/grubhub', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const result = await marketplaceService.handleWebhook(
+      'grubhub',
+      req.body as Buffer,
+      req.headers as Record<string, unknown>,
+    );
+    res.json({ received: true, ...result });
+  } catch (error: unknown) {
+    console.error('[Grubhub Webhook] Error:', error);
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Webhook processing failed' });
+  }
+});
+
 // JSON body parser for all other routes
 app.use(express.json());
 
@@ -253,6 +300,7 @@ app.use('/api/restaurant', loyaltyRoutes);  // Loyalty program endpoints
 app.use('/api/restaurant', printerRoutes);  // Printer management API
 app.use('/api/restaurant/:restaurantId/orders', orderActionRoutes);  // Dining option action endpoints
 app.use('/api/restaurant/:restaurantId/delivery', deliveryRoutes);  // Third-party delivery endpoints
+app.use('/api/restaurant', marketplaceRoutes);  // Marketplace integration config endpoints
 app.use('/api/restaurant', analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
 app.use('/api/restaurant', primaryCategoryRoutes);
 app.use('/api/restaurant', deviceRoutes);  // Device registration routes

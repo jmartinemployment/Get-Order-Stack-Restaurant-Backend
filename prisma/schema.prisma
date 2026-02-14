@@ -56,6 +56,10 @@ model Restaurant {
   loyaltyRewards       LoyaltyReward[]
   loyaltyTransactions  LoyaltyTransaction[]
   deliveryCredentials  RestaurantDeliveryCredentials?
+  marketplaceIntegrations MarketplaceIntegration[]
+  marketplaceOrders       MarketplaceOrder[]
+  marketplaceWebhookEvents MarketplaceWebhookEvent[]
+  marketplaceMenuMappings  MarketplaceMenuMapping[]
 
   @@map("restaurants")
 }
@@ -76,6 +80,90 @@ model RestaurantDeliveryCredentials {
   restaurant                        Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@map("restaurant_delivery_credentials")
+}
+
+model MarketplaceIntegration {
+  id                             String    @id @default(uuid())
+  restaurantId                   String    @map("restaurant_id")
+  provider                       String
+  enabled                        Boolean   @default(false)
+  externalStoreId                String?   @map("external_store_id")
+  webhookSigningSecretEncrypted  String?   @map("webhook_signing_secret_encrypted")
+  createdAt                      DateTime  @default(now()) @map("created_at")
+  updatedAt                      DateTime  @updatedAt @map("updated_at")
+
+  restaurant                     Restaurant             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  marketplaceOrders              MarketplaceOrder[]
+  webhookEvents                  MarketplaceWebhookEvent[]
+
+  @@unique([restaurantId, provider])
+  @@index([provider, externalStoreId])
+  @@map("marketplace_integrations")
+}
+
+model MarketplaceOrder {
+  id                 String    @id @default(uuid())
+  restaurantId       String    @map("restaurant_id")
+  orderId            String?   @unique @map("order_id")
+  integrationId      String?   @map("integration_id")
+  provider           String
+  externalOrderId    String    @map("external_order_id")
+  externalStoreId    String?   @map("external_store_id")
+  externalCustomerId String?   @map("external_customer_id")
+  status             String    @default("RECEIVED")
+  rawPayload         Json?     @map("raw_payload")
+  lastEventId        String?   @map("last_event_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  restaurant         Restaurant             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  order              Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  integration        MarketplaceIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, externalOrderId])
+  @@index([restaurantId, provider, status])
+  @@map("marketplace_orders")
+}
+
+model MarketplaceWebhookEvent {
+  id              String    @id @default(uuid())
+  restaurantId    String?   @map("restaurant_id")
+  integrationId   String?   @map("integration_id")
+  provider        String
+  externalEventId String    @map("external_event_id")
+  externalOrderId String?   @map("external_order_id")
+  payloadHash     String    @map("payload_hash")
+  payload         Json?
+  outcome         String    @default("RECEIVED")
+  errorMessage    String?   @map("error_message")
+  receivedAt      DateTime  @default(now()) @map("received_at")
+  processedAt     DateTime? @map("processed_at")
+
+  restaurant      Restaurant?            @relation(fields: [restaurantId], references: [id], onDelete: SetNull)
+  integration     MarketplaceIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, externalEventId])
+  @@index([restaurantId, provider, receivedAt])
+  @@map("marketplace_webhook_events")
+}
+
+model MarketplaceMenuMapping {
+  id               String    @id @default(uuid())
+  restaurantId     String    @map("restaurant_id")
+  provider         String
+  externalItemId   String    @map("external_item_id")
+  externalItemName String?   @map("external_item_name")
+  menuItemId       String    @map("menu_item_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  restaurant       Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItem         MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, provider, externalItemId])
+  @@index([restaurantId, provider])
+  @@index([menuItemId])
+  @@map("marketplace_menu_mappings")
 }
 
 // === PRIMARY CATEGORIES (Top-level nav grouping) ===
@@ -156,6 +244,7 @@ model MenuItem {
   orderItems        OrderItem[]
   modifierGroups    MenuItemModifierGroup[]
   recipeIngredients RecipeIngredient[]
+  marketplaceMenuMappings MarketplaceMenuMapping[]
 
   @@map("menu_items")
 }
@@ -358,6 +447,7 @@ model Order {
   table                RestaurantTable?     @relation(fields: [tableId], references: [id], onDelete: SetNull)
   orderItems           OrderItem[]
   statusHistory        OrderStatusHistory[]
+  marketplaceOrder     MarketplaceOrder?
   printJobs            PrintJob[]
   loyaltyTransactions  LoyaltyTransaction[]
 
