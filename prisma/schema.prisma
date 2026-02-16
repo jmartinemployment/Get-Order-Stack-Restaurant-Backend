@@ -56,10 +56,13 @@ model Restaurant {
   loyaltyRewards       LoyaltyReward[]
   loyaltyTransactions  LoyaltyTransaction[]
   deliveryCredentials  RestaurantDeliveryCredentials?
+  providerProfiles     RestaurantProviderProfile[]
+  providerProfileEvents RestaurantProviderProfileEvent[]
   marketplaceIntegrations MarketplaceIntegration[]
   marketplaceOrders       MarketplaceOrder[]
   marketplaceWebhookEvents MarketplaceWebhookEvent[]
   marketplaceMenuMappings  MarketplaceMenuMapping[]
+  marketplaceStatusSyncJobs MarketplaceStatusSyncJob[]
 
   @@map("restaurants")
 }
@@ -80,6 +83,53 @@ model RestaurantDeliveryCredentials {
   restaurant                        Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@map("restaurant_delivery_credentials")
+}
+
+model RestaurantProviderProfile {
+  id             String    @id @default(uuid())
+  restaurantId   String    @map("restaurant_id")
+  provider       String
+  configRefMap   Json?     @map("config_ref_map")
+  profileVersion Int       @default(1) @map("profile_version")
+  profileState   String    @default("ACTIVE") @map("profile_state")
+  keyBackend     String    @map("key_backend")
+  keyRef         String?   @map("key_ref")
+  wrappedDek     String?   @map("wrapped_dek")
+  dekVersion     Int       @default(1) @map("dek_version")
+  aadHash        String?   @map("aad_hash")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  rotatedAt      DateTime? @map("rotated_at")
+
+  restaurant     Restaurant                      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  events         RestaurantProviderProfileEvent[]
+
+  @@unique([restaurantId, provider])
+  @@index([restaurantId, profileState])
+  @@index([keyBackend])
+  @@map("restaurant_provider_profiles")
+}
+
+model RestaurantProviderProfileEvent {
+  id             String    @id @default(uuid())
+  restaurantId   String    @map("restaurant_id")
+  profileId      String?   @map("profile_id")
+  provider       String
+  action         String
+  actor          String?
+  profileVersion Int?      @map("profile_version")
+  outcome        String
+  correlationId  String?   @map("correlation_id")
+  metadata       Json?
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  restaurant     Restaurant                 @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  profile        RestaurantProviderProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+
+  @@index([restaurantId, provider, createdAt])
+  @@index([profileId, createdAt])
+  @@index([correlationId])
+  @@map("restaurant_provider_profile_events")
 }
 
 model MarketplaceIntegration {
@@ -113,12 +163,17 @@ model MarketplaceOrder {
   status             String    @default("RECEIVED")
   rawPayload         Json?     @map("raw_payload")
   lastEventId        String?   @map("last_event_id")
+  lastPushedStatus   String?   @map("last_pushed_status")
+  lastPushAt         DateTime? @map("last_push_at")
+  lastPushResult     String?   @map("last_push_result")
+  lastPushError      String?   @map("last_push_error")
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
   restaurant         Restaurant             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   order              Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull)
   integration        MarketplaceIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  statusSyncJobs     MarketplaceStatusSyncJob[]
 
   @@unique([provider, externalOrderId])
   @@index([restaurantId, provider, status])
@@ -166,6 +221,30 @@ model MarketplaceMenuMapping {
   @@map("marketplace_menu_mappings")
 }
 
+model MarketplaceStatusSyncJob {
+  id                 String    @id @default(uuid())
+  restaurantId       String    @map("restaurant_id")
+  marketplaceOrderId String    @map("marketplace_order_id")
+  provider           String
+  externalOrderId    String    @map("external_order_id")
+  targetStatus       String    @map("target_status")
+  status             String    @default("QUEUED")
+  attemptCount       Int       @default(0) @map("attempt_count")
+  nextAttemptAt      DateTime  @default(now()) @map("next_attempt_at")
+  completedAt        DateTime? @map("completed_at")
+  lastError          String?   @map("last_error")
+  payload            Json?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  restaurant         Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  marketplaceOrder   MarketplaceOrder @relation(fields: [marketplaceOrderId], references: [id], onDelete: Cascade)
+
+  @@unique([marketplaceOrderId, targetStatus])
+  @@index([restaurantId, status, nextAttemptAt])
+  @@map("marketplace_status_sync_jobs")
+}
+
 // === PRIMARY CATEGORIES (Top-level nav grouping) ===
 
 model PrimaryCategory {
@@ -207,6 +286,7 @@ model MenuCategory {
   restaurant      Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   primaryCategory PrimaryCategory? @relation(fields: [primaryCategoryId], references: [id], onDelete: SetNull)
   menuItems       MenuItem[]
+  stationMappings StationCategoryMapping[]
 
   @@index([primaryCategoryId])
   @@map("menu_categories")
@@ -769,9 +849,27 @@ model Station {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  categoryMappings StationCategoryMapping[]
+
   @@unique([restaurantId, name])
   @@index([restaurantId])
   @@map("stations")
+}
+
+model StationCategoryMapping {
+  id           String   @id @default(uuid())
+  stationId    String   @map("station_id")
+  categoryId   String   @map("category_id")
+  restaurantId String   @map("restaurant_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  station  Station      @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  category MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([stationId, categoryId])
+  @@index([restaurantId])
+  @@index([categoryId])
+  @@map("station_category_mappings")
 }
 
 model Device {

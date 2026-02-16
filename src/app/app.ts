@@ -14,6 +14,7 @@ import loyaltyRoutes from './loyalty.routes';
 import deliveryRoutes from './delivery.routes';
 import laborRoutes from './labor.routes';
 import marketplaceRoutes from './marketplace.routes';
+import stationRoutes, { stationCategoryMappingRouter } from './station.routes';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
@@ -301,6 +302,8 @@ app.use('/api/restaurant', printerRoutes);  // Printer management API
 app.use('/api/restaurant/:restaurantId/orders', orderActionRoutes);  // Dining option action endpoints
 app.use('/api/restaurant/:restaurantId/delivery', deliveryRoutes);  // Third-party delivery endpoints
 app.use('/api/restaurant', marketplaceRoutes);  // Marketplace integration config endpoints
+app.use('/api/restaurant/:restaurantId/stations', stationRoutes);  // Station CRUD + category assignment
+app.use('/api/restaurant/:restaurantId/station-category-mappings', stationCategoryMappingRouter);  // Flat mapping list
 app.use('/api/restaurant', analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
 app.use('/api/restaurant', primaryCategoryRoutes);
 app.use('/api/restaurant', deviceRoutes);  // Device registration routes
