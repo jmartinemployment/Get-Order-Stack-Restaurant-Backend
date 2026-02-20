@@ -63,6 +63,11 @@ model Restaurant {
   marketplaceWebhookEvents MarketplaceWebhookEvent[]
   marketplaceMenuMappings  MarketplaceMenuMapping[]
   marketplaceStatusSyncJobs MarketplaceStatusSyncJob[]
+  giftCards            GiftCard[]
+  invoices             Invoice[]
+  houseAccounts        HouseAccount[]
+  campaigns            Campaign[]
+  combos               Combo[]
 
   @@map("restaurants")
 }
@@ -526,6 +531,7 @@ model Order {
   customer             Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
   table                RestaurantTable?     @relation(fields: [tableId], references: [id], onDelete: SetNull)
   orderItems           OrderItem[]
+  checks               OrderCheck[]
   statusHistory        OrderStatusHistory[]
   marketplaceOrder     MarketplaceOrder?
   printJobs            PrintJob[]
@@ -574,6 +580,113 @@ model OrderItemModifier {
   modifier  Modifier? @relation(fields: [modifierId], references: [id], onDelete: SetNull)
 
   @@map("order_item_modifiers")
+}
+
+// === CHECK MANAGEMENT (POS) ===
+
+model OrderCheck {
+  id             String    @id @default(uuid())
+  orderId        String    @map("order_id")
+  restaurantId   String    @map("restaurant_id")
+  displayNumber  Int       @map("display_number")
+  paymentStatus  String    @default("OPEN") @map("payment_status")
+  subtotal       Decimal   @default(0) @db.Decimal(10, 2)
+  tax            Decimal   @default(0) @db.Decimal(10, 2)
+  tip            Decimal   @default(0) @db.Decimal(10, 2)
+  total          Decimal   @default(0) @db.Decimal(10, 2)
+  tabName        String?   @map("tab_name")
+  tabOpenedAt    DateTime? @map("tab_opened_at")
+  tabClosedAt    DateTime? @map("tab_closed_at")
+  preauthId      String?   @map("preauth_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  order        Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items        CheckItem[]
+  discounts    CheckDiscount[]
+  voidedItems  CheckVoidedItem[]
+
+  @@index([orderId])
+  @@index([restaurantId])
+  @@map("order_checks")
+}
+
+model CheckItem {
+  id                  String    @id @default(uuid())
+  checkId             String    @map("check_id")
+  orderId             String    @map("order_id")
+  menuItemId          String?   @map("menu_item_id")
+  menuItemName        String    @map("menu_item_name")
+  quantity            Int
+  unitPrice           Decimal   @db.Decimal(10, 2) @map("unit_price")
+  modifiersPrice      Decimal   @default(0) @db.Decimal(10, 2) @map("modifiers_price")
+  totalPrice          Decimal   @db.Decimal(10, 2) @map("total_price")
+  specialInstructions String?   @map("special_instructions")
+  seatNumber          Int?      @map("seat_number")
+  fulfillmentStatus   String    @default("NEW") @map("fulfillment_status")
+  courseGuid          String?   @map("course_guid")
+  isComped            Boolean   @default(false) @map("is_comped")
+  compReason          String?   @map("comp_reason")
+  compBy              String?   @map("comp_by")
+  compApprovedBy      String?   @map("comp_approved_by")
+  compAt              DateTime? @map("comp_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  check     OrderCheck          @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  modifiers CheckItemModifier[]
+
+  @@index([checkId])
+  @@index([orderId])
+  @@map("check_items")
+}
+
+model CheckItemModifier {
+  id              String  @id @default(uuid())
+  checkItemId     String  @map("check_item_id")
+  modifierId      String? @map("modifier_id")
+  modifierName    String  @map("modifier_name")
+  priceAdjustment Decimal @db.Decimal(10, 2) @map("price_adjustment")
+
+  checkItem CheckItem @relation(fields: [checkItemId], references: [id], onDelete: Cascade)
+
+  @@map("check_item_modifiers")
+}
+
+model CheckDiscount {
+  id         String  @id @default(uuid())
+  checkId    String  @map("check_id")
+  orderId    String  @map("order_id")
+  type       String  // percentage, flat, comp
+  value      Decimal @db.Decimal(10, 2)
+  reason     String
+  appliedBy  String  @map("applied_by")
+  approvedBy String? @map("approved_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  check OrderCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+
+  @@index([checkId])
+  @@map("check_discounts")
+}
+
+model CheckVoidedItem {
+  id              String   @id @default(uuid())
+  checkId         String   @map("check_id")
+  checkItemId     String   @map("check_item_id")
+  orderId         String   @map("order_id")
+  menuItemName    String   @map("menu_item_name")
+  quantity        Int
+  unitPrice       Decimal  @db.Decimal(10, 2) @map("unit_price")
+  totalPrice      Decimal  @db.Decimal(10, 2) @map("total_price")
+  voidReason      String   @map("void_reason")
+  voidedBy        String   @map("voided_by")
+  managerApproval String?  @map("manager_approval")
+  voidedAt        DateTime @default(now()) @map("voided_at")
+
+  check OrderCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+
+  @@index([checkId])
+  @@map("check_voided_items")
 }
 
 // === RESERVATIONS ===
@@ -994,4 +1107,167 @@ model RestaurantLoyaltyConfig {
   restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@map("restaurant_loyalty_config")
+}
+
+// === GIFT CARDS ===
+
+model GiftCard {
+  id             String    @id @default(uuid())
+  restaurantId   String    @map("restaurant_id")
+  code           String    @unique
+  type           String    // physical / digital
+  initialBalance Decimal   @db.Decimal(10, 2) @map("initial_balance")
+  currentBalance Decimal   @db.Decimal(10, 2) @map("current_balance")
+  status         String    @default("active") // active / redeemed / disabled
+  purchasedBy    String?   @map("purchased_by")
+  recipientName  String?   @map("recipient_name")
+  recipientEmail String?   @map("recipient_email")
+  expiresAt      DateTime? @map("expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  restaurant  Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  redemptions GiftCardRedemption[]
+
+  @@index([restaurantId])
+  @@map("gift_cards")
+}
+
+model GiftCardRedemption {
+  id         String   @id @default(uuid())
+  giftCardId String   @map("gift_card_id")
+  orderId    String?  @map("order_id")
+  amount     Decimal  @db.Decimal(10, 2)
+  redeemedBy String?  @map("redeemed_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  giftCard GiftCard @relation(fields: [giftCardId], references: [id], onDelete: Cascade)
+
+  @@index([giftCardId])
+  @@map("gift_card_redemptions")
+}
+
+// === INVOICING ===
+
+model Invoice {
+  id             String    @id @default(uuid())
+  restaurantId   String    @map("restaurant_id")
+  invoiceNumber  String    @unique @map("invoice_number")
+  customerId     String?   @map("customer_id")
+  customerName   String    @map("customer_name")
+  customerEmail  String    @map("customer_email")
+  houseAccountId String?   @map("house_account_id")
+  status         String    @default("draft") // draft / sent / paid / overdue / cancelled
+  subtotal       Decimal   @db.Decimal(10, 2)
+  tax            Decimal   @db.Decimal(10, 2)
+  total          Decimal   @db.Decimal(10, 2)
+  paidAmount     Decimal   @default(0) @db.Decimal(10, 2) @map("paid_amount")
+  dueDate        DateTime  @map("due_date")
+  notes          String?
+  sentAt         DateTime? @map("sent_at")
+  paidAt         DateTime? @map("paid_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  restaurant   Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  houseAccount HouseAccount?     @relation(fields: [houseAccountId], references: [id], onDelete: SetNull)
+  lineItems    InvoiceLineItem[]
+
+  @@index([restaurantId])
+  @@index([houseAccountId])
+  @@map("invoices")
+}
+
+model InvoiceLineItem {
+  id          String  @id @default(uuid())
+  invoiceId   String  @map("invoice_id")
+  description String
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(10, 2) @map("unit_price")
+  total       Decimal @db.Decimal(10, 2)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_line_items")
+}
+
+model HouseAccount {
+  id             String   @id @default(uuid())
+  restaurantId   String   @map("restaurant_id")
+  name           String
+  contactName    String   @map("contact_name")
+  contactEmail   String   @map("contact_email")
+  creditLimit    Decimal  @db.Decimal(10, 2) @map("credit_limit")
+  currentBalance Decimal  @default(0) @db.Decimal(10, 2) @map("current_balance")
+  status         String   @default("active") // active / suspended / closed
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  invoices   Invoice[]
+
+  @@index([restaurantId])
+  @@map("house_accounts")
+}
+
+// === MARKETING CAMPAIGNS ===
+
+model Campaign {
+  id                   String    @id @default(uuid())
+  restaurantId         String    @map("restaurant_id")
+  name                 String
+  channel              String    // email / sms / both
+  type                 String    // promotion / announcement / loyalty / re-engagement / event
+  status               String    @default("draft") // draft / scheduled / sent / cancelled
+  subject              String?
+  body                 String
+  audienceSegment      String?   @map("audience_segment")
+  audienceLoyaltyTier  String?   @map("audience_loyalty_tier")
+  estimatedRecipients  Int?      @map("estimated_recipients")
+  scheduledAt          DateTime? @map("scheduled_at")
+  sentAt               DateTime? @map("sent_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  restaurant  Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  performance CampaignPerformance?
+
+  @@index([restaurantId])
+  @@map("campaigns")
+}
+
+model CampaignPerformance {
+  id         String   @id @default(uuid())
+  campaignId String   @unique @map("campaign_id")
+  sent       Int      @default(0)
+  delivered  Int      @default(0)
+  opened     Int      @default(0)
+  clicked    Int      @default(0)
+  converted  Int      @default(0)
+  revenue    Decimal  @default(0) @db.Decimal(10, 2)
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@map("campaign_performances")
+}
+
+// === COMBOS / BUNDLES ===
+
+model Combo {
+  id           String   @id @default(uuid())
+  restaurantId String   @map("restaurant_id")
+  name         String
+  description  String?
+  comboPrice   Decimal  @db.Decimal(10, 2) @map("combo_price")
+  isActive     Boolean  @default(true) @map("is_active")
+  items        Json     // Array of {menuItemId, menuItemName, quantity, required}
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@map("combos")
 }

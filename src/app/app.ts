@@ -15,6 +15,11 @@ import deliveryRoutes from './delivery.routes';
 import laborRoutes from './labor.routes';
 import marketplaceRoutes from './marketplace.routes';
 import stationRoutes, { stationCategoryMappingRouter } from './station.routes';
+import checkRoutes from './check.routes';
+import giftCardRoutes from './gift-card.routes';
+import invoiceRoutes from './invoice.routes';
+import marketingCampaignRoutes from './marketing.routes';
+import comboRoutes from './combo.routes';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
@@ -299,11 +304,16 @@ app.use('/api/cloudprnt', cloudprntRoutes);  // CloudPRNT protocol endpoints (no
 app.use('/api/restaurant', laborRoutes);  // Labor/scheduling endpoints
 app.use('/api/restaurant', loyaltyRoutes);  // Loyalty program endpoints
 app.use('/api/restaurant', printerRoutes);  // Printer management API
+app.use('/api/restaurant/:restaurantId/orders', checkRoutes);  // Check management (POS) endpoints
 app.use('/api/restaurant/:restaurantId/orders', orderActionRoutes);  // Dining option action endpoints
 app.use('/api/restaurant/:restaurantId/delivery', deliveryRoutes);  // Third-party delivery endpoints
 app.use('/api/restaurant', marketplaceRoutes);  // Marketplace integration config endpoints
 app.use('/api/restaurant/:restaurantId/stations', stationRoutes);  // Station CRUD + category assignment
 app.use('/api/restaurant/:restaurantId/station-category-mappings', stationCategoryMappingRouter);  // Flat mapping list
+app.use('/api/restaurant', giftCardRoutes);  // Gift card CRUD + redemption
+app.use('/api/restaurant', invoiceRoutes);  // Invoice + house account CRUD
+app.use('/api/restaurant', marketingCampaignRoutes);  // Marketing campaign CRUD
+app.use('/api/restaurant', comboRoutes);  // Combo/bundle CRUD
 app.use('/api/restaurant', analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
 app.use('/api/restaurant', primaryCategoryRoutes);
 app.use('/api/restaurant', deviceRoutes);  // Device registration routes

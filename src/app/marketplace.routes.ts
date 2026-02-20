@@ -25,6 +25,13 @@ const MarketplaceMenuMappingUpsertSchema = z.object({
   menuItemId: z.string().trim().min(1),
 });
 
+const MarketplaceSyncJobStateSchema = z.enum(['QUEUED', 'PROCESSING', 'FAILED', 'SUCCESS', 'DEAD_LETTER']);
+
+const MarketplacePilotSummaryQuerySchema = z.object({
+  provider: MarketplaceProviderSchema.optional(),
+  windowHours: z.coerce.number().int().min(1).max(24 * 14).optional(),
+});
+
 router.get('/:restaurantId/marketplace/integrations', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
@@ -145,6 +152,90 @@ router.delete('/:restaurantId/marketplace/menu-mappings/:mappingId', requireAuth
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to delete marketplace menu mapping';
     console.error('[Marketplace] Failed to delete menu mapping:', message);
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/:restaurantId/marketplace/status-sync/jobs', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const statusRaw = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const limitRaw = typeof req.query.limit === 'string' ? Number.parseInt(req.query.limit, 10) : undefined;
+
+    let status: z.infer<typeof MarketplaceSyncJobStateSchema> | undefined;
+    if (statusRaw) {
+      const parsed = MarketplaceSyncJobStateSchema.safeParse(statusRaw.toUpperCase());
+      if (!parsed.success) {
+        res.status(400).json({ error: 'Invalid sync job status filter' });
+        return;
+      }
+      status = parsed.data;
+    }
+
+    const jobs = await marketplaceService.listStatusSyncJobs(restaurantId, {
+      status,
+      limit: Number.isFinite(limitRaw) ? limitRaw : undefined,
+    });
+    res.json({ jobs });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to load marketplace sync jobs';
+    console.error('[Marketplace] Failed to load status sync jobs:', message);
+    res.status(500).json({ error: message });
+  }
+});
+
+router.post('/:restaurantId/marketplace/status-sync/jobs/:jobId/retry', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, jobId } = req.params;
+    const retried = await marketplaceService.retryStatusSyncJob(restaurantId, jobId);
+    if (!retried) {
+      res.status(404).json({ error: 'Status sync job not found' });
+      return;
+    }
+    res.json(retried);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to retry marketplace sync job';
+    console.error('[Marketplace] Failed to retry status sync job:', message);
+    res.status(500).json({ error: message });
+  }
+});
+
+router.post('/:restaurantId/marketplace/status-sync/process', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const limitRaw = Number.parseInt(String(req.body?.limit ?? '20'), 10);
+    const result = await marketplaceService.processDueStatusSyncJobs({
+      restaurantId,
+      limit: Number.isFinite(limitRaw) ? limitRaw : 20,
+    });
+    res.json(result);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to process marketplace sync jobs';
+    console.error('[Marketplace] Failed to process status sync jobs:', message);
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/:restaurantId/marketplace/pilot/summary', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+  const queryParse = MarketplacePilotSummaryQuerySchema.safeParse(req.query);
+  if (!queryParse.success) {
+    res.status(400).json({
+      error: 'Invalid marketplace pilot summary query',
+      details: queryParse.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      })),
+    });
+    return;
+  }
+
+  try {
+    const { restaurantId } = req.params;
+    const summary = await marketplaceService.getPilotRolloutSummary(restaurantId, queryParse.data);
+    res.json(summary);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to load marketplace pilot summary';
+    console.error('[Marketplace] Failed to load pilot summary:', message);
     res.status(500).json({ error: message });
   }
 });

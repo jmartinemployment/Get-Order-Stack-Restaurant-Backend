@@ -115,6 +115,83 @@ function buildCourseSummaries(orderItems: any[]): any[] {
   return courses.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+function buildChecksArray(order: any): any[] | undefined {
+  if (Array.isArray(order.checks) && order.checks.length > 0) {
+    return order.checks.map((check: any) => ({
+      id: check.id,
+      displayNumber: check.displayNumber,
+      paymentStatus: check.paymentStatus,
+      subtotal: Number(check.subtotal),
+      tax: Number(check.tax),
+      tip: Number(check.tip),
+      total: Number(check.total),
+      tabName: check.tabName ?? undefined,
+      tabOpenedAt: check.tabOpenedAt ?? undefined,
+      tabClosedAt: check.tabClosedAt ?? undefined,
+      preauthId: check.preauthId ?? undefined,
+      items: Array.isArray(check.items)
+        ? check.items.map((item: any) => ({
+            id: item.id,
+            menuItemId: item.menuItemId,
+            menuItemName: item.menuItemName,
+            quantity: item.quantity,
+            unitPrice: Number(item.unitPrice),
+            modifiersPrice: Number(item.modifiersPrice),
+            totalPrice: Number(item.totalPrice),
+            specialInstructions: item.specialInstructions ?? undefined,
+            seatNumber: item.seatNumber ?? undefined,
+            fulfillmentStatus: item.fulfillmentStatus,
+            courseGuid: item.courseGuid ?? undefined,
+            isComped: item.isComped,
+            compReason: item.compReason ?? undefined,
+            compBy: item.compBy ?? undefined,
+            compApprovedBy: item.compApprovedBy ?? undefined,
+            compAt: item.compAt ?? undefined,
+            modifiers: Array.isArray(item.modifiers)
+              ? item.modifiers.map((m: any) => ({
+                  id: m.id,
+                  modifierId: m.modifierId,
+                  modifierName: m.modifierName,
+                  priceAdjustment: Number(m.priceAdjustment),
+                }))
+              : [],
+          }))
+        : [],
+      discounts: Array.isArray(check.discounts)
+        ? check.discounts.map((d: any) => ({
+            id: d.id,
+            type: d.type,
+            value: Number(d.value),
+            reason: d.reason,
+            appliedBy: d.appliedBy,
+            approvedBy: d.approvedBy ?? undefined,
+          }))
+        : [],
+      voidedSelections: Array.isArray(check.voidedItems)
+        ? check.voidedItems.map((v: any) => ({
+            id: v.id,
+            checkItemId: v.checkItemId,
+            menuItemName: v.menuItemName,
+            quantity: v.quantity,
+            unitPrice: Number(v.unitPrice),
+            totalPrice: Number(v.totalPrice),
+            voidReason: v.voidReason,
+            voidedBy: v.voidedBy,
+            managerApproval: v.managerApproval ?? undefined,
+            voidedAt: v.voidedAt,
+          }))
+        : [],
+    }));
+  }
+
+  // Backward compat: build a single virtual check from orderItems for SOS/kiosk/online orders
+  if (Array.isArray(order.orderItems) && order.orderItems.length > 0 && (!order.checks || order.checks.length === 0)) {
+    return undefined; // No checks — frontend handles orderItems directly
+  }
+
+  return undefined;
+}
+
 export function enrichOrderResponse(order: any): any {
   if (!order) return order;
 
@@ -151,6 +228,12 @@ export function enrichOrderResponse(order: any): any {
     if (courses.length > 0) {
       enriched.courses = courses;
     }
+  }
+
+  // Build checks array for POS orders
+  const checks = buildChecksArray(order);
+  if (checks) {
+    enriched.checks = checks;
   }
 
   enriched.throttle = {

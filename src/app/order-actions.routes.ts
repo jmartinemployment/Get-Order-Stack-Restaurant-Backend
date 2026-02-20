@@ -15,8 +15,17 @@ const DELIVERY_TRANSITIONS: Record<string, string[]> = {
 
 const ORDER_INCLUDE = {
   orderItems: { include: { modifiers: true } },
+  checks: {
+    include: {
+      items: { include: { modifiers: true } },
+      discounts: true,
+      voidedItems: true,
+    },
+    orderBy: { displayNumber: 'asc' as const },
+  },
   customer: true,
   table: true,
+  marketplaceOrder: true,
 } as const;
 
 // PATCH /:orderId/delivery-status

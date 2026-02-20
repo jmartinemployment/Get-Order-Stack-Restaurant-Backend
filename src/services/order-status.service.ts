@@ -1,6 +1,18 @@
 import { PrismaClient, Order } from '@prisma/client';
+import { marketplaceService } from './marketplace.service';
 
 const prisma = new PrismaClient();
+
+function queueMarketplaceStatusSync(orderId: string, restaurantId: string): void {
+  marketplaceService.enqueueStatusSyncForOrder(orderId)
+    .then((enqueueResult) => {
+      if (!enqueueResult.queued) return;
+      return marketplaceService.processDueStatusSyncJobs({ restaurantId, limit: 5 });
+    })
+    .catch((error: unknown) => {
+      console.error('[Marketplace] Failed to queue outbound status sync:', error);
+    });
+}
 
 export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
 export type CancelledBy = 'customer' | 'restaurant' | 'system';
@@ -100,6 +112,8 @@ export async function updateOrderStatus(
       }
     })
   ]);
+
+  queueMarketplaceStatusSync(updatedOrder.id, updatedOrder.restaurantId);
 
   return { success: true, order: updatedOrder };
 }

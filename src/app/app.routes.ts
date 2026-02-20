@@ -14,13 +14,23 @@ import { AISettingsPatchSchema } from '../validators/settings.validator';
 import { loyaltyService } from '../services/loyalty.service';
 import { coursePacingService } from '../services/course-pacing.service';
 import { orderThrottlingService } from '../services/order-throttling.service';
+import { authService } from '../services/auth.service';
 
 const router = Router();
 const prisma = new PrismaClient();
 const ORDER_INCLUDE = {
   orderItems: { include: { modifiers: true } },
+  checks: {
+    include: {
+      items: { include: { modifiers: true } },
+      discounts: true,
+      voidedItems: true,
+    },
+    orderBy: { displayNumber: 'asc' as const },
+  },
   customer: true,
   table: true,
+  marketplaceOrder: true,
 } as const;
 
 async function loadOrderWithRelations(orderId: string) {
@@ -45,6 +55,51 @@ function generateOrderNumber(): string {
   const random = Math.random().toString(36).substring(2, 6).toUpperCase();
   return `ORD-${timestamp}-${random}`;
 }
+
+// ============ Staff PIN Validation ============
+
+const ROLE_RANK: Record<string, number> = {
+  staff: 1,
+  manager: 2,
+  owner: 3,
+  super_admin: 4,
+};
+
+router.post('/:restaurantId/auth/validate-pin', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { pin, requiredRole = 'manager' } = req.body;
+
+    if (!pin) {
+      res.status(400).json({ error: 'pin is required' });
+      return;
+    }
+
+    const result = await authService.verifyStaffPin(restaurantId, pin);
+
+    if (!result.success || !result.staffPin) {
+      res.json({ valid: false });
+      return;
+    }
+
+    const staffRank = ROLE_RANK[result.staffPin.role] ?? 0;
+    const requiredRank = ROLE_RANK[requiredRole as string] ?? 2;
+
+    if (staffRank < requiredRank) {
+      res.json({ valid: false });
+      return;
+    }
+
+    res.json({
+      valid: true,
+      staffName: result.staffPin.name,
+      staffRole: result.staffPin.role,
+    });
+  } catch (error) {
+    console.error('[Auth] Error validating PIN:', error);
+    res.status(500).json({ error: 'Failed to validate PIN' });
+  }
+});
 
 // ============ Restaurant ============
 
@@ -1105,13 +1160,7 @@ router.get('/:restaurantId/orders', async (req: Request, res: Response) => {
         ...(deliveryStatus && { deliveryStatus: deliveryStatus as string }),
         ...(approvalStatus && { approvalStatus: approvalStatus as string }),
       },
-      include: {
-        orderItems: {
-          include: { modifiers: true }
-        },
-        customer: true,
-        table: true
-      },
+      include: ORDER_INCLUDE,
       orderBy: { createdAt: 'desc' },
       take: Number.parseInt(limit as string, 10)
     });
@@ -1129,12 +1178,9 @@ router.get('/:restaurantId/orders/:orderId', async (req: Request, res: Response)
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        orderItems: {
-          include: { menuItem: true, modifiers: true }
-        },
-        customer: true,
-        table: true
-      }
+        ...ORDER_INCLUDE,
+        orderItems: { include: { menuItem: true, modifiers: true } },
+      },
     });
 
     if (!order) {
@@ -1429,7 +1475,8 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
       include: {
         orderItems: { include: { modifiers: true } },
         customer: true,
-        table: true
+        table: true,
+        marketplaceOrder: true,
       }
     });
 
@@ -1522,6 +1569,7 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
         orderItems: { include: { modifiers: true } },
         customer: true,
         table: true,
+        marketplaceOrder: true,
         statusHistory: { orderBy: { createdAt: 'asc' } }
       }
     });
@@ -1973,6 +2021,7 @@ router.post('/:restaurantId/orders/:orderId/paypal-capture', async (req: Request
         orderItems: { include: { modifiers: true } },
         customer: true,
         table: true,
+        marketplaceOrder: true,
         restaurant: true,
       },
     });
