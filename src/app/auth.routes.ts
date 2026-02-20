@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authService } from '../services/auth.service';
+import { requireAuth, requireAdmin, requireSuperAdmin, requireRestaurantManager } from '../middleware/auth.middleware';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -184,11 +185,9 @@ router.post('/:restaurantId/pin/verify', async (req: Request, res: Response) => 
 // ============ Staff PIN Management (admin only) ============
 
 // List all staff PINs for a restaurant (without actual PIN values)
-router.get('/:restaurantId/pins', async (req: Request, res: Response) => {
+router.get('/:restaurantId/pins', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
-
-    // TODO: Add auth middleware to verify admin access
 
     const pins = await prisma.staffPin.findMany({
       where: { restaurantId, isActive: true },
@@ -209,12 +208,10 @@ router.get('/:restaurantId/pins', async (req: Request, res: Response) => {
 });
 
 // Create a new staff PIN
-router.post('/:restaurantId/pins', async (req: Request, res: Response) => {
+router.post('/:restaurantId/pins', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
     const { name, pin, role = 'staff' } = req.body;
-
-    // TODO: Add auth middleware to verify admin access
 
     if (!name || !pin) {
       res.status(400).json({ error: 'Name and PIN are required' });
@@ -236,12 +233,10 @@ router.post('/:restaurantId/pins', async (req: Request, res: Response) => {
 });
 
 // Update a staff PIN
-router.patch('/:restaurantId/pins/:pinId', async (req: Request, res: Response) => {
+router.patch('/:restaurantId/pins/:pinId', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
   try {
     const { pinId } = req.params;
     const { name, role, isActive } = req.body;
-
-    // TODO: Add auth middleware to verify admin access
 
     const updated = await prisma.staffPin.update({
       where: { id: pinId },
@@ -266,11 +261,9 @@ router.patch('/:restaurantId/pins/:pinId', async (req: Request, res: Response) =
 });
 
 // Delete (deactivate) a staff PIN
-router.delete('/:restaurantId/pins/:pinId', async (req: Request, res: Response) => {
+router.delete('/:restaurantId/pins/:pinId', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
   try {
     const { pinId } = req.params;
-
-    // TODO: Add auth middleware to verify admin access
 
     const result = await authService.deleteStaffPin(pinId);
     if (!result.success) {
@@ -287,11 +280,9 @@ router.delete('/:restaurantId/pins/:pinId', async (req: Request, res: Response) 
 // ============ User Management (super admin only) ============
 
 // Create a new user
-router.post('/users', async (req: Request, res: Response) => {
+router.post('/users', requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
   try {
     const { email, password, firstName, lastName, role, restaurantGroupId } = req.body;
-
-    // TODO: Add auth middleware to verify super_admin access
 
     if (!email || !password) {
       res.status(400).json({ error: 'Email and password are required' });
@@ -320,12 +311,10 @@ router.post('/users', async (req: Request, res: Response) => {
 });
 
 // Grant user access to a restaurant
-router.post('/users/:userId/restaurants/:restaurantId', async (req: Request, res: Response) => {
+router.post('/users/:userId/restaurants/:restaurantId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { userId, restaurantId } = req.params;
     const { role = 'staff' } = req.body;
-
-    // TODO: Add auth middleware to verify admin access
 
     const access = await prisma.userRestaurantAccess.upsert({
       where: {
@@ -349,11 +338,9 @@ router.post('/users/:userId/restaurants/:restaurantId', async (req: Request, res
 });
 
 // Revoke user access to a restaurant
-router.delete('/users/:userId/restaurants/:restaurantId', async (req: Request, res: Response) => {
+router.delete('/users/:userId/restaurants/:restaurantId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { userId, restaurantId } = req.params;
-
-    // TODO: Add auth middleware to verify admin access
 
     await prisma.userRestaurantAccess.delete({
       where: {
@@ -371,11 +358,9 @@ router.delete('/users/:userId/restaurants/:restaurantId', async (req: Request, r
 // ============ Restaurant Group Management ============
 
 // Create a restaurant group
-router.post('/groups', async (req: Request, res: Response) => {
+router.post('/groups', requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
   try {
     const { name, slug, description, logo } = req.body;
-
-    // TODO: Add auth middleware to verify super_admin access
 
     if (!name || !slug) {
       res.status(400).json({ error: 'Name and slug are required' });
@@ -394,10 +379,8 @@ router.post('/groups', async (req: Request, res: Response) => {
 });
 
 // List restaurant groups
-router.get('/groups', async (req: Request, res: Response) => {
+router.get('/groups', requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
   try {
-    // TODO: Add auth middleware to verify super_admin access
-
     const groups = await prisma.restaurantGroup.findMany({
       where: { active: true },
       include: {
