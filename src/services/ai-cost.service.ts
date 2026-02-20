@@ -3,7 +3,8 @@
  * Uses Claude to estimate ingredient costs and suggest pricing for menu items
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import { aiConfigService } from './ai-config.service';
+import { aiUsageService } from './ai-usage.service';
 
 interface CostEstimation {
   estimatedCost: number;
@@ -13,32 +14,19 @@ interface CostEstimation {
   reasoning: string;
 }
 
-interface DescriptionGeneration {
-  descriptionEn: string;
-}
-
 export class AICostService {
-  private client: Anthropic | null = null;
-
-  constructor() {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (apiKey) {
-      this.client = new Anthropic({ apiKey });
-    } else {
-      console.warn('ANTHROPIC_API_KEY not set - AI cost estimation disabled');
-    }
-  }
-
   /**
    * Estimate the ingredient cost for a menu item
    */
   async estimateCost(
+    restaurantId: string,
     name: string,
     description: string,
     currentPrice: number,
     cuisineType?: string
   ): Promise<CostEstimation | null> {
-    if (!this.client) return null;
+    const client = await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'aiCostEstimation');
+    if (!client) return null;
 
     try {
       const prompt = `You are a restaurant cost analyst. Estimate the ingredient/food cost for this menu item.
@@ -62,11 +50,13 @@ Respond in JSON format only:
   "reasoning": "<brief explanation>"
 }`;
 
-      const response = await this.client.messages.create({
+      const response = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 500,
         messages: [{ role: 'user', content: prompt }]
       });
+
+      await aiUsageService.logUsage(restaurantId, 'aiCostEstimation', response.usage.input_tokens, response.usage.output_tokens);
 
       const content = response.content[0];
       if (content.type !== 'text') return null;
@@ -76,10 +66,10 @@ Respond in JSON format only:
       if (!jsonMatch) return null;
 
       const result = JSON.parse(jsonMatch[0]) as CostEstimation;
-      
+
       // Recalculate profit margin based on current price
       result.profitMargin = ((currentPrice - result.estimatedCost) / currentPrice) * 100;
-      
+
       return result;
     } catch (error) {
       console.error('AI cost estimation failed:', error);
@@ -91,11 +81,13 @@ Respond in JSON format only:
    * Generate an English description for a menu item (gringo-friendly explanation)
    */
   async generateEnglishDescription(
+    restaurantId: string,
     name: string,
     description: string,
     cuisineType?: string
   ): Promise<string | null> {
-    if (!this.client) return null;
+    const client = await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'aiCostEstimation');
+    if (!client) return null;
 
     try {
       const prompt = `You are helping a ${cuisineType || ''} restaurant create English descriptions for their menu.
@@ -111,11 +103,13 @@ Write a clear, appetizing English description that helps American diners underst
 
 Respond with ONLY the description text, no quotes or formatting.`;
 
-      const response = await this.client.messages.create({
+      const response = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 150,
         messages: [{ role: 'user', content: prompt }]
       });
+
+      await aiUsageService.logUsage(restaurantId, 'aiCostEstimation', response.usage.input_tokens, response.usage.output_tokens);
 
       const content = response.content[0];
       if (content.type !== 'text') return null;
@@ -131,13 +125,15 @@ Respond with ONLY the description text, no quotes or formatting.`;
    * Batch process multiple items for cost estimation
    */
   async estimateCostBatch(
+    restaurantId: string,
     items: Array<{ id: string; name: string; description: string; price: number }>,
     cuisineType?: string
   ): Promise<Map<string, CostEstimation>> {
     const results = new Map<string, CostEstimation>();
-    
+
     for (const item of items) {
       const estimation = await this.estimateCost(
+        restaurantId,
         item.name,
         item.description,
         item.price,

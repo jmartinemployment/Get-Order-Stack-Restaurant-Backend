@@ -4,10 +4,10 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
+import { aiConfigService } from './ai-config.service';
+import { aiUsageService } from './ai-usage.service';
 
 const prisma = new PrismaClient();
-const anthropic = new Anthropic();
 
 const DEFAULT_RATE = 0.07; // Florida fallback
 
@@ -29,7 +29,7 @@ export class TaxService {
   /**
    * Get tax rate by ZIP - checks DB first, then AI, then fallback
    */
-  async getTaxRateByZip(zip: string, state = "FL"): Promise<TaxRateInfo> {
+  async getTaxRateByZip(zip: string, state = "FL", restaurantId?: string): Promise<TaxRateInfo> {
     // 1. Check database first
     try {
       const cached = await prisma.taxJurisdiction.findUnique({
@@ -54,7 +54,7 @@ export class TaxService {
 
     // 2. AI lookup
     try {
-      const aiResult = await this.lookupTaxRateWithAI(zip, state);
+      const aiResult = await this.lookupTaxRateWithAI(zip, state, restaurantId);
       if (aiResult) {
         // Save to DB for future lookups
         await this.saveTaxJurisdiction(zip, state, aiResult);
@@ -80,7 +80,7 @@ export class TaxService {
   /**
    * AI lookup for tax rate
    */
-  private async lookupTaxRateWithAI(zip: string, state: string): Promise<Omit<TaxRateInfo, 'source'> | null> {
+  private async lookupTaxRateWithAI(zip: string, state: string, restaurantId?: string): Promise<Omit<TaxRateInfo, 'source'> | null> {
     const prompt = `What is the current combined sales tax rate for ZIP code ${zip} in ${state}?
 
 Return ONLY valid JSON in this exact format, no other text:
@@ -97,11 +97,20 @@ Return ONLY valid JSON in this exact format, no other text:
 
 The rate should be a decimal (e.g., 0.07 for 7%). Include the breakdown of state, county, and city portions.`;
 
-    const response = await anthropic.messages.create({
+    const client = restaurantId
+      ? await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'taxEstimation')
+      : null;
+    if (!client) return null;
+
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 256,
       messages: [{ role: 'user', content: prompt }]
     });
+
+    if (restaurantId) {
+      await aiUsageService.logUsage(restaurantId, 'taxEstimation', response.usage.input_tokens, response.usage.output_tokens);
+    }
 
     const content = response.content[0];
     if (content.type !== 'text') return null;

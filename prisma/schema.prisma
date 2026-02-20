@@ -68,6 +68,12 @@ model Restaurant {
   houseAccounts        HouseAccount[]
   campaigns            Campaign[]
   combos               Combo[]
+  aiCredentials        RestaurantAiCredentials?
+  aiUsageLogs          AiUsageLog[]
+  vendors              Vendor[]
+  purchaseInvoices     PurchaseInvoice[]
+  foodCostRecipes      FoodCostRecipe[]
+  locationGroupMemberships LocationGroupMember[]
 
   @@map("restaurants")
 }
@@ -330,6 +336,7 @@ model MenuItem {
   modifierGroups    MenuItemModifierGroup[]
   recipeIngredients RecipeIngredient[]
   marketplaceMenuMappings MarketplaceMenuMapping[]
+  foodCostRecipes   FoodCostRecipe[]
 
   @@map("menu_items")
 }
@@ -830,6 +837,8 @@ model RestaurantGroup {
 
   users       User[]
   restaurants Restaurant[]
+  locationGroups LocationGroup[]
+  menuSyncLogs   MenuSyncLog[]
 
   @@map("restaurant_groups")
 }
@@ -1270,4 +1279,185 @@ model Combo {
 
   @@index([restaurantId])
   @@map("combos")
+}
+
+// === AI CREDENTIALS & USAGE ===
+
+model RestaurantAiCredentials {
+  id              String   @id @default(uuid())
+  restaurantId    String   @unique @map("restaurant_id")
+  encryptedApiKey String   @map("encrypted_api_key")
+  encryptionIv    String   @map("encryption_iv")
+  encryptionTag   String   @map("encryption_tag")
+  keyLastFour     String?  @map("key_last_four")
+  isValid         Boolean  @default(false) @map("is_valid")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("restaurant_ai_credentials")
+}
+
+model AiUsageLog {
+  id                 String   @id @default(uuid())
+  restaurantId       String   @map("restaurant_id")
+  featureKey         String   @map("feature_key")
+  inputTokens        Int      @map("input_tokens")
+  outputTokens       Int      @map("output_tokens")
+  estimatedCostCents Int      @map("estimated_cost_cents")
+  calledAt           DateTime @default(now()) @map("called_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, calledAt])
+  @@index([restaurantId, featureKey])
+  @@map("ai_usage_logs")
+}
+
+// === FOOD COST / AP AUTOMATION (T5-07) ===
+
+model Vendor {
+  id           String   @id @default(uuid())
+  restaurantId String   @map("restaurant_id")
+  name         String
+  contactName  String?  @map("contact_name")
+  contactEmail String?  @map("contact_email")
+  phone        String?
+  address      String?
+  notes        String?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant       Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  purchaseInvoices PurchaseInvoice[]
+
+  @@index([restaurantId])
+  @@map("vendors")
+}
+
+model PurchaseInvoice {
+  id              String    @id @default(uuid())
+  restaurantId    String    @map("restaurant_id")
+  vendorId        String    @map("vendor_id")
+  invoiceNumber   String    @map("invoice_number")
+  invoiceDate     DateTime  @map("invoice_date")
+  totalAmount     Decimal   @db.Decimal(10, 2) @map("total_amount")
+  status          String    @default("pending_review") // pending_review / approved / paid
+  imageUrl        String?   @map("image_url")
+  ocrProcessedAt  DateTime? @map("ocr_processed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  restaurant Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  vendor     Vendor               @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  lineItems  PurchaseLineItem[]
+
+  @@unique([restaurantId, invoiceNumber])
+  @@index([restaurantId])
+  @@index([vendorId])
+  @@map("purchase_invoices")
+}
+
+model PurchaseLineItem {
+  id                   String   @id @default(uuid())
+  invoiceId            String   @map("invoice_id")
+  ingredientName       String   @map("ingredient_name")
+  quantity             Decimal  @db.Decimal(10, 4)
+  unit                 String
+  unitCost             Decimal  @db.Decimal(10, 4) @map("unit_cost")
+  totalCost            Decimal  @db.Decimal(10, 2) @map("total_cost")
+  normalizedIngredient String?  @map("normalized_ingredient")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  invoice PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("purchase_line_items")
+}
+
+model FoodCostRecipe {
+  id           String   @id @default(uuid())
+  menuItemId   String   @map("menu_item_id")
+  restaurantId String   @map("restaurant_id")
+  name         String
+  yieldQty     Decimal  @db.Decimal(10, 2) @map("yield_qty")
+  yieldUnit    String   @map("yield_unit")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  menuItem    MenuItem                    @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  restaurant  Restaurant                  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  ingredients FoodCostRecipeIngredient[]
+
+  @@index([restaurantId])
+  @@index([menuItemId])
+  @@map("food_cost_recipes")
+}
+
+model FoodCostRecipeIngredient {
+  id               String   @id @default(uuid())
+  recipeId         String   @map("recipe_id")
+  ingredientName   String   @map("ingredient_name")
+  quantity         Decimal  @db.Decimal(10, 4)
+  unit             String
+  estimatedUnitCost Decimal @db.Decimal(10, 4) @map("estimated_unit_cost")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  recipe FoodCostRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([recipeId])
+  @@map("food_cost_recipe_ingredients")
+}
+
+// === MULTI-LOCATION MANAGEMENT (T5-08) ===
+
+model LocationGroup {
+  id                String   @id @default(uuid())
+  restaurantGroupId String   @map("restaurant_group_id")
+  name              String
+  description       String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  restaurantGroup RestaurantGroup       @relation(fields: [restaurantGroupId], references: [id], onDelete: Cascade)
+  members         LocationGroupMember[]
+
+  @@index([restaurantGroupId])
+  @@map("location_groups")
+}
+
+model LocationGroupMember {
+  id              String   @id @default(uuid())
+  locationGroupId String   @map("location_group_id")
+  restaurantId    String   @map("restaurant_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  locationGroup LocationGroup @relation(fields: [locationGroupId], references: [id], onDelete: Cascade)
+  restaurant    Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([locationGroupId, restaurantId])
+  @@index([restaurantId])
+  @@map("location_group_members")
+}
+
+model MenuSyncLog {
+  id                  String   @id @default(uuid())
+  restaurantGroupId   String   @map("restaurant_group_id")
+  sourceRestaurantId  String   @map("source_restaurant_id")
+  targetRestaurantIds Json     @map("target_restaurant_ids")
+  itemsAdded          Int      @default(0) @map("items_added")
+  itemsUpdated        Int      @default(0) @map("items_updated")
+  itemsSkipped        Int      @default(0) @map("items_skipped")
+  conflicts           Int      @default(0)
+  syncedBy            String?  @map("synced_by")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  restaurantGroup RestaurantGroup @relation(fields: [restaurantGroupId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantGroupId])
+  @@map("menu_sync_logs")
 }

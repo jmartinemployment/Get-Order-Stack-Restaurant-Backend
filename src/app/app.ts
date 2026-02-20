@@ -20,6 +20,9 @@ import giftCardRoutes from './gift-card.routes';
 import invoiceRoutes from './invoice.routes';
 import marketingCampaignRoutes from './marketing.routes';
 import comboRoutes from './combo.routes';
+import aiAdminRoutes from './ai-admin.routes';
+import foodCostRoutes from './food-cost.routes';
+import multiLocationRoutes from './multi-location.routes';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
@@ -314,6 +317,9 @@ app.use('/api/restaurant', giftCardRoutes);  // Gift card CRUD + redemption
 app.use('/api/restaurant', invoiceRoutes);  // Invoice + house account CRUD
 app.use('/api/restaurant', marketingCampaignRoutes);  // Marketing campaign CRUD
 app.use('/api/restaurant', comboRoutes);  // Combo/bundle CRUD
+app.use('/api/restaurant', aiAdminRoutes);  // AI admin config, credentials, usage
+app.use('/api/restaurant', foodCostRoutes);  // Food cost: vendors, invoices, recipes, reports
+app.use('/api/restaurant-groups', multiLocationRoutes);  // Multi-location: groups, sync, settings propagation
 app.use('/api/restaurant', analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
 app.use('/api/restaurant', primaryCategoryRoutes);
 app.use('/api/restaurant', deviceRoutes);  // Device registration routes

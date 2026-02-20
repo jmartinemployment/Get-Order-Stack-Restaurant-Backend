@@ -7,7 +7,8 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
+import { aiConfigService } from './ai-config.service';
+import { aiUsageService } from './ai-usage.service';
 
 const prisma = new PrismaClient();
 
@@ -62,16 +63,6 @@ export interface DailyInsightsReport {
 }
 
 export class SalesInsightsService {
-  private client: Anthropic | null = null;
-
-  constructor() {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (apiKey) {
-      this.client = new Anthropic({ apiKey });
-    } else {
-      console.warn('ANTHROPIC_API_KEY not set - AI sales insights disabled');
-    }
-  }
 
   /**
    * Get sales summary for a specific period
@@ -235,7 +226,7 @@ export class SalesInsightsService {
 
       // Generate insights
       const insights = await this.generateInsights(todaySummary, prevSummary, weekAgoSummary);
-      const recommendations = await this.generateRecommendations(todaySummary, restaurant.name);
+      const recommendations = await this.generateRecommendations(restaurantId, todaySummary, restaurant.name);
 
       return {
         restaurantId,
@@ -304,7 +295,7 @@ export class SalesInsightsService {
       }
 
       const insights = await this.generateInsights(thisWeekSummary, prevWeekSummary);
-      const recommendations = await this.generateRecommendations(thisWeekSummary, restaurant.name);
+      const recommendations = await this.generateRecommendations(restaurantId, thisWeekSummary, restaurant.name);
 
       return {
         restaurantId,
@@ -434,8 +425,9 @@ export class SalesInsightsService {
     return insights;
   }
 
-  private async generateRecommendations(summary: SalesSummary, restaurantName: string): Promise<string[]> {
-    if (!this.client) {
+  private async generateRecommendations(restaurantId: string, summary: SalesSummary, restaurantName: string): Promise<string[]> {
+    const client = await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'salesInsights');
+    if (!client) {
       return this.generateBasicRecommendations(summary);
     }
 
@@ -467,11 +459,13 @@ Provide recommendations as a JSON array of strings. Each should be:
 
 Format: ["Recommendation 1", "Recommendation 2", "Recommendation 3"]`;
 
-      const response = await this.client.messages.create({
+      const response = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 600,
         messages: [{ role: 'user', content: prompt }]
       });
+
+      await aiUsageService.logUsage(restaurantId, 'salesInsights', response.usage.input_tokens, response.usage.output_tokens);
 
       const content = response.content[0];
       if (content.type !== 'text') {

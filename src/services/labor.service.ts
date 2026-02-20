@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
 import { salesInsightsService } from './sales-insights.service';
+import { aiConfigService } from './ai-config.service';
+import { aiUsageService } from './ai-usage.service';
 
 const prisma = new PrismaClient();
 
@@ -503,14 +504,13 @@ export const laborService = {
       // No sales data available
     }
 
-    // Try AI recommendations if API key exists
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
+    // Try AI recommendations via config gateway
+    const client = await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'laborOptimization');
+    if (!client) {
       return generateBasicRecommendations(ordersByHour, shiftsByHour);
     }
 
     try {
-      const client = new Anthropic({ apiKey });
 
       const prompt = `You are a restaurant labor management advisor. Based on this staffing and sales data, provide 3-5 specific labor recommendations.
 
@@ -533,6 +533,8 @@ Format: [{"type":"...", "title":"...", "message":"...", "priority":"...", ...}]`
         max_tokens: 1024,
         messages: [{ role: 'user', content: prompt }],
       });
+
+      await aiUsageService.logUsage(restaurantId, 'laborOptimization', response.usage.input_tokens, response.usage.output_tokens);
 
       const content = response.content[0];
       if (content.type !== 'text') {

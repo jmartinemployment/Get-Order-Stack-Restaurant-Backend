@@ -8,7 +8,8 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
+import { aiConfigService } from './ai-config.service';
+import { aiUsageService } from './ai-usage.service';
 
 const prisma = new PrismaClient();
 
@@ -66,16 +67,6 @@ export interface UpsellRecommendation {
 }
 
 export class MenuEngineeringService {
-  private client: Anthropic | null = null;
-
-  constructor() {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (apiKey) {
-      this.client = new Anthropic({ apiKey });
-    } else {
-      console.warn('ANTHROPIC_API_KEY not set - AI insights disabled');
-    }
-  }
 
   /**
    * Generate a complete menu engineering report for a restaurant
@@ -222,7 +213,7 @@ export class MenuEngineeringService {
       const upsellRecommendations = this.generateUpsellRecommendations(quadrants);
 
       // Generate AI insights
-      const aiInsights = await this.generateAIInsights(itemAnalyses, quadrants, restaurant.name);
+      const aiInsights = await this.generateAIInsights(restaurantId, itemAnalyses, quadrants, restaurant.name);
 
       const report: MenuEngineeringReport = {
         restaurantId,
@@ -341,11 +332,13 @@ export class MenuEngineeringService {
   }
 
   private async generateAIInsights(
+    restaurantId: string,
     items: MenuItemAnalysis[],
     quadrants: MenuEngineeringReport['quadrants'],
     restaurantName: string
   ): Promise<string[]> {
-    if (!this.client) {
+    const client = await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'menuEngineering');
+    if (!client) {
       return this.generateBasicInsights(items, quadrants);
     }
 
@@ -381,11 +374,13 @@ Provide insights as a JSON array of strings. Each insight should be:
 Example format:
 ["Insight 1", "Insight 2", "Insight 3"]`;
 
-      const response = await this.client.messages.create({
+      const response = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 800,
         messages: [{ role: 'user', content: prompt }]
       });
+
+      await aiUsageService.logUsage(restaurantId, 'menuEngineering', response.usage.input_tokens, response.usage.output_tokens);
 
       const content = response.content[0];
       if (content.type !== 'text') {

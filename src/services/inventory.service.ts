@@ -7,7 +7,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
+// AI integration available via aiConfigService when needed
 
 const prisma = new PrismaClient();
 
@@ -68,14 +68,6 @@ export interface InventoryReport {
 }
 
 export class InventoryService {
-  private client: Anthropic | null = null;
-
-  constructor() {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (apiKey) {
-      this.client = new Anthropic({ apiKey });
-    }
-  }
 
   /**
    * Convert Prisma Decimal fields to numbers

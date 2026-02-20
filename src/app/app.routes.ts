@@ -308,7 +308,7 @@ router.post('/:restaurantId/menu/categories', async (req: Request, res: Response
     // Auto-generate English description if not provided
     let generatedDescEn = descriptionEn;
     if (!descriptionEn && description) {
-      generatedDescEn = await aiCostService.generateEnglishDescription(name, description, restaurant?.cuisineType || undefined);
+      generatedDescEn = await aiCostService.generateEnglishDescription(restaurantId, name, description, restaurant?.cuisineType || undefined);
     }
 
     const maxOrder = await prisma.menuCategory.aggregate({
@@ -345,10 +345,11 @@ router.patch('/:restaurantId/menu/categories/:categoryId', async (req: Request, 
       const category = await prisma.menuCategory.findUnique({
         where: { id: categoryId }
       });
-      generatedDescEn = description 
+      generatedDescEn = description
         ? await aiCostService.generateEnglishDescription(
-            name || category?.name || '', 
-            description, 
+            restaurantId,
+            name || category?.name || '',
+            description,
             restaurant?.cuisineType || undefined
           )
         : null;
@@ -454,7 +455,7 @@ router.post('/:restaurantId/menu/items', async (req: Request, res: Response) => 
     let generatedDescEn = descriptionEn;
     if (!descriptionEn && description) {
       generatedDescEn = await aiCostService.generateEnglishDescription(
-        name, description, restaurant?.cuisineType || undefined
+        restaurantId, name, description, restaurant?.cuisineType || undefined
       );
     }
 
@@ -462,7 +463,7 @@ router.post('/:restaurantId/menu/items', async (req: Request, res: Response) => 
     let aiData: any = {};
     if (!cost) {
       const estimation = await aiCostService.estimateCost(
-        name, description, Number(price), restaurant?.cuisineType || undefined
+        restaurantId, name, description, Number(price), restaurant?.cuisineType || undefined
       );
       if (estimation) {
         aiData = {
@@ -527,6 +528,7 @@ router.patch('/:restaurantId/menu/items/:itemId', async (req: Request, res: Resp
     // Regenerate English description if changed
     if ((name !== undefined || description !== undefined) && descriptionEn === undefined) {
       generatedDescEn = await aiCostService.generateEnglishDescription(
+        restaurantId,
         name || currentItem?.name || '',
         description || currentItem?.description || '',
         restaurant?.cuisineType || undefined
@@ -536,6 +538,7 @@ router.patch('/:restaurantId/menu/items/:itemId', async (req: Request, res: Resp
     // Re-estimate cost if price changed
     if (price !== undefined && !cost && !currentItem?.cost) {
       const estimation = await aiCostService.estimateCost(
+        restaurantId,
         name || currentItem?.name || '',
         description || currentItem?.description || '',
         Number(price),
@@ -999,7 +1002,7 @@ router.post('/:restaurantId/menu/items/:itemId/estimate-cost', async (req: Reque
     }
 
     const estimation = await aiCostService.estimateCost(
-      item.name, item.description, Number(item.price), restaurant?.cuisineType || undefined
+      restaurantId, item.name, item.description, Number(item.price), restaurant?.cuisineType || undefined
     );
 
     if (!estimation) {
@@ -1040,7 +1043,7 @@ router.post('/:restaurantId/menu/items/:itemId/generate-description', async (req
     }
 
     const descriptionEn = await aiCostService.generateEnglishDescription(
-      item.name, item.description, restaurant?.cuisineType || undefined
+      restaurantId, item.name, item.description, restaurant?.cuisineType || undefined
     );
 
     if (!descriptionEn) {
@@ -1072,7 +1075,7 @@ router.post('/:restaurantId/menu/estimate-all-costs', async (req: Request, res: 
     let estimated = 0;
     for (const item of items) {
       const estimation = await aiCostService.estimateCost(
-        item.name, item.description, Number(item.price), restaurant?.cuisineType || undefined
+        restaurantId, item.name, item.description, Number(item.price), restaurant?.cuisineType || undefined
       );
 
       if (estimation) {
@@ -1110,7 +1113,7 @@ router.post('/:restaurantId/menu/generate-all-descriptions', async (req: Request
     let generated = 0;
     for (const item of items) {
       const descriptionEn = await aiCostService.generateEnglishDescription(
-        item.name, item.description, restaurant?.cuisineType || undefined
+        restaurantId, item.name, item.description, restaurant?.cuisineType || undefined
       );
 
       if (descriptionEn) {

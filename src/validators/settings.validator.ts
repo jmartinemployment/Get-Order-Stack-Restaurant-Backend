@@ -22,6 +22,14 @@ export const AISettingsPatchSchema = z.object({
   allowRushThrottle: z.boolean().optional(),
   expoStationEnabled: z.boolean().optional(),
   approvalTimeoutHours: z.number().int().min(1).max(168).optional(),
+  aiFeatures: z.object({
+    aiCostEstimation: z.boolean().optional(),
+    menuEngineering: z.boolean().optional(),
+    salesInsights: z.boolean().optional(),
+    laborOptimization: z.boolean().optional(),
+    inventoryPredictions: z.boolean().optional(),
+    taxEstimation: z.boolean().optional(),
+  }).strict().optional(),
 }).passthrough().superRefine((value, ctx) => {
   if (
     value.maxActiveOrders !== undefined
