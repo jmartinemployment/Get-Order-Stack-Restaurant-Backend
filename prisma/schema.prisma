@@ -905,8 +905,10 @@ model StaffPin {
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
-  shifts       Shift[]
-  timeEntries  TimeEntry[]
+  shifts             Shift[]
+  timeEntries        TimeEntry[]
+  availability       StaffAvailability[]
+  swapRequestsMade   SwapRequest[]       @relation("SwapRequestor")
 
   @@index([restaurantId])
   @@map("staff_pins")
@@ -925,7 +927,8 @@ model Shift {
   isPublished   Boolean  @default(false) @map("is_published")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
-  staffPin      StaffPin @relation(fields: [staffPinId], references: [id], onDelete: Cascade)
+  staffPin      StaffPin      @relation(fields: [staffPinId], references: [id], onDelete: Cascade)
+  swapRequests  SwapRequest[]
   @@index([restaurantId, date])
   @@index([staffPinId])
   @@map("shifts")
@@ -958,6 +961,44 @@ model LaborTarget {
   updatedAt     DateTime @updatedAt @map("updated_at")
   @@unique([restaurantId, dayOfWeek])
   @@map("labor_targets")
+}
+
+model StaffAvailability {
+  id             String   @id @default(uuid())
+  restaurantId   String   @map("restaurant_id")
+  staffPinId     String   @map("staff_pin_id")
+  dayOfWeek      Int      @map("day_of_week") // 0=Sunday .. 6=Saturday
+  isAvailable    Boolean  @default(true) @map("is_available")
+  preferredStart String?  @db.VarChar(5) @map("preferred_start") // "HH:mm"
+  preferredEnd   String?  @db.VarChar(5) @map("preferred_end")   // "HH:mm"
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  staffPin       StaffPin @relation(fields: [staffPinId], references: [id], onDelete: Cascade)
+
+  @@unique([staffPinId, dayOfWeek])
+  @@index([restaurantId])
+  @@map("staff_availability")
+}
+
+model SwapRequest {
+  id             String    @id @default(uuid())
+  restaurantId   String    @map("restaurant_id")
+  shiftId        String    @map("shift_id")
+  requestorPinId String    @map("requestor_pin_id")
+  targetPinId    String?   @map("target_pin_id")
+  reason         String
+  status         String    @default("pending") // pending | approved | rejected
+  respondedAt    DateTime? @map("responded_at")
+  respondedBy    String?   @map("responded_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  shift          Shift     @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  requestor      StaffPin  @relation("SwapRequestor", fields: [requestorPinId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@index([requestorPinId])
+  @@map("swap_requests")
 }
 
 model Station {

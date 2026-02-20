@@ -37,7 +37,7 @@ router.get('/:restaurantId/staff/pins', async (req: Request, res: Response) => {
 router.get('/:restaurantId/staff/shifts', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, staffPinId } = req.query;
 
     if (!startDate || !endDate) {
       res.status(400).json({ error: 'startDate and endDate query params are required' });
@@ -49,6 +49,14 @@ router.get('/:restaurantId/staff/shifts', async (req: Request, res: Response) =>
       startDate as string,
       endDate as string,
     );
+
+    // Filter by staffPinId if provided
+    if (staffPinId) {
+      const filtered = shifts.filter((s: { staffPinId: string }) => s.staffPinId === staffPinId);
+      res.json(filtered);
+      return;
+    }
+
     res.json(shifts);
   } catch (error: unknown) {
     console.error('[Labor] Error fetching shifts:', error);
@@ -283,6 +291,322 @@ router.put('/:restaurantId/staff/labor-targets', async (req: Request, res: Respo
   } catch (error: unknown) {
     console.error('[Labor] Error setting labor target:', error);
     res.status(500).json({ error: 'Failed to set labor target' });
+  }
+});
+
+// ============ Staff Portal — Earnings ============
+
+// GET /:restaurantId/staff/:staffPinId/earnings
+router.get('/:restaurantId/staff/:staffPinId/earnings', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, staffPinId } = req.params;
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      res.status(400).json({ error: 'startDate and endDate query params are required' });
+      return;
+    }
+
+    const start = new Date(startDate as string);
+    const end = new Date(endDate as string);
+
+    // Get time entries for this staff member in the period
+    const timeEntries = await prisma.timeEntry.findMany({
+      where: {
+        restaurantId,
+        staffPinId,
+        clockIn: { gte: start },
+        clockOut: { lte: end },
+      },
+    });
+
+    // Calculate hours
+    let totalMinutes = 0;
+    for (const entry of timeEntries) {
+      if (!entry.clockOut) continue;
+      const worked = (entry.clockOut.getTime() - entry.clockIn.getTime()) / 60000;
+      totalMinutes += worked - entry.breakMinutes;
+    }
+
+    const totalHours = Math.round(totalMinutes / 60 * 100) / 100;
+    const regularHours = Math.min(totalHours, 40);
+    const overtimeHours = Math.max(totalHours - 40, 0);
+
+    // Estimate pay (default $15/hr, 1.5x overtime)
+    const hourlyRate = 15;
+    const basePay = Math.round(regularHours * hourlyRate * 100) / 100;
+    const overtimePay = Math.round(overtimeHours * hourlyRate * 1.5 * 100) / 100;
+
+    // Sum tips from orders in the period (basic — uses tip pool data if available)
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        createdAt: { gte: start, lte: end },
+        status: { not: 'cancelled' },
+      },
+      select: { tip: true },
+    });
+
+    // Get count of active staff for tip split estimate
+    const activeStaff = await prisma.staffPin.count({
+      where: { restaurantId, isActive: true },
+    });
+
+    const totalTips = orders.reduce((sum, o) => sum + Number(o.tip ?? 0), 0);
+    const tipShare = activeStaff > 0 ? Math.round((totalTips / activeStaff) * 100) / 100 : 0;
+
+    const earnings = {
+      periodStart: startDate as string,
+      periodEnd: endDate as string,
+      regularHours,
+      overtimeHours,
+      totalHours,
+      basePay,
+      overtimePay,
+      tips: tipShare,
+      totalEarnings: Math.round((basePay + overtimePay + tipShare) * 100) / 100,
+    };
+
+    res.json(earnings);
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching staff earnings:', error);
+    res.status(500).json({ error: 'Failed to fetch staff earnings' });
+  }
+});
+
+// ============ Staff Portal — Availability ============
+
+// GET /:restaurantId/staff/:staffPinId/availability
+router.get('/:restaurantId/staff/:staffPinId/availability', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, staffPinId } = req.params;
+
+    const prefs = await prisma.staffAvailability.findMany({
+      where: { restaurantId, staffPinId },
+      orderBy: { dayOfWeek: 'asc' },
+    });
+
+    res.json(prefs);
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching availability:', error);
+    res.status(500).json({ error: 'Failed to fetch availability' });
+  }
+});
+
+// PUT /:restaurantId/staff/:staffPinId/availability
+router.put('/:restaurantId/staff/:staffPinId/availability', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, staffPinId } = req.params;
+    const { preferences } = req.body as {
+      preferences: Array<{
+        dayOfWeek: number;
+        isAvailable: boolean;
+        preferredStart?: string | null;
+        preferredEnd?: string | null;
+        notes?: string | null;
+      }>;
+    };
+
+    if (!Array.isArray(preferences)) {
+      res.status(400).json({ error: 'preferences array is required' });
+      return;
+    }
+
+    // Upsert each day's availability in a transaction
+    const result = await prisma.$transaction(
+      preferences.map((pref) =>
+        prisma.staffAvailability.upsert({
+          where: {
+            staffPinId_dayOfWeek: {
+              staffPinId,
+              dayOfWeek: pref.dayOfWeek,
+            },
+          },
+          create: {
+            restaurantId,
+            staffPinId,
+            dayOfWeek: pref.dayOfWeek,
+            isAvailable: pref.isAvailable,
+            preferredStart: pref.preferredStart ?? null,
+            preferredEnd: pref.preferredEnd ?? null,
+            notes: pref.notes ?? null,
+          },
+          update: {
+            isAvailable: pref.isAvailable,
+            preferredStart: pref.preferredStart ?? null,
+            preferredEnd: pref.preferredEnd ?? null,
+            notes: pref.notes ?? null,
+          },
+        }),
+      ),
+    );
+
+    res.json(result);
+  } catch (error: unknown) {
+    console.error('[Labor] Error saving availability:', error);
+    res.status(500).json({ error: 'Failed to save availability' });
+  }
+});
+
+// ============ Staff Portal — Swap Requests ============
+
+// GET /:restaurantId/staff/:staffPinId/swap-requests
+router.get('/:restaurantId/staff/:staffPinId/swap-requests', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, staffPinId } = req.params;
+
+    const requests = await prisma.swapRequest.findMany({
+      where: {
+        restaurantId,
+        OR: [
+          { requestorPinId: staffPinId },
+          { targetPinId: staffPinId },
+        ],
+      },
+      include: {
+        shift: true,
+        requestor: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Enrich with shift details for frontend
+    const enriched = requests.map((r) => ({
+      id: r.id,
+      shiftId: r.shiftId,
+      shiftDate: r.shift.date.toISOString().split('T')[0],
+      shiftStartTime: r.shift.startTime,
+      shiftEndTime: r.shift.endTime,
+      shiftPosition: r.shift.position,
+      requestorPinId: r.requestorPinId,
+      requestorName: r.requestor.name,
+      targetPinId: r.targetPinId,
+      targetName: null as string | null,
+      reason: r.reason,
+      status: r.status,
+      createdAt: r.createdAt.toISOString(),
+      respondedAt: r.respondedAt?.toISOString() ?? null,
+      respondedBy: r.respondedBy,
+    }));
+
+    res.json(enriched);
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching swap requests:', error);
+    res.status(500).json({ error: 'Failed to fetch swap requests' });
+  }
+});
+
+// POST /:restaurantId/staff/swap-requests
+router.post('/:restaurantId/staff/swap-requests', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { shiftId, requestorPinId, reason } = req.body as {
+      shiftId: string;
+      requestorPinId: string;
+      reason: string;
+    };
+
+    if (!shiftId || !requestorPinId || !reason) {
+      res.status(400).json({ error: 'shiftId, requestorPinId, and reason are required' });
+      return;
+    }
+
+    const request = await prisma.swapRequest.create({
+      data: {
+        restaurantId,
+        shiftId,
+        requestorPinId,
+        reason,
+      },
+      include: {
+        shift: true,
+        requestor: { select: { id: true, name: true } },
+      },
+    });
+
+    const enriched = {
+      id: request.id,
+      shiftId: request.shiftId,
+      shiftDate: request.shift.date.toISOString().split('T')[0],
+      shiftStartTime: request.shift.startTime,
+      shiftEndTime: request.shift.endTime,
+      shiftPosition: request.shift.position,
+      requestorPinId: request.requestorPinId,
+      requestorName: request.requestor.name,
+      targetPinId: request.targetPinId,
+      targetName: null,
+      reason: request.reason,
+      status: request.status,
+      createdAt: request.createdAt.toISOString(),
+      respondedAt: null,
+      respondedBy: null,
+    };
+
+    res.status(201).json(enriched);
+  } catch (error: unknown) {
+    console.error('[Labor] Error creating swap request:', error);
+    res.status(500).json({ error: 'Failed to create swap request' });
+  }
+});
+
+// PATCH /:restaurantId/staff/swap-requests/:requestId
+router.patch('/:restaurantId/staff/swap-requests/:requestId', async (req: Request, res: Response) => {
+  try {
+    const { requestId } = req.params;
+    const { status, respondedBy } = req.body as {
+      status: 'approved' | 'rejected';
+      respondedBy: string;
+    };
+
+    if (!status || !respondedBy) {
+      res.status(400).json({ error: 'status and respondedBy are required' });
+      return;
+    }
+
+    if (status !== 'approved' && status !== 'rejected') {
+      res.status(400).json({ error: 'status must be "approved" or "rejected"' });
+      return;
+    }
+
+    const request = await prisma.swapRequest.update({
+      where: { id: requestId },
+      data: {
+        status,
+        respondedBy,
+        respondedAt: new Date(),
+      },
+      include: {
+        shift: true,
+        requestor: { select: { id: true, name: true } },
+      },
+    });
+
+    const enriched = {
+      id: request.id,
+      shiftId: request.shiftId,
+      shiftDate: request.shift.date.toISOString().split('T')[0],
+      shiftStartTime: request.shift.startTime,
+      shiftEndTime: request.shift.endTime,
+      shiftPosition: request.shift.position,
+      requestorPinId: request.requestorPinId,
+      requestorName: request.requestor.name,
+      targetPinId: request.targetPinId,
+      targetName: null,
+      reason: request.reason,
+      status: request.status,
+      createdAt: request.createdAt.toISOString(),
+      respondedAt: request.respondedAt?.toISOString() ?? null,
+      respondedBy: request.respondedBy,
+    };
+
+    res.json(enriched);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Swap request not found' });
+      return;
+    }
+    console.error('[Labor] Error updating swap request:', error);
+    res.status(500).json({ error: 'Failed to update swap request' });
   }
 });
 
