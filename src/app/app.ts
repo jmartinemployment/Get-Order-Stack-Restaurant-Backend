@@ -23,6 +23,7 @@ import comboRoutes from './combo.routes';
 import aiAdminRoutes from './ai-admin.routes';
 import foodCostRoutes from './food-cost.routes';
 import multiLocationRoutes from './multi-location.routes';
+import onboardingRoutes from './onboarding.routes';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
@@ -324,5 +325,8 @@ app.use('/api/restaurant', analyticsRoutes);  // Must be before menuRoutes for /
 app.use('/api/restaurant', primaryCategoryRoutes);
 app.use('/api/restaurant', deviceRoutes);  // Device registration routes
 app.use('/api/restaurant', menuRoutes);
+app.use('/api/restaurant', onboardingRoutes);  // Merchant profile + business hours
+app.use('/api/platform', onboardingRoutes);    // Menu templates + tax rate lookup
+app.use('/api/onboarding', onboardingRoutes);  // Create new merchant
 
 export default app;

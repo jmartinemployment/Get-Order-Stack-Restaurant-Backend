@@ -232,25 +232,28 @@ router.post('/:restaurantId/pins', requireAuth, requireRestaurantManager, async 
   }
 });
 
-// Update a staff PIN
+// Update a staff PIN (including PIN value change)
 router.patch('/:restaurantId/pins/:pinId', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
   try {
-    const { pinId } = req.params;
-    const { name, role, isActive } = req.body;
+    const { restaurantId, pinId } = req.params;
+    const { name, role, isActive, newPin } = req.body;
 
-    const updated = await prisma.staffPin.update({
+    const result = await authService.updateStaffPin(pinId, restaurantId, {
+      ...(name !== undefined && { name }),
+      ...(role !== undefined && { role }),
+      ...(isActive !== undefined && { isActive }),
+      ...(newPin !== undefined && { newPin })
+    });
+
+    if (!result.success) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+
+    // Return updated record
+    const updated = await prisma.staffPin.findUnique({
       where: { id: pinId },
-      data: {
-        ...(name !== undefined && { name }),
-        ...(role !== undefined && { role }),
-        ...(isActive !== undefined && { isActive })
-      },
-      select: {
-        id: true,
-        name: true,
-        role: true,
-        isActive: true
-      }
+      select: { id: true, name: true, role: true, isActive: true }
     });
 
     res.json(updated);
@@ -277,9 +280,121 @@ router.delete('/:restaurantId/pins/:pinId', requireAuth, requireRestaurantManage
   }
 });
 
-// ============ User Management (super admin only) ============
+// ============ User Management ============
 
-// Create a new user
+// List all users (admin: owner or super_admin)
+router.get('/users', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const restaurantGroupId = req.query.restaurantGroupId as string | undefined;
+    const users = await authService.listUsers(restaurantGroupId);
+    res.json(users);
+  } catch (error) {
+    console.error('List users error:', error);
+    res.status(500).json({ error: 'Failed to list users' });
+  }
+});
+
+// Get a single user with restaurant access
+router.get('/users/:userId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        restaurantAccess: {
+          include: {
+            restaurant: {
+              select: { id: true, name: true, slug: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    res.json({
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      isActive: user.isActive,
+      lastLoginAt: user.lastLoginAt,
+      createdAt: user.createdAt,
+      restaurants: user.restaurantAccess.map(a => ({
+        id: a.restaurant.id,
+        name: a.restaurant.name,
+        slug: a.restaurant.slug,
+        role: a.role
+      }))
+    });
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+// Update a user (admin: owner or super_admin)
+router.patch('/users/:userId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { firstName, lastName, role, isActive } = req.body;
+
+    // Only super_admin can change roles to super_admin or owner
+    if (role && ['super_admin', 'owner'].includes(role) && req.user?.role !== 'super_admin') {
+      res.status(403).json({ error: 'Only super_admin can assign owner or super_admin roles' });
+      return;
+    }
+
+    const result = await authService.updateUser(userId, {
+      ...(firstName !== undefined && { firstName }),
+      ...(lastName !== undefined && { lastName }),
+      ...(role !== undefined && { role }),
+      ...(isActive !== undefined && { isActive })
+    });
+
+    if (!result.success) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// Change own password (any authenticated user)
+router.post('/change-password', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      res.status(400).json({ error: 'Old password and new password are required' });
+      return;
+    }
+
+    const result = await authService.changePassword(req.user!.userId, oldPassword, newPassword);
+
+    if (!result.success) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+// Create a new user (super_admin only)
 router.post('/users', requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
   try {
     const { email, password, firstName, lastName, role, restaurantGroupId } = req.body;

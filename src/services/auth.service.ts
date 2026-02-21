@@ -408,6 +408,153 @@ class AuthService {
     }
   }
 
+  // ============ User Management — List & Update ============
+
+  async listUsers(restaurantGroupId?: string): Promise<Array<{
+    id: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    role: string;
+    isActive: boolean;
+    lastLoginAt: Date | null;
+    createdAt: Date;
+    restaurants: Array<{ id: string; name: string; slug: string; role: string }>;
+  }>> {
+    const where: any = {};
+    if (restaurantGroupId) {
+      where.restaurantGroupId = restaurantGroupId;
+    }
+
+    const users = await prisma.user.findMany({
+      where,
+      include: {
+        restaurantAccess: {
+          include: {
+            restaurant: {
+              select: { id: true, name: true, slug: true }
+            }
+          }
+        }
+      },
+      orderBy: { email: 'asc' }
+    });
+
+    return users.map(u => ({
+      id: u.id,
+      email: u.email,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      role: u.role,
+      isActive: u.isActive,
+      lastLoginAt: u.lastLoginAt,
+      createdAt: u.createdAt,
+      restaurants: u.restaurantAccess.map(a => ({
+        id: a.restaurant.id,
+        name: a.restaurant.name,
+        slug: a.restaurant.slug,
+        role: a.role
+      }))
+    }));
+  }
+
+  async updateUser(userId: string, data: {
+    firstName?: string;
+    lastName?: string;
+    role?: string;
+    isActive?: boolean;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data
+      });
+
+      // If deactivated, invalidate all sessions
+      if (data.isActive === false) {
+        await this.logoutAllSessions(userId);
+      }
+
+      return { success: true };
+    } catch (error: unknown) {
+      console.error('[Auth] Update user error:', error);
+      return { success: false, error: 'Failed to update user' };
+    }
+  }
+
+  async changePassword(userId: string, oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        return { success: false, error: 'User not found' };
+      }
+
+      const isValid = await this.verifyPassword(oldPassword, user.passwordHash);
+      if (!isValid) {
+        return { success: false, error: 'Current password is incorrect' };
+      }
+
+      if (newPassword.length < 6) {
+        return { success: false, error: 'New password must be at least 6 characters' };
+      }
+
+      const passwordHash = await this.hashPassword(newPassword);
+      await prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash }
+      });
+
+      return { success: true };
+    } catch (error: unknown) {
+      console.error('[Auth] Change password error:', error);
+      return { success: false, error: 'Failed to change password' };
+    }
+  }
+
+  async updateStaffPin(pinId: string, restaurantId: string, data: {
+    name?: string;
+    role?: string;
+    isActive?: boolean;
+    newPin?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const updateData: any = {};
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.role !== undefined) updateData.role = data.role;
+      if (data.isActive !== undefined) updateData.isActive = data.isActive;
+
+      if (data.newPin) {
+        if (!/^\d{4,6}$/.test(data.newPin)) {
+          return { success: false, error: 'PIN must be 4-6 digits' };
+        }
+
+        // Check for duplicate
+        const existingPins = await prisma.staffPin.findMany({
+          where: { restaurantId, isActive: true, id: { not: pinId } }
+        });
+
+        for (const existing of existingPins) {
+          const isDuplicate = await this.verifyPin(data.newPin, existing.pin);
+          if (isDuplicate) {
+            return { success: false, error: 'PIN already in use' };
+          }
+        }
+
+        updateData.pin = await this.hashPin(data.newPin);
+      }
+
+      await prisma.staffPin.update({
+        where: { id: pinId },
+        data: updateData
+      });
+
+      return { success: true };
+    } catch (error: unknown) {
+      console.error('[Auth] Update staff PIN error:', error);
+      return { success: false, error: 'Failed to update staff PIN' };
+    }
+  }
+
   // ============ Helpers ============
 
   private generateSessionToken(): string {
