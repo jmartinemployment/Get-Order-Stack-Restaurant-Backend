@@ -915,6 +915,7 @@ model StaffPin {
   timeEntries        TimeEntry[]
   availability       StaffAvailability[]
   swapRequestsMade   SwapRequest[]       @relation("SwapRequestor")
+  timecardEdits      TimecardEditRequest[]
 
   @@index([restaurantId])
   @@map("staff_pins")
@@ -952,6 +953,7 @@ model TimeEntry {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   staffPin      StaffPin  @relation(fields: [staffPinId], references: [id], onDelete: Cascade)
+  editRequests  TimecardEditRequest[]
   @@index([restaurantId, clockIn])
   @@index([staffPinId])
   @@map("time_entries")
@@ -1005,6 +1007,40 @@ model SwapRequest {
   @@index([restaurantId])
   @@index([requestorPinId])
   @@map("swap_requests")
+}
+
+model WorkweekConfig {
+  id                     String   @id @default(uuid())
+  restaurantId           String   @unique @map("restaurant_id")
+  weekStartDay           Int      @default(0) @map("week_start_day") // 0=Sunday .. 6=Saturday
+  dayStartTime           String   @default("04:00") @db.VarChar(5) @map("day_start_time") // "HH:mm" 24h
+  overtimeThresholdHours Decimal  @default(40) @db.Decimal(5,2) @map("overtime_threshold_hours")
+  overtimeMultiplier     Decimal  @default(1.5) @db.Decimal(3,2) @map("overtime_multiplier")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+  @@map("workweek_configs")
+}
+
+model TimecardEditRequest {
+  id            String    @id @default(uuid())
+  restaurantId  String    @map("restaurant_id")
+  timeEntryId   String    @map("time_entry_id")
+  staffPinId    String    @map("staff_pin_id")
+  editType      String    @map("edit_type") // clock_in_time | clock_out_time | break_minutes
+  originalValue String    @map("original_value")
+  newValue      String    @map("new_value")
+  reason        String
+  status        String    @default("pending") // pending | approved | denied
+  respondedBy   String?   @map("responded_by")
+  respondedAt   DateTime? @map("responded_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  timeEntry     TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  staffPin      StaffPin  @relation(fields: [staffPinId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, status])
+  @@index([staffPinId])
+  @@map("timecard_edit_requests")
 }
 
 model Station {

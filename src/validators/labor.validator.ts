@@ -42,3 +42,40 @@ export const LaborTargetSchema = z.object({
 export const PublishWeekSchema = z.object({
   weekStartDate: z.string().min(1, 'weekStartDate is required'),
 });
+
+// --- Workweek Config ---
+
+export const WorkweekConfigSchema = z.object({
+  weekStartDay: z.number().int().min(0).max(6),
+  dayStartTime: z.string().regex(timeRegex, 'dayStartTime must be HH:mm format'),
+  overtimeThresholdHours: z.number().min(1).max(168),
+  overtimeMultiplier: z.number().min(1).max(3),
+});
+
+// --- Timecard Edit Requests ---
+
+const editTypeEnum = z.enum(['clock_in_time', 'clock_out_time', 'break_minutes']);
+
+export const TimecardEditRequestSchema = z.object({
+  timeEntryId: z.string().uuid('timeEntryId must be a valid UUID'),
+  editType: editTypeEnum,
+  originalValue: z.string().min(1, 'originalValue is required'),
+  newValue: z.string().min(1, 'newValue is required'),
+  reason: z.string().min(1, 'Reason is required').max(500),
+});
+
+export const TimecardEditResponseSchema = z.object({
+  respondedBy: z.string().min(1, 'respondedBy is required'),
+});
+
+// --- Schedule Enforcement ---
+
+export const ValidateClockInSchema = z.object({
+  staffPinId: z.string().uuid('staffPinId must be a valid UUID'),
+});
+
+export const ClockInOverrideSchema = z.object({
+  staffPinId: z.string().uuid('staffPinId must be a valid UUID'),
+  managerPin: z.string().min(4).max(6),
+  shiftId: z.string().uuid().optional(),
+});

@@ -8,6 +8,11 @@ import {
   ClockOutSchema,
   LaborTargetSchema,
   PublishWeekSchema,
+  WorkweekConfigSchema,
+  TimecardEditRequestSchema,
+  TimecardEditResponseSchema,
+  ValidateClockInSchema,
+  ClockInOverrideSchema,
 } from '../validators/labor.validator';
 
 const router = Router();
@@ -329,13 +334,21 @@ router.get('/:restaurantId/staff/:staffPinId/earnings', async (req: Request, res
     }
 
     const totalHours = Math.round(totalMinutes / 60 * 100) / 100;
-    const regularHours = Math.min(totalHours, 40);
-    const overtimeHours = Math.max(totalHours - 40, 0);
 
-    // Estimate pay (default $15/hr, 1.5x overtime)
+    // Load workweek config for overtime thresholds
+    const workweekConfig = await prisma.workweekConfig.findUnique({
+      where: { restaurantId },
+    });
+    const otThreshold = workweekConfig ? Number(workweekConfig.overtimeThresholdHours) : 40;
+    const otMultiplier = workweekConfig ? Number(workweekConfig.overtimeMultiplier) : 1.5;
+
+    const regularHours = Math.min(totalHours, otThreshold);
+    const overtimeHours = Math.max(totalHours - otThreshold, 0);
+
+    // Estimate pay (default $15/hr)
     const hourlyRate = 15;
     const basePay = Math.round(regularHours * hourlyRate * 100) / 100;
-    const overtimePay = Math.round(overtimeHours * hourlyRate * 1.5 * 100) / 100;
+    const overtimePay = Math.round(overtimeHours * hourlyRate * otMultiplier * 100) / 100;
 
     // Sum tips from orders in the period (basic — uses tip pool data if available)
     const orders = await prisma.order.findMany({
@@ -607,6 +620,593 @@ router.patch('/:restaurantId/staff/swap-requests/:requestId', async (req: Reques
     }
     console.error('[Labor] Error updating swap request:', error);
     res.status(500).json({ error: 'Failed to update swap request' });
+  }
+});
+
+// ============ Workweek Config (Step 15) ============
+
+// GET /:restaurantId/staff/workweek-config
+router.get('/:restaurantId/staff/workweek-config', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const config = await prisma.workweekConfig.findUnique({
+      where: { restaurantId },
+    });
+
+    if (!config) {
+      // Return defaults when no config exists
+      res.json({
+        weekStartDay: 0,
+        dayStartTime: '04:00',
+        overtimeThresholdHours: 40,
+        overtimeMultiplier: 1.5,
+      });
+      return;
+    }
+
+    res.json({
+      weekStartDay: config.weekStartDay,
+      dayStartTime: config.dayStartTime,
+      overtimeThresholdHours: Number(config.overtimeThresholdHours),
+      overtimeMultiplier: Number(config.overtimeMultiplier),
+    });
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching workweek config:', error);
+    res.status(500).json({ error: 'Failed to fetch workweek config' });
+  }
+});
+
+// PUT /:restaurantId/staff/workweek-config
+router.put('/:restaurantId/staff/workweek-config', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const parsed = WorkweekConfigSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'Invalid workweek config',
+        details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+      });
+      return;
+    }
+
+    const config = await prisma.workweekConfig.upsert({
+      where: { restaurantId },
+      create: {
+        restaurantId,
+        weekStartDay: parsed.data.weekStartDay,
+        dayStartTime: parsed.data.dayStartTime,
+        overtimeThresholdHours: parsed.data.overtimeThresholdHours,
+        overtimeMultiplier: parsed.data.overtimeMultiplier,
+      },
+      update: {
+        weekStartDay: parsed.data.weekStartDay,
+        dayStartTime: parsed.data.dayStartTime,
+        overtimeThresholdHours: parsed.data.overtimeThresholdHours,
+        overtimeMultiplier: parsed.data.overtimeMultiplier,
+      },
+    });
+
+    res.json({
+      weekStartDay: config.weekStartDay,
+      dayStartTime: config.dayStartTime,
+      overtimeThresholdHours: Number(config.overtimeThresholdHours),
+      overtimeMultiplier: Number(config.overtimeMultiplier),
+    });
+  } catch (error: unknown) {
+    console.error('[Labor] Error saving workweek config:', error);
+    res.status(500).json({ error: 'Failed to save workweek config' });
+  }
+});
+
+// ============ Timecard Edit Requests (Step 11) ============
+
+// GET /:restaurantId/staff/:staffPinId/timecard-edits — staff's own edit requests
+router.get('/:restaurantId/staff/:staffPinId/timecard-edits', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, staffPinId } = req.params;
+
+    const edits = await prisma.timecardEditRequest.findMany({
+      where: { restaurantId, staffPinId },
+      include: {
+        timeEntry: { select: { clockIn: true, clockOut: true, breakMinutes: true } },
+        staffPin: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(edits.map((e) => ({
+      id: e.id,
+      timeEntryId: e.timeEntryId,
+      staffPinId: e.staffPinId,
+      staffName: e.staffPin.name,
+      editType: e.editType,
+      originalValue: e.originalValue,
+      newValue: e.newValue,
+      reason: e.reason,
+      status: e.status,
+      respondedBy: e.respondedBy,
+      respondedAt: e.respondedAt?.toISOString() ?? null,
+      createdAt: e.createdAt.toISOString(),
+      timeEntry: {
+        clockIn: e.timeEntry.clockIn.toISOString(),
+        clockOut: e.timeEntry.clockOut?.toISOString() ?? null,
+        breakMinutes: e.timeEntry.breakMinutes,
+      },
+    })));
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching staff timecard edits:', error);
+    res.status(500).json({ error: 'Failed to fetch timecard edits' });
+  }
+});
+
+// GET /:restaurantId/staff/timecard-edits — manager view: all edit requests (filterable by status)
+router.get('/:restaurantId/staff/timecard-edits', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { status } = req.query;
+
+    const where: Record<string, unknown> = { restaurantId };
+    if (status) {
+      where.status = status as string;
+    }
+
+    const edits = await prisma.timecardEditRequest.findMany({
+      where,
+      include: {
+        timeEntry: { select: { clockIn: true, clockOut: true, breakMinutes: true } },
+        staffPin: { select: { name: true, role: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(edits.map((e) => ({
+      id: e.id,
+      timeEntryId: e.timeEntryId,
+      staffPinId: e.staffPinId,
+      staffName: e.staffPin.name,
+      staffRole: e.staffPin.role,
+      editType: e.editType,
+      originalValue: e.originalValue,
+      newValue: e.newValue,
+      reason: e.reason,
+      status: e.status,
+      respondedBy: e.respondedBy,
+      respondedAt: e.respondedAt?.toISOString() ?? null,
+      createdAt: e.createdAt.toISOString(),
+      timeEntry: {
+        clockIn: e.timeEntry.clockIn.toISOString(),
+        clockOut: e.timeEntry.clockOut?.toISOString() ?? null,
+        breakMinutes: e.timeEntry.breakMinutes,
+      },
+    })));
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching timecard edits:', error);
+    res.status(500).json({ error: 'Failed to fetch timecard edits' });
+  }
+});
+
+// POST /:restaurantId/staff/timecard-edits — staff requests an edit
+router.post('/:restaurantId/staff/timecard-edits', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const parsed = TimecardEditRequestSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'Invalid edit request',
+        details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+      });
+      return;
+    }
+
+    // Verify the time entry exists and belongs to this restaurant
+    const timeEntry = await prisma.timeEntry.findFirst({
+      where: { id: parsed.data.timeEntryId, restaurantId },
+    });
+
+    if (!timeEntry) {
+      res.status(404).json({ error: 'Time entry not found' });
+      return;
+    }
+
+    // Derive staffPinId from the time entry
+    const edit = await prisma.timecardEditRequest.create({
+      data: {
+        restaurantId,
+        timeEntryId: parsed.data.timeEntryId,
+        staffPinId: timeEntry.staffPinId,
+        editType: parsed.data.editType,
+        originalValue: parsed.data.originalValue,
+        newValue: parsed.data.newValue,
+        reason: parsed.data.reason,
+      },
+      include: {
+        staffPin: { select: { name: true } },
+      },
+    });
+
+    res.status(201).json({
+      id: edit.id,
+      timeEntryId: edit.timeEntryId,
+      staffPinId: edit.staffPinId,
+      staffName: edit.staffPin.name,
+      editType: edit.editType,
+      originalValue: edit.originalValue,
+      newValue: edit.newValue,
+      reason: edit.reason,
+      status: edit.status,
+      createdAt: edit.createdAt.toISOString(),
+    });
+  } catch (error: unknown) {
+    console.error('[Labor] Error creating timecard edit request:', error);
+    res.status(500).json({ error: 'Failed to create edit request' });
+  }
+});
+
+// PATCH /:restaurantId/staff/timecard-edits/:editId/approve
+router.patch('/:restaurantId/staff/timecard-edits/:editId/approve', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, editId } = req.params;
+    const parsed = TimecardEditResponseSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'Invalid response data',
+        details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+      });
+      return;
+    }
+
+    // Fetch the edit request
+    const editRequest = await prisma.timecardEditRequest.findFirst({
+      where: { id: editId, restaurantId, status: 'pending' },
+    });
+
+    if (!editRequest) {
+      res.status(404).json({ error: 'Edit request not found or already processed' });
+      return;
+    }
+
+    // Apply the edit to the actual TimeEntry + mark request approved in a transaction
+    const updateData: Record<string, unknown> = {};
+    if (editRequest.editType === 'clock_in_time') {
+      updateData.clockIn = new Date(editRequest.newValue);
+    } else if (editRequest.editType === 'clock_out_time') {
+      updateData.clockOut = new Date(editRequest.newValue);
+    } else if (editRequest.editType === 'break_minutes') {
+      updateData.breakMinutes = Number.parseInt(editRequest.newValue, 10);
+    }
+
+    const [updatedEdit] = await prisma.$transaction([
+      prisma.timecardEditRequest.update({
+        where: { id: editId },
+        data: {
+          status: 'approved',
+          respondedBy: parsed.data.respondedBy,
+          respondedAt: new Date(),
+        },
+        include: { staffPin: { select: { name: true } } },
+      }),
+      prisma.timeEntry.update({
+        where: { id: editRequest.timeEntryId },
+        data: updateData,
+      }),
+    ]);
+
+    res.json({
+      id: updatedEdit.id,
+      timeEntryId: updatedEdit.timeEntryId,
+      staffPinId: updatedEdit.staffPinId,
+      staffName: updatedEdit.staffPin.name,
+      editType: updatedEdit.editType,
+      originalValue: updatedEdit.originalValue,
+      newValue: updatedEdit.newValue,
+      reason: updatedEdit.reason,
+      status: updatedEdit.status,
+      respondedBy: updatedEdit.respondedBy,
+      respondedAt: updatedEdit.respondedAt?.toISOString() ?? null,
+      createdAt: updatedEdit.createdAt.toISOString(),
+    });
+  } catch (error: unknown) {
+    console.error('[Labor] Error approving timecard edit:', error);
+    res.status(500).json({ error: 'Failed to approve edit request' });
+  }
+});
+
+// PATCH /:restaurantId/staff/timecard-edits/:editId/deny
+router.patch('/:restaurantId/staff/timecard-edits/:editId/deny', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, editId } = req.params;
+    const parsed = TimecardEditResponseSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'Invalid response data',
+        details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+      });
+      return;
+    }
+
+    const editRequest = await prisma.timecardEditRequest.findFirst({
+      where: { id: editId, restaurantId, status: 'pending' },
+    });
+
+    if (!editRequest) {
+      res.status(404).json({ error: 'Edit request not found or already processed' });
+      return;
+    }
+
+    const updatedEdit = await prisma.timecardEditRequest.update({
+      where: { id: editId },
+      data: {
+        status: 'denied',
+        respondedBy: parsed.data.respondedBy,
+        respondedAt: new Date(),
+      },
+      include: { staffPin: { select: { name: true } } },
+    });
+
+    res.json({
+      id: updatedEdit.id,
+      timeEntryId: updatedEdit.timeEntryId,
+      staffPinId: updatedEdit.staffPinId,
+      staffName: updatedEdit.staffPin.name,
+      editType: updatedEdit.editType,
+      originalValue: updatedEdit.originalValue,
+      newValue: updatedEdit.newValue,
+      reason: updatedEdit.reason,
+      status: updatedEdit.status,
+      respondedBy: updatedEdit.respondedBy,
+      respondedAt: updatedEdit.respondedAt?.toISOString() ?? null,
+      createdAt: updatedEdit.createdAt.toISOString(),
+    });
+  } catch (error: unknown) {
+    console.error('[Labor] Error denying timecard edit:', error);
+    res.status(500).json({ error: 'Failed to deny edit request' });
+  }
+});
+
+// ============ Schedule Enforcement (Step 12) ============
+
+// POST /:restaurantId/staff/validate-clock-in — pre-check before allowing clock-in
+router.post('/:restaurantId/staff/validate-clock-in', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const parsed = ValidateClockInSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'Invalid data',
+        details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+      });
+      return;
+    }
+
+    // Load restaurant timeclock settings from aiSettings JSON
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { aiSettings: true },
+    });
+
+    const aiSettings = (restaurant?.aiSettings as Record<string, unknown>) ?? {};
+    const enforcement = aiSettings.scheduleEnforcement as Record<string, unknown> | undefined;
+
+    // If enforcement is not enabled, always allow
+    if (!enforcement || enforcement.enabled !== true) {
+      res.json({ allowed: true });
+      return;
+    }
+
+    const gracePeriodMinutes = (enforcement.gracePeriodMinutes as number) ?? 15;
+
+    // Find today's shifts for this staff member
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const todayShifts = await prisma.shift.findMany({
+      where: {
+        restaurantId,
+        staffPinId: parsed.data.staffPinId,
+        date: { gte: todayStart, lte: todayEnd },
+      },
+      orderBy: { startTime: 'asc' },
+    });
+
+    if (todayShifts.length === 0) {
+      res.json({
+        allowed: false,
+        blockReason: 'No shift scheduled for today',
+        requiresManagerOverride: true,
+      });
+      return;
+    }
+
+    // Check if current time is within grace period of any shift start
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    let withinGracePeriod = false;
+
+    for (const shift of todayShifts) {
+      const [startH, startM] = shift.startTime.split(':').map(Number);
+      const shiftStartMinutes = startH * 60 + startM;
+      const earliestClockIn = shiftStartMinutes - gracePeriodMinutes;
+
+      if (currentMinutes >= earliestClockIn) {
+        withinGracePeriod = true;
+        break;
+      }
+    }
+
+    if (!withinGracePeriod) {
+      const nextShift = todayShifts[0];
+      res.json({
+        allowed: false,
+        blockReason: `Too early — shift starts at ${nextShift.startTime}`,
+        requiresManagerOverride: true,
+      });
+      return;
+    }
+
+    res.json({ allowed: true });
+  } catch (error: unknown) {
+    console.error('[Labor] Error validating clock-in:', error);
+    res.status(500).json({ error: 'Failed to validate clock-in' });
+  }
+});
+
+// POST /:restaurantId/staff/clock-in-with-override — manager override for schedule enforcement
+router.post('/:restaurantId/staff/clock-in-with-override', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const parsed = ClockInOverrideSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'Invalid override data',
+        details: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+      });
+      return;
+    }
+
+    // Validate manager PIN
+    const managerPin = await prisma.staffPin.findFirst({
+      where: {
+        restaurantId,
+        pin: parsed.data.managerPin,
+        isActive: true,
+        role: { in: ['manager', 'owner', 'super_admin'] },
+      },
+    });
+
+    if (!managerPin) {
+      res.status(403).json({ error: 'Invalid manager PIN' });
+      return;
+    }
+
+    // Proceed with clock-in (bypassing schedule enforcement)
+    const entry = await laborService.clockIn(
+      restaurantId,
+      parsed.data.staffPinId,
+      parsed.data.shiftId,
+    );
+
+    res.status(201).json({
+      ...entry,
+      overrideBy: managerPin.name,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to clock in';
+    if (message.startsWith('ALREADY_CLOCKED_IN:')) {
+      res.status(409).json({ error: message.replace('ALREADY_CLOCKED_IN: ', '') });
+      return;
+    }
+    console.error('[Labor] Error clocking in with override:', error);
+    res.status(500).json({ error: 'Failed to clock in with override' });
+  }
+});
+
+// ============ Auto Clock-Out (Step 13) ============
+
+// POST /:restaurantId/staff/auto-clock-out — close orphaned time entries
+router.post('/:restaurantId/staff/auto-clock-out', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    // Load restaurant timeclock settings
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { aiSettings: true },
+    });
+
+    const aiSettings = (restaurant?.aiSettings as Record<string, unknown>) ?? {};
+    const autoClockOut = aiSettings.autoClockOut as Record<string, unknown> | undefined;
+
+    if (!autoClockOut || autoClockOut.enabled !== true) {
+      res.json({ closedEntries: 0, message: 'Auto clock-out is disabled' });
+      return;
+    }
+
+    const mode = (autoClockOut.mode as string) ?? 'after_shift_end';
+    const delayMinutes = (autoClockOut.delayMinutes as number) ?? 30;
+    const cutoffTime = (autoClockOut.cutoffTime as string) ?? '04:00';
+
+    // Find all open time entries for this restaurant
+    const openEntries = await prisma.timeEntry.findMany({
+      where: {
+        restaurantId,
+        clockOut: null,
+      },
+      include: {
+        staffPin: { select: { name: true } },
+      },
+    });
+
+    const now = new Date();
+    const closedIds: string[] = [];
+
+    for (const entry of openEntries) {
+      let shouldClose = false;
+      let clockOutTime = now;
+
+      if (mode === 'after_shift_end' && entry.shiftId) {
+        // Check if shift has ended + delay has passed
+        const shift = await prisma.shift.findUnique({ where: { id: entry.shiftId } });
+        if (shift) {
+          const [endH, endM] = shift.endTime.split(':').map(Number);
+          const shiftEnd = new Date(entry.clockIn);
+          shiftEnd.setHours(endH, endM, 0, 0);
+
+          // If shift end is before clock-in (cross-midnight), add a day
+          if (shiftEnd.getTime() < entry.clockIn.getTime()) {
+            shiftEnd.setDate(shiftEnd.getDate() + 1);
+          }
+
+          const cutoff = new Date(shiftEnd.getTime() + delayMinutes * 60000);
+          if (now.getTime() >= cutoff.getTime()) {
+            shouldClose = true;
+            clockOutTime = shiftEnd; // Clock out at shift end time, not current time
+          }
+        }
+      } else if (mode === 'business_day_cutoff') {
+        // Check if current time has passed today's cutoff
+        const [cutH, cutM] = cutoffTime.split(':').map(Number);
+        const todayCutoff = new Date(now);
+        todayCutoff.setHours(cutH, cutM, 0, 0);
+
+        // If cutoff is early morning (e.g., 04:00) and entry was yesterday, check if we've passed it
+        if (now.getTime() >= todayCutoff.getTime() && entry.clockIn.getTime() < todayCutoff.getTime()) {
+          shouldClose = true;
+          clockOutTime = todayCutoff;
+        }
+      }
+
+      if (shouldClose) {
+        await prisma.timeEntry.update({
+          where: { id: entry.id },
+          data: {
+            clockOut: clockOutTime,
+            notes: entry.notes
+              ? `${entry.notes} | auto_clock_out`
+              : 'auto_clock_out',
+          },
+        });
+        closedIds.push(entry.id);
+      }
+    }
+
+    res.json({
+      closedEntries: closedIds.length,
+      closedIds,
+      message: closedIds.length > 0
+        ? `Auto-clocked out ${closedIds.length} entries`
+        : 'No entries needed auto clock-out',
+    });
+  } catch (error: unknown) {
+    console.error('[Labor] Error running auto clock-out:', error);
+    res.status(500).json({ error: 'Failed to run auto clock-out' });
   }
 });
 

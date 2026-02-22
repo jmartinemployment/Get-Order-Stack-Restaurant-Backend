@@ -342,6 +342,13 @@ export const laborService = {
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);
 
+    // Load workweek config for overtime thresholds
+    const workweekConfig = await prisma.workweekConfig.findUnique({
+      where: { restaurantId },
+    });
+    const otThreshold = workweekConfig ? Number(workweekConfig.overtimeThresholdHours) : 40;
+    const otMultiplier = workweekConfig ? Number(workweekConfig.overtimeMultiplier) : 1.5;
+
     const entries = await prisma.timeEntry.findMany({
       where: {
         restaurantId,
@@ -383,8 +390,8 @@ export const laborService = {
     }
 
     const staffSummaries = [...staffMap.values()].map((s) => {
-      const regularHours = Math.min(s.totalHours, 40);
-      const overtimeHours = Math.max(0, s.totalHours - 40);
+      const regularHours = Math.min(s.totalHours, otThreshold);
+      const overtimeHours = Math.max(0, s.totalHours - otThreshold);
       return {
         staffPinId: s.staffPinId,
         staffName: s.staffName,
@@ -392,7 +399,7 @@ export const laborService = {
         totalHours: Math.round(s.totalHours * 100) / 100,
         regularHours: Math.round(regularHours * 100) / 100,
         overtimeHours: Math.round(overtimeHours * 100) / 100,
-        laborCost: Math.round((regularHours * hourlyRate + overtimeHours * hourlyRate * 1.5) * 100) / 100,
+        laborCost: Math.round((regularHours * hourlyRate + overtimeHours * hourlyRate * otMultiplier) * 100) / 100,
         shiftsWorked: s.shiftsWorked,
       };
     });
@@ -411,7 +418,7 @@ export const laborService = {
 
     const laborPercent = totalRevenue > 0 ? Math.round((totalLaborCost / totalRevenue) * 10000) / 100 : 0;
 
-    // Daily breakdown
+    // Daily breakdown with per-day revenue
     const dayMap = new Map<string, { hours: number; cost: number }>();
     for (const entry of entries) {
       const dateKey = entry.clockIn.toISOString().split('T')[0];
@@ -427,19 +434,39 @@ export const laborService = {
       }
     }
 
+    // Load per-day revenue from orders
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        createdAt: { gte: start, lte: end },
+        status: { not: 'cancelled' },
+      },
+      select: { createdAt: true, total: true },
+    });
+
+    const revenueByDay = new Map<string, number>();
+    for (const order of orders) {
+      const dateKey = order.createdAt.toISOString().split('T')[0];
+      revenueByDay.set(dateKey, (revenueByDay.get(dateKey) ?? 0) + Number(order.total));
+    }
+
     // Load targets for target overlay
     const targets = await prisma.laborTarget.findMany({ where: { restaurantId } });
     const targetMap = new Map(targets.map((t) => [t.dayOfWeek, Number(t.targetPercent)]));
 
     const dailyBreakdown = [...dayMap.entries()].map(([date, data]) => {
       const dayOfWeek = new Date(date).getDay();
+      const dayRevenue = revenueByDay.get(date) ?? 0;
+      const dayLaborPercent = dayRevenue > 0 ? Math.round((data.cost / dayRevenue) * 10000) / 100 : 0;
+      const target = targetMap.get(dayOfWeek) ?? null;
       return {
         date,
         hours: Math.round(data.hours * 100) / 100,
         cost: Math.round(data.cost * 100) / 100,
-        revenue: 0, // Would need per-day revenue query
-        laborPercent: 0,
-        targetPercent: targetMap.get(dayOfWeek) ?? null,
+        revenue: Math.round(dayRevenue * 100) / 100,
+        laborPercent: dayLaborPercent,
+        targetPercent: target,
+        variancePercent: target !== null ? Math.round((dayLaborPercent - target) * 100) / 100 : null,
       };
     }).sort((a, b) => a.date.localeCompare(b.date));
 
@@ -460,6 +487,8 @@ export const laborService = {
       totalLaborCost: Math.round(totalLaborCost * 100) / 100,
       totalRevenue: Math.round(totalRevenue * 100) / 100,
       laborPercent,
+      overtimeThresholdHours: otThreshold,
+      overtimeMultiplier: otMultiplier,
       staffSummaries,
       dailyBreakdown,
       overtimeFlags,
