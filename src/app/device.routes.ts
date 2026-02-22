@@ -1,113 +1,65 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
 import { handlePrismaError } from '../utils/prisma-errors';
+import { generateDeviceCode } from '../utils/device-code';
 
-const router = Router();
+const router = Router({ mergeParams: true });
 const prisma = new PrismaClient();
 
-// ============ Device Registration ============
+const HEARTBEAT_THRESHOLD_MS = 30_000;
 
-// Register a new device or update existing
-router.post('/:restaurantId/devices/register', async (req: Request, res: Response) => {
-  try {
-    const { restaurantId } = req.params;
-    const { deviceId, deviceName, deviceType, platform, appVersion, pushToken } = req.body;
+// === Validation Schemas ===
 
-    if (!deviceId || !deviceType) {
-      res.status(400).json({ error: 'deviceId and deviceType are required' });
-      return;
-    }
-
-    // Verify restaurant exists
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId }
-    });
-
-    if (!restaurant) {
-      res.status(404).json({ error: 'Restaurant not found' });
-      return;
-    }
-
-    // Upsert device - create or update if exists
-    const device = await prisma.device.upsert({
-      where: { deviceId },
-      create: {
-        restaurantId,
-        deviceId,
-        deviceName: deviceName || `${deviceType.toUpperCase()}-${deviceId.slice(-6)}`,
-        deviceType,
-        isActive: true,
-        lastSeenAt: new Date()
-      },
-      update: {
-        restaurantId, // Allow device to switch restaurants
-        deviceName: deviceName || undefined,
-        isActive: true,
-        lastSeenAt: new Date()
-      }
-    });
-
-    console.log(`[Device] Registered ${deviceType} device: ${deviceId} for restaurant ${restaurantId}`);
-
-    res.status(201).json({
-      success: true,
-      device: {
-        id: device.id,
-        deviceId: device.deviceId,
-        deviceName: device.deviceName,
-        deviceType: device.deviceType,
-        restaurantId: device.restaurantId
-      }
-    });
-  } catch (error) {
-    handlePrismaError(error, res, {
-      P2003: { status: 400, message: 'Invalid restaurant ID' }
-    }, 'Failed to register device');
-  }
+const createDeviceSchema = z.object({
+  deviceName: z.string().min(1).max(100),
+  deviceType: z.enum(['pos_terminal', 'kds_station', 'kiosk', 'order_pad', 'printer_station']),
+  posMode: z.enum(['full_service', 'quick_service', 'bar', 'retail', 'services', 'bookings', 'standard']).optional(),
+  modeId: z.string().uuid().optional(),
+  locationId: z.string().uuid().optional(),
 });
 
-// Device heartbeat - update last seen timestamp
-router.post('/:restaurantId/devices/:deviceId/heartbeat', async (req: Request, res: Response) => {
-  try {
-    const { deviceId } = req.params;
-
-    const device = await prisma.device.update({
-      where: { deviceId },
-      data: {
-        lastSeenAt: new Date(),
-        isActive: true
-      }
-    });
-
-    res.json({ success: true, lastSeenAt: device.lastSeenAt });
-  } catch (error) {
-    handlePrismaError(error, res, {
-      P2025: { status: 404, message: 'Device not found' }
-    }, 'Failed to update heartbeat');
-  }
+const registerBrowserSchema = z.object({
+  posMode: z.enum(['full_service', 'quick_service', 'bar', 'retail', 'services', 'bookings', 'standard']),
+  hardwareInfo: z.object({
+    platform: z.string(),
+    osVersion: z.string().nullable().optional(),
+    appVersion: z.string().nullable().optional(),
+    screenSize: z.string().nullable().optional(),
+    serialNumber: z.string().nullable().optional(),
+  }).optional(),
 });
 
-// Get all devices for a restaurant
+const updateDeviceSchema = z.object({
+  deviceName: z.string().min(1).max(100).optional(),
+  posMode: z.enum(['full_service', 'quick_service', 'bar', 'retail', 'services', 'bookings', 'standard']).optional(),
+  modeId: z.string().uuid().nullable().optional(),
+  status: z.enum(['pending', 'active', 'revoked']).optional(),
+  locationId: z.string().uuid().nullable().optional(),
+});
+
+// === Routes ===
+
+// List all devices for a restaurant
 router.get('/:restaurantId/devices', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
-    const { type, online } = req.query;
+    const { status, type } = req.query;
 
     const devices = await prisma.device.findMany({
       where: {
         restaurantId,
-        isActive: true,
+        ...(status && { status: status as string }),
         ...(type && { deviceType: type as string }),
-        ...(online === 'true' && { isOnline: true })
       },
-      orderBy: { lastSeenAt: 'desc' }
+      include: { mode: true },
+      orderBy: { createdAt: 'desc' },
     });
 
-    // Mark devices as offline if no heartbeat in 30 seconds
-    const thirtySecondsAgo = new Date(Date.now() - 30000);
+    const thirtySecondsAgo = new Date(Date.now() - HEARTBEAT_THRESHOLD_MS);
     const devicesWithStatus = devices.map(device => ({
       ...device,
-      isOnline: device.lastSeenAt ? device.lastSeenAt > thirtySecondsAgo : false
+      isOnline: device.lastSeenAt ? device.lastSeenAt > thirtySecondsAgo : false,
     }));
 
     res.json(devicesWithStatus);
@@ -116,63 +68,167 @@ router.get('/:restaurantId/devices', async (req: Request, res: Response) => {
   }
 });
 
-// Update device info
-router.patch('/:restaurantId/devices/:deviceId', async (req: Request, res: Response) => {
+// Create a new device with pairing code
+router.post('/:restaurantId/devices', async (req: Request, res: Response) => {
   try {
-    const { deviceId } = req.params;
-    const { deviceName, pushToken, isActive } = req.body;
+    const { restaurantId } = req.params;
+    const parsed = createDeviceSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+
+    const { deviceName, deviceType, posMode, modeId, locationId } = parsed.data;
+    const deviceCode = await generateDeviceCode(prisma);
+
+    const device = await prisma.device.create({
+      data: {
+        restaurantId,
+        deviceCode,
+        deviceName,
+        deviceType,
+        posMode: posMode ?? null,
+        modeId: modeId ?? null,
+        locationId: locationId ?? null,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+      },
+    });
+
+    res.status(201).json(device);
+  } catch (error) {
+    handlePrismaError(error, res, {
+      P2003: { status: 400, message: 'Invalid restaurant, mode, or location ID' },
+    }, 'Failed to create device');
+  }
+});
+
+// Register current browser as a device (no pairing code needed)
+router.post('/:restaurantId/devices/register-browser', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const parsed = registerBrowserSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+
+    const { posMode, hardwareInfo } = parsed.data;
+
+    const device = await prisma.device.create({
+      data: {
+        restaurantId,
+        deviceName: 'Browser',
+        deviceType: 'pos_terminal',
+        posMode,
+        status: 'active',
+        pairedAt: new Date(),
+        hardwareInfo: hardwareInfo ?? { platform: 'Browser' },
+      },
+    });
+
+    res.status(201).json(device);
+  } catch (error) {
+    handlePrismaError(error, res, {
+      P2003: { status: 400, message: 'Invalid restaurant ID' },
+    }, 'Failed to register browser device');
+  }
+});
+
+// Get a single device by UUID
+router.get('/:restaurantId/devices/:id', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, id } = req.params;
+
+    const device = await prisma.device.findFirst({
+      where: { id, restaurantId },
+      include: { mode: true },
+    });
+
+    if (!device) {
+      res.status(404).json({ error: 'Device not found' });
+      return;
+    }
+
+    res.json(device);
+  } catch (error) {
+    handlePrismaError(error, res, {}, 'Failed to fetch device');
+  }
+});
+
+// Update device
+router.patch('/:restaurantId/devices/:id', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, id } = req.params;
+    const parsed = updateDeviceSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+
+    const existing = await prisma.device.findFirst({
+      where: { id, restaurantId },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Device not found' });
+      return;
+    }
 
     const device = await prisma.device.update({
-      where: { deviceId },
-      data: {
-        ...(deviceName !== undefined && { deviceName }),
-        ...(pushToken !== undefined && { pushToken }),
-        ...(isActive !== undefined && { isActive })
-      }
+      where: { id },
+      data: parsed.data,
     });
 
     res.json(device);
   } catch (error) {
     handlePrismaError(error, res, {
-      P2025: { status: 404, message: 'Device not found' }
+      P2025: { status: 404, message: 'Device not found' },
     }, 'Failed to update device');
   }
 });
 
-// Disconnect/deactivate a device
-router.post('/:restaurantId/devices/:deviceId/disconnect', async (req: Request, res: Response) => {
+// Delete device
+router.delete('/:restaurantId/devices/:id', async (req: Request, res: Response) => {
   try {
-    const { deviceId } = req.params;
+    const { restaurantId, id } = req.params;
 
-    const device = await prisma.device.update({
-      where: { deviceId },
-      data: {
-        isActive: false
-      }
+    const existing = await prisma.device.findFirst({
+      where: { id, restaurantId },
     });
 
-    res.json({ success: true, message: 'Device disconnected' });
-  } catch (error) {
-    handlePrismaError(error, res, {
-      P2025: { status: 404, message: 'Device not found' }
-    }, 'Failed to disconnect device');
-  }
-});
+    if (!existing) {
+      res.status(404).json({ error: 'Device not found' });
+      return;
+    }
 
-// Delete a device registration
-router.delete('/:restaurantId/devices/:deviceId', async (req: Request, res: Response) => {
-  try {
-    const { deviceId } = req.params;
-
-    await prisma.device.delete({
-      where: { deviceId }
-    });
-
+    await prisma.device.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
     handlePrismaError(error, res, {
-      P2025: { status: 404, message: 'Device not found' }
+      P2025: { status: 404, message: 'Device not found' },
     }, 'Failed to delete device');
+  }
+});
+
+// Device heartbeat
+router.post('/:restaurantId/devices/:id/heartbeat', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const device = await prisma.device.update({
+      where: { id },
+      data: { lastSeenAt: new Date() },
+    });
+
+    res.json({ success: true, lastSeenAt: device.lastSeenAt });
+  } catch (error) {
+    handlePrismaError(error, res, {
+      P2025: { status: 404, message: 'Device not found' },
+    }, 'Failed to update heartbeat');
   }
 });
 

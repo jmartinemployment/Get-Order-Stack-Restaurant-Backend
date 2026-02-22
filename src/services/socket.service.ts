@@ -58,7 +58,7 @@ export function initializeSocketServer(httpServer: HttpServer, corsOrigins: any)
       // Update device status in database
       try {
         await prisma.device.updateMany({
-          where: { deviceId },
+          where: { id: deviceId },
           data: { lastSeenAt: new Date() }
         });
       } catch (err) {
@@ -94,7 +94,7 @@ export function initializeSocketServer(httpServer: HttpServer, corsOrigins: any)
       // Update device status
       try {
         await prisma.device.updateMany({
-          where: { deviceId },
+          where: { id: deviceId },
           data: { lastSeenAt: new Date() }
         });
       } catch (err) {
@@ -108,7 +108,7 @@ export function initializeSocketServer(httpServer: HttpServer, corsOrigins: any)
     socket.on('heartbeat', async (data: { deviceId: string }) => {
       try {
         await prisma.device.updateMany({
-          where: { deviceId: data.deviceId },
+          where: { id: data.deviceId },
           data: { lastSeenAt: new Date() }
         });
       } catch (err) {
@@ -126,7 +126,7 @@ export function initializeSocketServer(httpServer: HttpServer, corsOrigins: any)
         // Update device last seen
         try {
           await prisma.device.updateMany({
-            where: { deviceId: info.deviceId },
+            where: { id: info.deviceId },
             data: { lastSeenAt: new Date() }
           });
         } catch (err) {

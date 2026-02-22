@@ -274,6 +274,19 @@ router.post('/create', async (req: Request, res: Response) => {
         });
       }
 
+      // Create browser device for the onboarding user
+      const device = await tx.device.create({
+        data: {
+          restaurantId: restaurant.id,
+          deviceName: 'Browser',
+          deviceType: 'pos_terminal',
+          posMode: defaultDeviceMode ?? 'full_service',
+          status: 'active',
+          pairedAt: new Date(),
+          hardwareInfo: { platform: 'Browser' },
+        },
+      });
+
       // Apply menu template if selected
       if (menuTemplateId) {
         const template = MENU_TEMPLATES.find(t => t.id === menuTemplateId);
@@ -306,7 +319,7 @@ router.post('/create', async (req: Request, res: Response) => {
         }
       }
 
-      return { restaurant, user };
+      return { restaurant, user, device };
     });
 
     // Create session + JWT outside transaction (authService uses its own prisma)
@@ -316,6 +329,7 @@ router.post('/create', async (req: Request, res: Response) => {
       // Restaurant created but login failed — still return restaurant ID
       res.status(201).json({
         restaurantId: result.restaurant.id,
+        deviceId: result.device.id,
         token: null,
         restaurant: {
           id: result.restaurant.id,
@@ -328,6 +342,7 @@ router.post('/create', async (req: Request, res: Response) => {
 
     res.status(201).json({
       restaurantId: result.restaurant.id,
+      deviceId: result.device.id,
       token: loginResult.token,
       restaurant: {
         id: result.restaurant.id,
@@ -335,9 +350,6 @@ router.post('/create', async (req: Request, res: Response) => {
         slug: result.restaurant.slug,
       },
     });
-    return;
-
-    res.status(201).json(result);
   } catch (error) {
     console.error('Onboarding create error:', error);
     if (error instanceof Error && error.message.includes('Unique constraint')) {

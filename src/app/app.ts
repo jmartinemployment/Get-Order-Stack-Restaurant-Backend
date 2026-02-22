@@ -6,6 +6,11 @@ import menuRoutes from './app.routes';
 import primaryCategoryRoutes from './primary-category.routes';
 import analyticsRoutes from './analytics.routes';
 import deviceRoutes from './device.routes';
+import devicePairingRoutes from './device-pairing.routes';
+import deviceModeRoutes from './device-mode.routes';
+import printerProfileRoutes from './printer-profile.routes';
+import peripheralRoutes from './peripheral.routes';
+import kioskProfileRoutes from './kiosk-profile.routes';
 import authRoutes from './auth.routes';
 import cloudprntRoutes from './cloudprnt.routes';
 import printerRoutes from './printer.routes';
@@ -324,6 +329,11 @@ app.use('/api/restaurant-groups', multiLocationRoutes);  // Multi-location: grou
 app.use('/api/restaurant', analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
 app.use('/api/restaurant', primaryCategoryRoutes);
 app.use('/api/restaurant', deviceRoutes);  // Device registration routes
+app.use('/api/devices', devicePairingRoutes);  // Device pairing (POST /pair) + lookup (GET /:id)
+app.use('/api/restaurant', deviceModeRoutes);  // Device mode CRUD
+app.use('/api/restaurant', printerProfileRoutes);  // Printer profile CRUD
+app.use('/api/restaurant', peripheralRoutes);  // Peripheral device CRUD
+app.use('/api/restaurant', kioskProfileRoutes);  // Kiosk profile CRUD
 app.use('/api/restaurant', menuRoutes);
 app.use('/api/restaurant', onboardingRoutes);  // Merchant profile + business hours
 app.use('/api/platform', onboardingRoutes);    // Menu templates + tax rate lookup

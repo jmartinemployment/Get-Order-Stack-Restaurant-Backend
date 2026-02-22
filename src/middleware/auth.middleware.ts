@@ -230,11 +230,11 @@ export const requireDeviceAuth = async (req: Request, res: Response, next: NextF
 
     // Verify device exists and is active
     const device = await prisma.device.findUnique({
-      where: { deviceId },
+      where: { id: deviceId },
       include: { restaurant: true }
     });
 
-    if (!device || !device.isActive) {
+    if (!device || device.status !== 'active') {
       res.status(401).json({ error: 'Invalid or inactive device' });
       return;
     }

@@ -821,7 +821,7 @@ router.post('/:restaurantId/tables', async (req: Request, res: Response) => {
 
     const table = await prisma.restaurantTable.create({
       data: {
-        restaurantId, tableNumber, tableName, capacity, section, posX, posY
+        restaurantId, tableNumber, tableName, capacity, section, posX, posY, updatedAt: new Date()
       }
     });
     res.status(201).json(table);
