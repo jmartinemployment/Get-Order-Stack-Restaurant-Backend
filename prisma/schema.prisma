@@ -1009,6 +1009,22 @@ model SwapRequest {
   @@map("swap_requests")
 }
 
+model StaffNotification {
+  id              String   @id @default(uuid())
+  restaurantId    String   @map("restaurant_id")
+  recipientPinId  String   @map("recipient_pin_id")
+  type            String   // schedule_published | shift_changed | swap_approved | swap_rejected | timecard_approved | timecard_rejected | announcement
+  title           String
+  message         String
+  isRead          Boolean  @default(false) @map("is_read")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([restaurantId])
+  @@index([recipientPinId])
+  @@index([recipientPinId, isRead])
+  @@map("staff_notifications")
+}
+
 model WorkweekConfig {
   id                     String   @id @default(uuid())
   restaurantId           String   @unique @map("restaurant_id")

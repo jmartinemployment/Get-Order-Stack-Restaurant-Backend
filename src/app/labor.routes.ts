@@ -622,6 +622,144 @@ router.get('/:restaurantId/staff/labor-live', async (req: Request, res: Response
   }
 });
 
+// ============ Staff Notifications ============
+// IMPORTANT: These routes MUST be before /:staffPinId/ routes to avoid param collision
+
+// GET /:restaurantId/staff/notifications?pinId=...
+router.get('/:restaurantId/staff/notifications', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { pinId } = req.query;
+
+    if (!pinId) {
+      res.status(400).json({ error: 'pinId query param is required' });
+      return;
+    }
+
+    const notifications = await prisma.staffNotification.findMany({
+      where: { restaurantId, recipientPinId: pinId as string },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    res.json(notifications);
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching notifications:', error);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+// PATCH /:restaurantId/staff/notifications/:notificationId/read
+router.patch('/:restaurantId/staff/notifications/:notificationId/read', async (req: Request, res: Response) => {
+  try {
+    const { notificationId } = req.params;
+
+    await prisma.staffNotification.update({
+      where: { id: notificationId },
+      data: { isRead: true },
+    });
+
+    res.json({ success: true });
+  } catch (error: unknown) {
+    console.error('[Labor] Error marking notification read:', error);
+    res.status(500).json({ error: 'Failed to mark notification read' });
+  }
+});
+
+// POST /:restaurantId/staff/notifications/schedule-published
+router.post('/:restaurantId/staff/notifications/schedule-published', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { weekStart } = req.body;
+
+    if (!weekStart) {
+      res.status(400).json({ error: 'weekStart is required' });
+      return;
+    }
+
+    // Find all staff with shifts in the published week
+    const weekStartDate = new Date(weekStart);
+    const weekEndDate = new Date(weekStart);
+    weekEndDate.setDate(weekEndDate.getDate() + 6);
+
+    const shifts = await prisma.shift.findMany({
+      where: {
+        restaurantId,
+        date: { gte: weekStartDate, lte: weekEndDate },
+      },
+      select: { staffPinId: true },
+    });
+
+    const uniquePinIds = [...new Set(shifts.map((s) => s.staffPinId))];
+
+    if (uniquePinIds.length === 0) {
+      res.json({ sent: 0 });
+      return;
+    }
+
+    const notifications = uniquePinIds.map((pinId) => ({
+      restaurantId,
+      recipientPinId: pinId,
+      type: 'schedule_published',
+      title: 'Schedule Published',
+      message: `The schedule for the week of ${weekStart} has been published. Check your shifts.`,
+    }));
+
+    await prisma.staffNotification.createMany({ data: notifications });
+
+    res.json({ sent: uniquePinIds.length });
+  } catch (error: unknown) {
+    console.error('[Labor] Error sending schedule notification:', error);
+    res.status(500).json({ error: 'Failed to send schedule notification' });
+  }
+});
+
+// POST /:restaurantId/staff/notifications/announcement
+router.post('/:restaurantId/staff/notifications/announcement', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { message, recipientPinIds } = req.body;
+
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      res.status(400).json({ error: 'message is required' });
+      return;
+    }
+
+    let pinIds: string[];
+
+    if (recipientPinIds && Array.isArray(recipientPinIds) && recipientPinIds.length > 0) {
+      pinIds = recipientPinIds;
+    } else {
+      // Send to all active staff
+      const staff = await prisma.staffPin.findMany({
+        where: { restaurantId, isActive: true },
+        select: { id: true },
+      });
+      pinIds = staff.map((s) => s.id);
+    }
+
+    if (pinIds.length === 0) {
+      res.json({ sent: 0 });
+      return;
+    }
+
+    const notifications = pinIds.map((pinId) => ({
+      restaurantId,
+      recipientPinId: pinId,
+      type: 'announcement',
+      title: 'Team Announcement',
+      message: message.trim(),
+    }));
+
+    await prisma.staffNotification.createMany({ data: notifications });
+
+    res.json({ sent: pinIds.length });
+  } catch (error: unknown) {
+    console.error('[Labor] Error sending announcement:', error);
+    res.status(500).json({ error: 'Failed to send announcement' });
+  }
+});
+
 // ============ Staff Portal — Earnings ============
 
 // GET /:restaurantId/staff/:staffPinId/earnings
