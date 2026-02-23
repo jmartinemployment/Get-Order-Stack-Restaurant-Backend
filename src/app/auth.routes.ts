@@ -8,6 +8,66 @@ const prisma = new PrismaClient();
 
 // ============ User Authentication ============
 
+// Public signup — creates owner account + auto-login
+router.post('/signup', async (req: Request, res: Response) => {
+  try {
+    const { firstName, lastName, email, password } = req.body;
+
+    if (!email || !password) {
+      res.status(400).json({ error: 'Email and password are required' });
+      return;
+    }
+
+    if (!firstName || !lastName) {
+      res.status(400).json({ error: 'First name and last name are required' });
+      return;
+    }
+
+    if (password.length < 6) {
+      res.status(400).json({ error: 'Password must be at least 6 characters' });
+      return;
+    }
+
+    // Create the user as an owner
+    const createResult = await authService.createUser({
+      email,
+      password,
+      firstName,
+      lastName,
+      role: 'owner',
+    });
+
+    if (!createResult.success) {
+      res.status(400).json({ error: createResult.error });
+      return;
+    }
+
+    // Auto-login after signup
+    const deviceInfo = req.headers['user-agent'] || undefined;
+    const ipAddress = req.ip || req.socket.remoteAddress || undefined;
+    const loginResult = await authService.loginUser(email, password, deviceInfo, ipAddress);
+
+    if (!loginResult.success) {
+      // User created but login failed — unlikely but handle gracefully
+      res.status(201).json({
+        token: null,
+        user: createResult.user,
+        restaurants: [],
+      });
+      return;
+    }
+
+    res.status(201).json({
+      token: loginResult.token,
+      user: loginResult.user,
+      restaurants: loginResult.restaurants,
+    });
+  } catch (error) {
+    console.error('Signup error:', error);
+    res.status(500).json({ error: 'Signup failed' });
+  }
+});
+
 // Login with email/password
 router.post('/login', async (req: Request, res: Response) => {
   try {
