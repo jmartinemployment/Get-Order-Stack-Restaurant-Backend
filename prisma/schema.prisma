@@ -1043,6 +1043,35 @@ model TimecardEditRequest {
   @@map("timecard_edit_requests")
 }
 
+model ScheduleTemplate {
+  id            String          @id @default(uuid())
+  restaurantId  String          @map("restaurant_id")
+  name          String
+  createdBy     String          @map("created_by")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  shifts        TemplateShift[]
+
+  @@index([restaurantId])
+  @@map("schedule_templates")
+}
+
+model TemplateShift {
+  id              String           @id @default(uuid())
+  templateId      String           @map("template_id")
+  staffPinId      String           @map("staff_pin_id")
+  staffName       String           @map("staff_name")
+  dayOfWeek       Int              @map("day_of_week") // 0=Sunday .. 6=Saturday
+  startTime       String           @db.VarChar(5) @map("start_time")
+  endTime         String           @db.VarChar(5) @map("end_time")
+  position        String           @default("server")
+  breakMinutes    Int              @default(0) @map("break_minutes")
+  template        ScheduleTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@map("template_shifts")
+}
+
 model Station {
   id           String   @id @default(uuid())
   restaurantId String   @map("restaurant_id")

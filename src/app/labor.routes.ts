@@ -1210,4 +1210,337 @@ router.post('/:restaurantId/staff/auto-clock-out', async (req: Request, res: Res
   }
 });
 
+// ============ Schedule Templates ============
+
+// GET /:restaurantId/staff/schedule-templates
+router.get('/:restaurantId/staff/schedule-templates', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const templates = await prisma.scheduleTemplate.findMany({
+      where: { restaurantId },
+      include: { shifts: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(templates.map((t) => ({
+      id: t.id,
+      restaurantId: t.restaurantId,
+      name: t.name,
+      shifts: t.shifts.map((s) => ({
+        staffPinId: s.staffPinId,
+        staffName: s.staffName,
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        position: s.position,
+        breakMinutes: s.breakMinutes,
+      })),
+      createdBy: t.createdBy,
+      createdAt: t.createdAt.toISOString(),
+    })));
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching schedule templates:', error);
+    res.status(500).json({ error: 'Failed to fetch schedule templates' });
+  }
+});
+
+// POST /:restaurantId/staff/schedule-templates — save current week as template
+router.post('/:restaurantId/staff/schedule-templates', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { name, weekStartDate } = req.body as { name: string; weekStartDate: string };
+
+    if (!name?.trim()) {
+      res.status(400).json({ error: 'Template name is required' });
+      return;
+    }
+    if (!weekStartDate) {
+      res.status(400).json({ error: 'weekStartDate is required' });
+      return;
+    }
+
+    // Get all shifts for the specified week
+    const weekStart = new Date(weekStartDate + 'T00:00:00');
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const shifts = await prisma.shift.findMany({
+      where: {
+        restaurantId,
+        date: { gte: weekStart, lte: weekEnd },
+      },
+      include: { staffPin: { select: { name: true } } },
+    });
+
+    if (shifts.length === 0) {
+      res.status(400).json({ error: 'No shifts found for this week' });
+      return;
+    }
+
+    // Create template with shifts
+    const template = await prisma.scheduleTemplate.create({
+      data: {
+        restaurantId,
+        name: name.trim(),
+        createdBy: 'manager',
+        shifts: {
+          create: shifts.map((s) => ({
+            staffPinId: s.staffPinId,
+            staffName: s.staffPin.name,
+            dayOfWeek: s.date.getDay(),
+            startTime: s.startTime,
+            endTime: s.endTime,
+            position: s.position,
+            breakMinutes: s.breakMinutes,
+          })),
+        },
+      },
+      include: { shifts: true },
+    });
+
+    res.status(201).json({
+      id: template.id,
+      restaurantId: template.restaurantId,
+      name: template.name,
+      shifts: template.shifts.map((s) => ({
+        staffPinId: s.staffPinId,
+        staffName: s.staffName,
+        dayOfWeek: s.dayOfWeek,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        position: s.position,
+        breakMinutes: s.breakMinutes,
+      })),
+      createdBy: template.createdBy,
+      createdAt: template.createdAt.toISOString(),
+    });
+  } catch (error: unknown) {
+    console.error('[Labor] Error saving schedule template:', error);
+    res.status(500).json({ error: 'Failed to save schedule template' });
+  }
+});
+
+// POST /:restaurantId/staff/schedule-templates/:templateId/apply — apply template to a week
+router.post('/:restaurantId/staff/schedule-templates/:templateId/apply', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, templateId } = req.params;
+    const { weekStartDate } = req.body as { weekStartDate: string };
+
+    if (!weekStartDate) {
+      res.status(400).json({ error: 'weekStartDate is required' });
+      return;
+    }
+
+    const template = await prisma.scheduleTemplate.findFirst({
+      where: { id: templateId, restaurantId },
+      include: { shifts: true },
+    });
+
+    if (!template) {
+      res.status(404).json({ error: 'Template not found' });
+      return;
+    }
+
+    const weekStart = new Date(weekStartDate + 'T00:00:00');
+
+    // Create shifts for each template shift
+    const createdShifts = await prisma.$transaction(
+      template.shifts.map((ts) => {
+        const shiftDate = new Date(weekStart);
+        shiftDate.setDate(shiftDate.getDate() + ts.dayOfWeek);
+
+        return prisma.shift.create({
+          data: {
+            restaurantId,
+            staffPinId: ts.staffPinId,
+            date: shiftDate,
+            startTime: ts.startTime,
+            endTime: ts.endTime,
+            position: ts.position,
+            breakMinutes: ts.breakMinutes,
+          },
+          include: { staffPin: { select: { name: true, role: true } } },
+        });
+      }),
+    );
+
+    res.status(201).json(createdShifts.map((s) => ({
+      id: s.id,
+      restaurantId: s.restaurantId,
+      staffPinId: s.staffPinId,
+      staffName: s.staffPin.name,
+      staffRole: s.staffPin.role,
+      date: s.date.toISOString().split('T')[0],
+      startTime: s.startTime,
+      endTime: s.endTime,
+      position: s.position,
+      breakMinutes: s.breakMinutes,
+      notes: s.notes,
+      isPublished: s.isPublished,
+    })));
+  } catch (error: unknown) {
+    console.error('[Labor] Error applying schedule template:', error);
+    res.status(500).json({ error: 'Failed to apply schedule template' });
+  }
+});
+
+// DELETE /:restaurantId/staff/schedule-templates/:templateId
+router.delete('/:restaurantId/staff/schedule-templates/:templateId', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, templateId } = req.params;
+
+    const template = await prisma.scheduleTemplate.findFirst({
+      where: { id: templateId, restaurantId },
+    });
+
+    if (!template) {
+      res.status(404).json({ error: 'Template not found' });
+      return;
+    }
+
+    await prisma.scheduleTemplate.delete({ where: { id: templateId } });
+    res.status(204).send();
+  } catch (error: unknown) {
+    console.error('[Labor] Error deleting schedule template:', error);
+    res.status(500).json({ error: 'Failed to delete schedule template' });
+  }
+});
+
+// ============ Copy Previous Week ============
+
+// POST /:restaurantId/staff/copy-week
+router.post('/:restaurantId/staff/copy-week', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { targetWeekStart } = req.body as { targetWeekStart: string };
+
+    if (!targetWeekStart) {
+      res.status(400).json({ error: 'targetWeekStart is required' });
+      return;
+    }
+
+    const targetStart = new Date(targetWeekStart + 'T00:00:00');
+
+    // Calculate previous week dates
+    const prevStart = new Date(targetStart);
+    prevStart.setDate(prevStart.getDate() - 7);
+    const prevEnd = new Date(prevStart);
+    prevEnd.setDate(prevEnd.getDate() + 6);
+    prevEnd.setHours(23, 59, 59, 999);
+
+    const prevShifts = await prisma.shift.findMany({
+      where: {
+        restaurantId,
+        date: { gte: prevStart, lte: prevEnd },
+      },
+      include: { staffPin: { select: { name: true, role: true } } },
+    });
+
+    if (prevShifts.length === 0) {
+      res.status(400).json({ error: 'No shifts found in previous week' });
+      return;
+    }
+
+    // Create new shifts offset by +7 days
+    const createdShifts = await prisma.$transaction(
+      prevShifts.map((s) => {
+        const newDate = new Date(s.date);
+        newDate.setDate(newDate.getDate() + 7);
+
+        return prisma.shift.create({
+          data: {
+            restaurantId,
+            staffPinId: s.staffPinId,
+            date: newDate,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            position: s.position,
+            breakMinutes: s.breakMinutes,
+          },
+          include: { staffPin: { select: { name: true, role: true } } },
+        });
+      }),
+    );
+
+    res.status(201).json(createdShifts.map((s) => ({
+      id: s.id,
+      restaurantId: s.restaurantId,
+      staffPinId: s.staffPinId,
+      staffName: s.staffPin.name,
+      staffRole: s.staffPin.role,
+      date: s.date.toISOString().split('T')[0],
+      startTime: s.startTime,
+      endTime: s.endTime,
+      position: s.position,
+      breakMinutes: s.breakMinutes,
+      notes: s.notes,
+      isPublished: s.isPublished,
+    })));
+  } catch (error: unknown) {
+    console.error('[Labor] Error copying previous week:', error);
+    res.status(500).json({ error: 'Failed to copy previous week' });
+  }
+});
+
+// ============ Live Labor Snapshot ============
+
+// GET /:restaurantId/staff/labor-live
+router.get('/:restaurantId/staff/labor-live', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    // Get all currently clocked-in staff
+    const activeClocks = await prisma.timeEntry.findMany({
+      where: {
+        restaurantId,
+        clockOut: null,
+      },
+    });
+
+    const clockedInCount = activeClocks.length;
+
+    // Estimate hourly cost ($15/hr default — in production, use staff hourly rates)
+    const hourlyRate = 15;
+    const currentHourlyCost = Math.round(clockedInCount * hourlyRate * 100) / 100;
+
+    // Get today's revenue
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayOrders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        createdAt: { gte: todayStart },
+        status: { not: 'cancelled' },
+      },
+      select: { total: true },
+    });
+
+    const todayRevenue = todayOrders.reduce(
+      (sum, o) => sum + Number(o.total ?? 0),
+      0,
+    );
+
+    // Calculate labor % and projected daily cost
+    const laborPercent = todayRevenue > 0
+      ? Math.round((currentHourlyCost * (new Date().getHours() || 1)) / todayRevenue * 10000) / 100
+      : 0;
+
+    // Project: assume restaurant open 12 hours
+    const projectedDailyLaborCost = Math.round(currentHourlyCost * 12 * 100) / 100;
+
+    res.json({
+      currentHourlyCost,
+      clockedInCount,
+      todayRevenue: Math.round(todayRevenue * 100) / 100,
+      laborPercent,
+      projectedDailyLaborCost,
+    });
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching live labor snapshot:', error);
+    res.status(500).json({ error: 'Failed to fetch live labor snapshot' });
+  }
+});
+
 export default router;
