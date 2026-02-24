@@ -81,6 +81,13 @@ model Restaurant {
   foodCostRecipes      FoodCostRecipe[]
   locationGroupMemberships LocationGroupMember[]
 
+  // Payment Connect (Stripe Connect / PayPal Partner Referrals)
+  stripeConnectedAccountId  String?  @map("stripe_connected_account_id")
+  paypalMerchantId          String?  @map("paypal_merchant_id")
+  paymentProcessor          String?  @map("payment_processor")  // 'stripe' | 'paypal' | 'none'
+  platformFeePercent        Float    @default(2.9) @map("platform_fee_percent")
+  platformFeeFixed          Int      @default(30)  @map("platform_fee_fixed")  // cents
+
   @@map("restaurants")
 }
 

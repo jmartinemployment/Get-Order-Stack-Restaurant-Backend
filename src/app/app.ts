@@ -29,6 +29,7 @@ import aiAdminRoutes from './ai-admin.routes';
 import foodCostRoutes from './food-cost.routes';
 import multiLocationRoutes from './multi-location.routes';
 import onboardingRoutes from './onboarding.routes';
+import paymentConnectRoutes from './payment-connect.routes';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
@@ -335,6 +336,7 @@ app.use('/api/restaurant', printerProfileRoutes);  // Printer profile CRUD
 app.use('/api/restaurant', peripheralRoutes);  // Peripheral device CRUD
 app.use('/api/restaurant', kioskProfileRoutes);  // Kiosk profile CRUD
 app.use('/api/restaurant', menuRoutes);
+app.use('/api/restaurant', paymentConnectRoutes);  // Stripe Connect + PayPal Partner Referrals
 app.use('/api/restaurant', onboardingRoutes);  // Merchant profile + business hours
 app.use('/api/platform', onboardingRoutes);    // Menu templates + tax rate lookup
 app.use('/api/onboarding', onboardingRoutes);  // Create new merchant

@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { calculatePlatformFee } from '../config/platform-fees';
 
 const prisma = new PrismaClient();
 
@@ -96,6 +97,36 @@ export const paypalService = {
 
       const token = await paypalService.getAccessToken();
 
+      const purchaseUnit: Record<string, unknown> = {
+        reference_id: orderId,
+        description: `Order ${order.orderNumber} — ${order.restaurant.name}`,
+        amount: {
+          currency_code: currency,
+          value: amount.toFixed(2),
+        },
+      };
+
+      // Add platform fee when merchant has a PayPal connected account
+      if (order.restaurant.paypalMerchantId) {
+        const amountCents = Math.round(amount * 100);
+        const feeCents = calculatePlatformFee(
+          amountCents,
+          order.restaurant.platformFeePercent,
+          order.restaurant.platformFeeFixed,
+        );
+        purchaseUnit.payee = {
+          merchant_id: order.restaurant.paypalMerchantId,
+        };
+        purchaseUnit.payment_instruction = {
+          platform_fees: [{
+            amount: {
+              currency_code: currency,
+              value: (feeCents / 100).toFixed(2),
+            },
+          }],
+        };
+      }
+
       const response = await fetch(`${PAYPAL_API_BASE}/v2/checkout/orders`, {
         method: 'POST',
         headers: {
@@ -104,14 +135,7 @@ export const paypalService = {
         },
         body: JSON.stringify({
           intent: 'CAPTURE',
-          purchase_units: [{
-            reference_id: orderId,
-            description: `Order ${order.orderNumber} — ${order.restaurant.name}`,
-            amount: {
-              currency_code: currency,
-              value: amount.toFixed(2),
-            },
-          }],
+          purchase_units: [purchaseUnit],
         }),
       });
 

@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { PrismaClient } from '@prisma/client';
+import { calculatePlatformFee } from '../config/platform-fees';
 
 const prisma = new PrismaClient();
 
@@ -52,7 +53,7 @@ export const stripeService = {
 
       const amountInCents = Math.round(amount * 100);
 
-      const paymentIntent = await stripe.paymentIntents.create({
+      const intentParams: Stripe.PaymentIntentCreateParams = {
         amount: amountInCents,
         currency,
         metadata: {
@@ -65,7 +66,22 @@ export const stripeService = {
         automatic_payment_methods: {
           enabled: true
         }
-      });
+      };
+
+      // Add platform fee + transfer when merchant has a Stripe connected account
+      if (order.restaurant.stripeConnectedAccountId) {
+        const fee = calculatePlatformFee(
+          amountInCents,
+          order.restaurant.platformFeePercent,
+          order.restaurant.platformFeeFixed,
+        );
+        intentParams.application_fee_amount = fee;
+        intentParams.transfer_data = {
+          destination: order.restaurant.stripeConnectedAccountId,
+        };
+      }
+
+      const paymentIntent = await stripe.paymentIntents.create(intentParams);
 
       await prisma.order.update({
         where: { id: orderId },
