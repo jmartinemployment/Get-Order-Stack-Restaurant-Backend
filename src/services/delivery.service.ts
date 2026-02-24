@@ -568,6 +568,79 @@ export const deliveryService = {
     }
   },
 
+  async getActiveAssignments(restaurantId: string) {
+    const activeStatuses: DispatchStatus[] = [
+      'QUOTED', 'DISPATCH_REQUESTED', 'DRIVER_ASSIGNED',
+      'DRIVER_EN_ROUTE_TO_PICKUP', 'DRIVER_AT_PICKUP', 'PICKED_UP',
+      'DRIVER_EN_ROUTE_TO_DROPOFF', 'DRIVER_AT_DROPOFF',
+    ];
+
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        orderType: 'delivery',
+        dispatchStatus: { in: activeStatuses },
+      },
+      include: ORDER_INCLUDE,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return orders.map(order => ({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      provider: order.deliveryProvider,
+      dispatchStatus: order.dispatchStatus,
+      deliveryExternalId: order.deliveryExternalId,
+      trackingUrl: order.deliveryTrackingUrl,
+      estimatedDeliveryAt: order.deliveryEstimatedAt,
+      dispatchedAt: order.dispatchedAt,
+      customerName: order.customer
+        ? `${order.customer.firstName ?? ''} ${order.customer.lastName ?? ''}`.trim()
+        : null,
+      deliveryAddress: order.deliveryAddress,
+      total: order.total,
+    }));
+  },
+
+  async getDrivers(restaurantId: string) {
+    // No dedicated Driver model — derive from active delivery orders with assigned drivers
+    const driverStatuses: DispatchStatus[] = [
+      'DRIVER_ASSIGNED', 'DRIVER_EN_ROUTE_TO_PICKUP', 'DRIVER_AT_PICKUP',
+      'PICKED_UP', 'DRIVER_EN_ROUTE_TO_DROPOFF', 'DRIVER_AT_DROPOFF',
+    ];
+
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        orderType: 'delivery',
+        dispatchStatus: { in: driverStatuses },
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        deliveryProvider: true,
+        dispatchStatus: true,
+        deliveryExternalId: true,
+        deliveryLat: true,
+        deliveryLng: true,
+        deliveryEstimatedAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return orders.map(order => ({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      provider: order.deliveryProvider,
+      dispatchStatus: order.dispatchStatus,
+      deliveryExternalId: order.deliveryExternalId,
+      location: order.deliveryLat && order.deliveryLng
+        ? { lat: Number(order.deliveryLat), lng: Number(order.deliveryLng) }
+        : null,
+      estimatedDeliveryAt: order.deliveryEstimatedAt,
+    }));
+  },
+
   async getWebhookVerificationSecret(
     provider: 'doordash' | 'uber',
     deliveryExternalId: string,

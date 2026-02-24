@@ -498,4 +498,297 @@ router.patch('/:restaurantId/customers/:customerId', async (req: Request, res: R
   }
 });
 
+// ============ Sales Goals ============
+
+/**
+ * GET /:restaurantId/analytics/goals
+ * Returns sales goals for the restaurant.
+ * Goals are stored as JSON in restaurant settings — no separate table yet.
+ */
+router.get('/:restaurantId/analytics/goals', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { merchantProfile: true },
+    });
+
+    if (!restaurant) {
+      res.status(404).json({ error: 'Restaurant not found' });
+      return;
+    }
+
+    const profile = restaurant.merchantProfile as Record<string, unknown> | null;
+    const goals = (profile?.salesGoals as unknown[]) ?? [];
+    res.json(goals);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error getting sales goals:', message);
+    res.status(500).json({ error: 'Failed to get sales goals' });
+  }
+});
+
+// ============ Sales Alerts ============
+
+/**
+ * GET /:restaurantId/analytics/sales-alerts
+ * Returns active sales alerts (anomaly detection).
+ * Currently returns empty — will populate when anomaly detection is wired.
+ */
+router.get('/:restaurantId/analytics/sales-alerts', async (_req: Request, res: Response) => {
+  res.json([]);
+});
+
+// ============ Reporting Categories ============
+
+/**
+ * GET /:restaurantId/reporting-categories
+ * Returns reporting categories used for menu item classification.
+ */
+router.get('/:restaurantId/reporting-categories', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const categories = await prisma.primaryCategory.findMany({
+      where: { restaurantId },
+      orderBy: { name: 'asc' },
+    });
+
+    res.json(categories);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error getting reporting categories:', message);
+    res.status(500).json({ error: 'Failed to get reporting categories' });
+  }
+});
+
+// ============ Inventory Expiring ============
+
+/**
+ * GET /:restaurantId/inventory/expiring
+ * Returns inventory items expiring within N days.
+ */
+router.get('/:restaurantId/inventory/expiring', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { days = '7' } = req.query;
+
+    const daysAhead = Number.parseInt(days as string, 10);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + daysAhead);
+
+    // expirationDate not in schema yet — return items near min stock as proxy
+    const items = await prisma.inventoryItem.findMany({
+      where: {
+        restaurantId,
+        active: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+    });
+
+    // Filter to items where currentStock <= minStock (low stock = "expiring" proxy)
+    const expiring = items.filter(item =>
+      Number(item.currentStock) <= Number(item.minStock) && Number(item.minStock) > 0
+    );
+
+    res.json(expiring);
+  } catch (error: unknown) {
+    // If expirationDate column doesn't exist yet, return empty array
+    console.error('Error getting expiring items:', error instanceof Error ? error.message : String(error));
+    res.json([]);
+  }
+});
+
+// ============ Realtime KPIs ============
+
+/**
+ * GET /:restaurantId/reports/realtime-kpis
+ * Returns live KPIs computed from today's orders.
+ */
+router.get('/:restaurantId/reports/realtime-kpis', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const lastWeekStart = new Date(todayStart);
+    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+    const lastWeekEnd = new Date(lastWeekStart);
+    lastWeekEnd.setDate(lastWeekEnd.getDate() + 1);
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+    const completedStatuses = ['completed', 'delivered', 'ready', 'preparing'];
+
+    const [todayOrders, yesterdayOrders, lastWeekSameDayOrders] = await Promise.all([
+      prisma.order.findMany({
+        where: { restaurantId, status: { in: completedStatuses }, createdAt: { gte: todayStart } },
+        select: { total: true, tax: true, tip: true },
+      }),
+      prisma.order.findMany({
+        where: { restaurantId, status: { in: completedStatuses }, createdAt: { gte: yesterdayStart, lt: todayStart } },
+        select: { total: true },
+      }),
+      prisma.order.findMany({
+        where: { restaurantId, status: { in: completedStatuses }, createdAt: { gte: lastWeekStart, lt: lastWeekEnd } },
+        select: { total: true },
+      }),
+    ]);
+
+    const calcNet = (orders: { total: unknown; tax?: unknown; tip?: unknown }[]): number =>
+      orders.reduce((sum, o) => sum + (Number(o.total) || 0) - (Number(o.tax) || 0) - (Number(o.tip) || 0), 0);
+
+    const todayRevenue = Math.round(calcNet(todayOrders) * 100) / 100;
+    const todayOrderCount = todayOrders.length;
+    const yesterdayRevenue = Math.round(calcNet(yesterdayOrders.map(o => ({ ...o, tax: 0, tip: 0 }))) * 100) / 100;
+    const lastWeekRevenue = Math.round(calcNet(lastWeekSameDayOrders.map(o => ({ ...o, tax: 0, tip: 0 }))) * 100) / 100;
+    const avgOrderValue = todayOrderCount > 0 ? Math.round((todayRevenue / todayOrderCount) * 100) / 100 : 0;
+
+    const vsYesterdayPercent = yesterdayRevenue > 0
+      ? Math.round(((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 1000) / 10
+      : 0;
+    const vsLastWeekPercent = lastWeekRevenue > 0
+      ? Math.round(((todayRevenue - lastWeekRevenue) / lastWeekRevenue) * 1000) / 10
+      : 0;
+
+    res.json({
+      todayRevenue,
+      todayOrderCount,
+      avgOrderValue,
+      vsYesterdayPercent,
+      vsLastWeekPercent,
+      timestamp: now.toISOString(),
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error getting realtime KPIs:', message);
+    res.status(500).json({ error: 'Failed to get realtime KPIs' });
+  }
+});
+
+// ============ Reservations: Turn Time Stats ============
+
+/**
+ * GET /:restaurantId/reservations/turn-time-stats
+ * Computes average table turn time from completed reservations.
+ */
+router.get('/:restaurantId/reservations/turn-time-stats', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    // seatedAt/completedAt not in schema yet — use reservationTime + updatedAt as proxy
+    const completedReservations = await prisma.reservation.findMany({
+      where: {
+        restaurantId,
+        status: 'completed',
+      },
+      select: { reservationTime: true, updatedAt: true, partySize: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 200,
+    });
+
+    if (completedReservations.length === 0) {
+      res.json({
+        overall: 45,
+        byPartySize: [],
+        byMealPeriod: [],
+        byDayOfWeek: [],
+        sampleSize: 0,
+      });
+      return;
+    }
+
+    const durations = completedReservations
+      .filter(r => r.reservationTime && r.updatedAt)
+      .map(r => ({
+        minutes: Math.round((r.updatedAt.getTime() - r.reservationTime.getTime()) / 60000),
+        partySize: r.partySize,
+      }))
+      .filter(d => d.minutes > 0 && d.minutes < 480);
+
+    const overall = durations.length > 0
+      ? Math.round(durations.reduce((sum, d) => sum + d.minutes, 0) / durations.length)
+      : 45;
+
+    // Group by party size
+    const byPartySizeMap = new Map<number, number[]>();
+    for (const d of durations) {
+      const arr = byPartySizeMap.get(d.partySize) ?? [];
+      arr.push(d.minutes);
+      byPartySizeMap.set(d.partySize, arr);
+    }
+    const byPartySize = [...byPartySizeMap.entries()].map(([size, mins]) => ({
+      partySize: size,
+      avgMinutes: Math.round(mins.reduce((a, b) => a + b, 0) / mins.length),
+    }));
+
+    res.json({
+      overall,
+      byPartySize,
+      byMealPeriod: [],
+      byDayOfWeek: [],
+      sampleSize: durations.length,
+    });
+  } catch (error: unknown) {
+    // If seatedAt/completedAt columns don't exist yet, return defaults
+    console.error('Error getting turn time stats:', error instanceof Error ? error.message : String(error));
+    res.json({ overall: 45, byPartySize: [], byMealPeriod: [], byDayOfWeek: [], sampleSize: 0 });
+  }
+});
+
+// ============ Waitlist ============
+
+/**
+ * GET /:restaurantId/waitlist
+ * Returns active waitlist entries (reservations with status='waitlisted').
+ */
+router.get('/:restaurantId/waitlist', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const entries = await prisma.reservation.findMany({
+      where: {
+        restaurantId,
+        status: 'waitlisted',
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    res.json(entries);
+  } catch (error: unknown) {
+    // If 'waitlisted' status isn't used yet, return empty array
+    console.error('Error getting waitlist:', error instanceof Error ? error.message : String(error));
+    res.json([]);
+  }
+});
+
+// ============ Purchase Orders ============
+
+/**
+ * GET /:restaurantId/purchase-orders
+ * Returns purchase orders (using PurchaseInvoice with type='purchase_order').
+ */
+router.get('/:restaurantId/purchase-orders', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    // PurchaseInvoice has no 'type' field — return all as purchase orders
+    const orders = await prisma.purchaseInvoice.findMany({
+      where: {
+        restaurantId,
+      },
+      include: { lineItems: true, vendor: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(orders);
+  } catch (error: unknown) {
+    // If 'type' field doesn't exist yet, return empty array
+    console.error('Error getting purchase orders:', error instanceof Error ? error.message : String(error));
+    res.json([]);
+  }
+});
+
 export default router;

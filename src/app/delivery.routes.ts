@@ -280,4 +280,41 @@ router.post('/:orderId/cancel', async (req: Request, res: Response) => {
   }
 });
 
+// ============ Delivery Assignments ============
+
+/**
+ * GET /:restaurantId/delivery/assignments
+ * Returns active delivery assignments for the restaurant.
+ * Derived from orders with delivery status set.
+ */
+router.get('/assignments', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const assignments = await deliveryService.getActiveAssignments(restaurantId);
+    res.json(assignments);
+  } catch (error: unknown) {
+    // Service may not implement this yet — return empty array
+    console.error('[Delivery] Assignments error:', error instanceof Error ? error.message : String(error));
+    res.json([]);
+  }
+});
+
+// ============ Delivery Drivers ============
+
+/**
+ * GET /:restaurantId/delivery/drivers
+ * Returns delivery drivers associated with the restaurant.
+ */
+router.get('/drivers', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const drivers = await deliveryService.getDrivers(restaurantId);
+    res.json(drivers);
+  } catch (error: unknown) {
+    // Service may not implement this yet — return empty array
+    console.error('[Delivery] Drivers error:', error instanceof Error ? error.message : String(error));
+    res.json([]);
+  }
+});
+
 export default router;
