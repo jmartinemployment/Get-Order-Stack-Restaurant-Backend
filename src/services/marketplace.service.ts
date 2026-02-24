@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
-import { broadcastOrderEvent } from './socket.service';
+import { broadcastToSourceAndKDS } from './socket.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
 
 const prisma = new PrismaClient();
@@ -825,7 +825,7 @@ async function applyMarketplaceStatusToOrder(orderId: string, status: string): P
     include: ORDER_INCLUDE,
   });
 
-  broadcastOrderEvent(updated.restaurantId, 'order:updated', enrichOrderResponse(updated));
+  broadcastToSourceAndKDS(updated.restaurantId, updated.sourceDeviceId, 'order:updated', enrichOrderResponse(updated));
 }
 
 export const marketplaceService = {
@@ -1646,7 +1646,7 @@ export const marketplaceService = {
         });
 
         linkedOrderId = createdOrder.id;
-        broadcastOrderEvent(createdOrder.restaurantId, 'order:new', enrichOrderResponse(createdOrder));
+        broadcastToSourceAndKDS(createdOrder.restaurantId, createdOrder.sourceDeviceId, 'order:new', enrichOrderResponse(createdOrder));
       } else if (!linkedOrderId && normalized.items.length === 0) {
         const reason = 'Marketplace payload contained no items';
         await prisma.marketplaceOrder.update({

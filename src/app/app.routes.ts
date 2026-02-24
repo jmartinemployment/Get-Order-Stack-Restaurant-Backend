@@ -1906,6 +1906,88 @@ router.patch('/:restaurantId/orders/:orderId/items/:itemId/status', async (req: 
   }
 });
 
+// Batch mark items as ready (per-station partial completion)
+router.patch('/:restaurantId/orders/:orderId/items/ready', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId, orderId } = req.params;
+    const { itemIds, stationId, stationName } = req.body;
+
+    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+      res.status(400).json({ error: 'itemIds array is required' });
+      return;
+    }
+
+    // Update each item status to 'completed' (ready)
+    await prisma.orderItem.updateMany({
+      where: {
+        id: { in: itemIds },
+        orderId,
+      },
+      data: {
+        status: 'completed',
+        completedAt: new Date(),
+        fulfillmentStatus: 'SENT',
+      },
+    });
+
+    // Check if ALL items on the order are now completed
+    const remainingItems = await prisma.orderItem.count({
+      where: {
+        orderId,
+        status: { not: 'completed' },
+      },
+    });
+
+    const allReady = remainingItems === 0;
+
+    // If all items ready, auto-transition order to 'ready'
+    if (allReady) {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'ready' },
+      });
+    }
+
+    // Get updated item names for the notification
+    const updatedItems = await prisma.orderItem.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, menuItemName: true, status: true },
+    });
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, restaurantId },
+      include: ORDER_INCLUDE,
+    });
+
+    if (order) {
+      const enriched = enrichOrderResponse(order);
+
+      // Emit items:ready to source device only
+      if (order.sourceDeviceId) {
+        sendOrderEventToDevice(restaurantId, order.sourceDeviceId, 'items:ready', {
+          orderId,
+          stationId: stationId ?? '',
+          stationName: stationName ?? 'Station',
+          items: updatedItems.map(i => ({ id: i.id, name: i.menuItemName, status: i.status })),
+          allReady,
+        });
+      }
+
+      // Broadcast order:updated to source + KDS
+      broadcastToSourceAndKDS(order.restaurantId, order.sourceDeviceId, 'order:updated', enriched);
+    }
+
+    res.json({
+      itemIds,
+      allReady,
+      items: updatedItems,
+    });
+  } catch (error) {
+    console.error('Error marking items ready:', error);
+    res.status(500).json({ error: 'Failed to mark items as ready' });
+  }
+});
+
 router.delete('/:restaurantId/orders/:orderId', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;

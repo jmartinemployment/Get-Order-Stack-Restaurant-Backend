@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { broadcastOrderEvent } from './socket.service';
+import { broadcastOrderEvent, broadcastToSourceAndKDS } from './socket.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
 import {
   deliveryCredentialsService,
@@ -465,9 +465,9 @@ export const deliveryService = {
       include: ORDER_INCLUDE,
     });
 
-    // Broadcast the order update
+    // Broadcast the order update to source POS + KDS only
     const enriched = enrichOrderResponse(updated);
-    broadcastOrderEvent(updated.restaurantId, 'order:updated', enriched);
+    broadcastToSourceAndKDS(updated.restaurantId, updated.sourceDeviceId, 'order:updated', enriched);
 
     return result;
   },
@@ -514,7 +514,7 @@ export const deliveryService = {
       });
 
       const enriched = enrichOrderResponse(updated);
-      broadcastOrderEvent(updated.restaurantId, 'order:updated', enriched);
+      broadcastToSourceAndKDS(updated.restaurantId, updated.sourceDeviceId, 'order:updated', enriched);
     }
 
     return cancelled;
@@ -553,9 +553,9 @@ export const deliveryService = {
       include: ORDER_INCLUDE,
     });
 
-    // Broadcast order update via existing order:updated event
+    // Broadcast order update to source POS + KDS only
     const enriched = enrichOrderResponse(updated);
-    broadcastOrderEvent(updated.restaurantId, 'order:updated', enriched);
+    broadcastToSourceAndKDS(updated.restaurantId, updated.sourceDeviceId, 'order:updated', enriched);
 
     // Also send GPS ping via delivery:location_updated for live tracking
     if (driverInfo?.location) {

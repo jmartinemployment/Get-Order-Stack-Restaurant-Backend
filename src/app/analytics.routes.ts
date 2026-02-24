@@ -13,6 +13,63 @@ import { orderProfitService } from '../services/order-profit.service';
 const router = Router();
 const prisma = new PrismaClient();
 
+// ============ Today's Sales Stats (Home Dashboard) ============
+
+/**
+ * GET /:restaurantId/analytics/today-stats
+ * Returns net sales and order count for today vs yesterday
+ */
+router.get('/:restaurantId/analytics/today-stats', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+    const completedStatuses = ['completed', 'delivered', 'ready', 'preparing'];
+
+    const [todayOrders, yesterdayOrders] = await Promise.all([
+      prisma.order.findMany({
+        where: {
+          restaurantId,
+          status: { in: completedStatuses },
+          createdAt: { gte: todayStart },
+        },
+        select: { total: true, tax: true, tip: true, discount: true },
+      }),
+      prisma.order.findMany({
+        where: {
+          restaurantId,
+          status: { in: completedStatuses },
+          createdAt: { gte: yesterdayStart, lt: todayStart },
+        },
+        select: { total: true, tax: true, tip: true, discount: true },
+      }),
+    ]);
+
+    const sumNetSales = (orders: { total: unknown; tax: unknown; tip: unknown; discount: unknown }[]): number =>
+      orders.reduce((sum, o) => {
+        const total = Number(o.total) || 0;
+        const tax = Number(o.tax) || 0;
+        const tip = Number(o.tip) || 0;
+        return sum + (total - tax - tip);
+      }, 0);
+
+    res.json({
+      netSales: Math.round(sumNetSales(todayOrders) * 100) / 100,
+      orderCount: todayOrders.length,
+      priorDayNetSales: Math.round(sumNetSales(yesterdayOrders) * 100) / 100,
+      priorDayOrderCount: yesterdayOrders.length,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error getting today stats:', message);
+    res.status(500).json({ error: 'Failed to get today stats' });
+  }
+});
+
 // ============ Menu Engineering ============
 
 /**

@@ -265,13 +265,13 @@ export function broadcastToSourceAndKDS(restaurantId: string, sourceDeviceId: st
     const info = socketInfo.get(socketId);
     if (!info) continue;
 
-    // Send to: KDS devices always, POS only if it's the source device
+    // Send to: KDS devices always, POS/SOS only if it's the source device
     const isKDS = info.deviceType === 'kds';
-    const isPOS = info.deviceType === 'pos';
+    const isPOS = info.deviceType === 'pos' || info.deviceType === 'sos';
     const isSourceDevice = sourceDeviceId && info.deviceId === sourceDeviceId;
 
-    // POS devices only get notified if they created the order
-    // No sourceDeviceId = no POS notifications
+    // POS/SOS devices only get notified if they created the order
+    // No sourceDeviceId = no POS/SOS notifications
     if (isPOS && !isSourceDevice) {
       skippedCount++;
       console.log(`[Socket.io] SKIPPED POS ${info.deviceId} (not source device)`);
