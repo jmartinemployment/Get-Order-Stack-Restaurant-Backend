@@ -84,9 +84,10 @@ model Restaurant {
   // Payment Connect (Stripe Connect / PayPal Partner Referrals)
   stripeConnectedAccountId  String?  @map("stripe_connected_account_id")
   paypalMerchantId          String?  @map("paypal_merchant_id")
+  planTier                  String   @default("free") @map("plan_tier")  // 'free' | 'plus' | 'premium'
   paymentProcessor          String?  @map("payment_processor")  // 'stripe' | 'paypal' | 'none'
-  platformFeePercent        Float    @default(2.9) @map("platform_fee_percent")
-  platformFeeFixed          Int      @default(30)  @map("platform_fee_fixed")  // cents
+  platformFeePercent        Float    @default(2.6) @map("platform_fee_percent")
+  platformFeeFixed          Int      @default(10)  @map("platform_fee_fixed")  // cents
 
   @@map("restaurants")
 }

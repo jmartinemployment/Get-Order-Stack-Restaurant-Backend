@@ -1,7 +1,7 @@
 export const PLATFORM_FEE_TIERS = {
-  free:    { percent: 2.9, fixedCents: 30 },
-  plus:    { percent: 2.6, fixedCents: 10 },
-  premium: { percent: 2.3, fixedCents: 10 },
+  free:    { percent: 2.6, fixedCents: 10 },
+  plus:    { percent: 2.5, fixedCents: 10 },
+  premium: { percent: 2.4, fixedCents: 10 },
 } as const;
 
 export type PlatformFeeTier = keyof typeof PLATFORM_FEE_TIERS;

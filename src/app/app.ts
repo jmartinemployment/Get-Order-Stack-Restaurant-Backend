@@ -30,6 +30,7 @@ import foodCostRoutes from './food-cost.routes';
 import multiLocationRoutes from './multi-location.routes';
 import onboardingRoutes from './onboarding.routes';
 import paymentConnectRoutes from './payment-connect.routes';
+import subscriptionRoutes from './subscription.routes';
 import analyticsStandaloneRoutes from './analytics-standalone.routes';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
@@ -339,6 +340,7 @@ app.use('/api/restaurant', peripheralRoutes);  // Peripheral device CRUD
 app.use('/api/restaurant', kioskProfileRoutes);  // Kiosk profile CRUD
 app.use('/api/restaurant', menuRoutes);
 app.use('/api/restaurant', paymentConnectRoutes);  // Stripe Connect + PayPal Partner Referrals
+app.use('/api/restaurant', subscriptionRoutes);  // Subscription plan tier CRUD
 app.use('/api/restaurant', onboardingRoutes);  // Merchant profile + business hours
 app.use('/api/platform', onboardingRoutes);    // Menu templates + tax rate lookup
 app.use('/api/onboarding', onboardingRoutes);  // Create new merchant
