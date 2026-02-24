@@ -363,8 +363,36 @@ router.get('/:restaurantId/inventory/report', async (req: Request, res: Response
 });
 
 /**
+ * GET /:restaurantId/inventory/expiring
+ * Returns inventory items near or below minimum stock.
+ */
+router.get('/:restaurantId/inventory/expiring', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const items = await prisma.inventoryItem.findMany({
+      where: {
+        restaurantId,
+        active: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+    });
+
+    const expiring = items.filter(item =>
+      Number(item.currentStock) <= Number(item.minStock) && Number(item.minStock) > 0
+    );
+
+    res.json(expiring);
+  } catch (error: unknown) {
+    console.error('Error getting expiring items:', error instanceof Error ? error.message : String(error));
+    res.json([]);
+  }
+});
+
+/**
  * GET /:restaurantId/inventory/:itemId
- * Get a single inventory item (must be after /alerts, /predictions, /report)
+ * Get a single inventory item (must be after /alerts, /predictions, /report, /expiring)
  */
 router.get('/:restaurantId/inventory/:itemId', async (req: Request, res: Response) => {
   try {
@@ -560,44 +588,6 @@ router.get('/:restaurantId/reporting-categories', async (req: Request, res: Resp
     const message = error instanceof Error ? error.message : String(error);
     console.error('Error getting reporting categories:', message);
     res.status(500).json({ error: 'Failed to get reporting categories' });
-  }
-});
-
-// ============ Inventory Expiring ============
-
-/**
- * GET /:restaurantId/inventory/expiring
- * Returns inventory items expiring within N days.
- */
-router.get('/:restaurantId/inventory/expiring', async (req: Request, res: Response) => {
-  try {
-    const { restaurantId } = req.params;
-    const { days = '7' } = req.query;
-
-    const daysAhead = Number.parseInt(days as string, 10);
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() + daysAhead);
-
-    // expirationDate not in schema yet — return items near min stock as proxy
-    const items = await prisma.inventoryItem.findMany({
-      where: {
-        restaurantId,
-        active: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 50,
-    });
-
-    // Filter to items where currentStock <= minStock (low stock = "expiring" proxy)
-    const expiring = items.filter(item =>
-      Number(item.currentStock) <= Number(item.minStock) && Number(item.minStock) > 0
-    );
-
-    res.json(expiring);
-  } catch (error: unknown) {
-    // If expirationDate column doesn't exist yet, return empty array
-    console.error('Error getting expiring items:', error instanceof Error ? error.message : String(error));
-    res.json([]);
   }
 });
 
