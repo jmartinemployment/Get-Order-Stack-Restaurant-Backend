@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { MENU_TEMPLATES } from '../data/menu-templates';
 import { authService } from '../services/auth.service';
+import { optionalAuth } from '../middleware/auth.middleware';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -181,7 +182,10 @@ router.post('/:restaurantId/business-hours', async (req: Request, res: Response)
 // ============ Onboarding Create ============
 
 // POST /api/onboarding/create
-router.post('/create', async (req: Request, res: Response) => {
+// Supports two flows:
+// 1. Authenticated (JWT present from /signup) — uses existing user, creates restaurant + links
+// 2. Unauthenticated (ownerEmail + ownerPassword) — creates user + restaurant in one transaction
+router.post('/create', optionalAuth, async (req: Request, res: Response) => {
   try {
     const {
       businessName,
@@ -199,9 +203,30 @@ router.post('/create', async (req: Request, res: Response) => {
       ownerPassword,
     } = req.body;
 
-    if (!businessName || !ownerEmail || !ownerPassword) {
+    if (!businessName) {
+      res.status(400).json({ error: 'Business name is required' });
+      return;
+    }
+
+    // Determine user source: authenticated JWT or inline creation
+    const isAuthenticated = !!req.user;
+
+    if (!isAuthenticated && (!ownerEmail || !ownerPassword)) {
       res.status(400).json({ error: 'Business name, owner email, and password are required' });
       return;
+    }
+
+    // Look up authenticated user if present
+    let existingUser: { id: string; email: string; firstName: string | null; lastName: string | null } | null = null;
+    if (isAuthenticated) {
+      existingUser = await prisma.user.findUnique({
+        where: { id: req.user!.userId },
+        select: { id: true, email: true, firstName: true, lastName: true },
+      });
+      if (!existingUser) {
+        res.status(401).json({ error: 'Authenticated user not found' });
+        return;
+      }
     }
 
     const slug = businessName
@@ -240,23 +265,31 @@ router.post('/create', async (req: Request, res: Response) => {
         },
       });
 
-      // Create user
-      const hashedPassword = await authService.hashPassword(ownerPassword);
-      const user = await tx.user.create({
-        data: {
-          email: ownerEmail,
-          passwordHash: hashedPassword,
-          firstName: ownerPin?.displayName?.split(' ')[0] ?? 'Owner',
-          lastName: ownerPin?.displayName?.split(' ').slice(1).join(' ') ?? '',
-          role: 'owner',
-          isActive: true,
-        },
-      });
+      // Create or reuse user
+      let userId: string;
+      if (existingUser) {
+        // Authenticated flow — reuse existing user from signup
+        userId = existingUser.id;
+      } else {
+        // Legacy flow — create user inline
+        const hashedPassword = await authService.hashPassword(ownerPassword);
+        const user = await tx.user.create({
+          data: {
+            email: ownerEmail,
+            passwordHash: hashedPassword,
+            firstName: ownerPin?.displayName?.split(' ')[0] ?? 'Owner',
+            lastName: ownerPin?.displayName?.split(' ').slice(1).join(' ') ?? '',
+            role: 'owner',
+            isActive: true,
+          },
+        });
+        userId = user.id;
+      }
 
       // Create user-restaurant access
       await tx.userRestaurantAccess.create({
         data: {
-          userId: user.id,
+          userId,
           restaurantId: restaurant.id,
           role: 'owner',
         },
@@ -319,14 +352,28 @@ router.post('/create', async (req: Request, res: Response) => {
         }
       }
 
-      return { restaurant, user, device };
+      return { restaurant, userId, device };
     });
 
-    // Create session + JWT outside transaction (authService uses its own prisma)
+    // For authenticated flow, return existing token info (no re-login needed)
+    if (isAuthenticated) {
+      res.status(201).json({
+        restaurantId: result.restaurant.id,
+        deviceId: result.device.id,
+        token: null, // Frontend already has a valid token
+        restaurant: {
+          id: result.restaurant.id,
+          name: result.restaurant.name,
+          slug: result.restaurant.slug,
+        },
+      });
+      return;
+    }
+
+    // Legacy flow: create session + JWT
     const loginResult = await authService.loginUser(ownerEmail, ownerPassword, 'Onboarding Wizard');
 
     if (!loginResult.success) {
-      // Restaurant created but login failed — still return restaurant ID
       res.status(201).json({
         restaurantId: result.restaurant.id,
         deviceId: result.device.id,
