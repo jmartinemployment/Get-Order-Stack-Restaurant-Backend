@@ -143,6 +143,195 @@ const tacoTruckCategories: MenuTemplateCategory[] = [
   },
 ];
 
+const americanGrillCategories: MenuTemplateCategory[] = [
+  {
+    name: 'Starters', sortOrder: 1,
+    items: [
+      { name: 'Fried Chicken Tenders', description: 'Hand-breaded tenders with honey mustard', price: 11, sortOrder: 1, prepTimeMinutes: 10, sku: null, durationMinutes: null },
+      { name: 'Loaded Potato Skins', description: 'Cheddar, bacon, sour cream, chives', price: 10, sortOrder: 2, prepTimeMinutes: 12, sku: null, durationMinutes: null },
+      { name: 'Mac & Cheese Bites', description: 'Crispy fried mac and cheese', price: 9, sortOrder: 3, prepTimeMinutes: 8, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Mains', sortOrder: 2,
+    items: [
+      { name: 'Grilled Ribeye', description: '12 oz ribeye with garlic butter, seasonal vegetables', price: 28, sortOrder: 1, prepTimeMinutes: 15, sku: null, durationMinutes: null },
+      { name: 'Southern Fried Chicken', description: 'Half chicken, collard greens, cornbread', price: 18, sortOrder: 2, prepTimeMinutes: 15, sku: null, durationMinutes: null },
+      { name: 'Smothered Pork Chops', description: 'Pan-fried chops with onion gravy, mashed potatoes', price: 19, sortOrder: 3, prepTimeMinutes: 14, sku: null, durationMinutes: null },
+      { name: 'Shrimp & Grits', description: 'Sautéed shrimp, creamy stone-ground grits', price: 17, sortOrder: 4, prepTimeMinutes: 12, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Drinks', sortOrder: 3,
+    items: [
+      { name: 'Sweet Tea', description: 'Southern-style sweet iced tea', price: 3, sortOrder: 1, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+      { name: 'Lemonade', description: 'Fresh-squeezed lemonade', price: 4, sortOrder: 2, prepTimeMinutes: 2, sku: null, durationMinutes: null },
+    ],
+  },
+];
+
+const bbqCategories: MenuTemplateCategory[] = [
+  {
+    name: 'Platters', sortOrder: 1,
+    items: [
+      { name: 'Brisket Platter', description: 'Slow-smoked beef brisket with two sides', price: 22, sortOrder: 1, prepTimeMinutes: 5, sku: null, durationMinutes: null },
+      { name: 'Pulled Pork Platter', description: 'Hickory-smoked pulled pork with two sides', price: 18, sortOrder: 2, prepTimeMinutes: 5, sku: null, durationMinutes: null },
+      { name: 'Smoked Ribs (Half Rack)', description: 'St. Louis-style ribs, dry rub or sauced', price: 24, sortOrder: 3, prepTimeMinutes: 5, sku: null, durationMinutes: null },
+      { name: 'Combo Platter', description: 'Choose two meats with two sides', price: 26, sortOrder: 4, prepTimeMinutes: 5, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Sides', sortOrder: 2,
+    items: [
+      { name: 'Coleslaw', description: 'Creamy house-made coleslaw', price: 4, sortOrder: 1, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+      { name: 'Baked Beans', description: 'Smoky slow-cooked beans', price: 4, sortOrder: 2, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+      { name: 'Cornbread', description: 'Honey butter cornbread', price: 3, sortOrder: 3, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Drinks', sortOrder: 3,
+    items: [
+      { name: 'Sweet Tea', description: 'Southern-style sweet iced tea', price: 3, sortOrder: 1, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+      { name: 'Craft Lager', description: 'Local craft beer on draft', price: 6, sortOrder: 2, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+    ],
+  },
+];
+
+const asianKitchenCategories: MenuTemplateCategory[] = [
+  {
+    name: 'Appetizers', sortOrder: 1,
+    items: [
+      { name: 'Spring Rolls', description: 'Crispy vegetable spring rolls with sweet chili', price: 8, sortOrder: 1, prepTimeMinutes: 6, sku: null, durationMinutes: null },
+      { name: 'Edamame', description: 'Steamed and salted soybeans', price: 6, sortOrder: 2, prepTimeMinutes: 3, sku: null, durationMinutes: null },
+      { name: 'Pork Dumplings', description: 'Pan-fried dumplings with soy dipping sauce', price: 10, sortOrder: 3, prepTimeMinutes: 8, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Entrees', sortOrder: 2,
+    items: [
+      { name: 'Pad Thai', description: 'Rice noodles, shrimp, peanuts, bean sprouts', price: 16, sortOrder: 1, prepTimeMinutes: 12, sku: null, durationMinutes: null },
+      { name: 'General Tso\'s Chicken', description: 'Crispy chicken in sweet-spicy sauce with rice', price: 15, sortOrder: 2, prepTimeMinutes: 12, sku: null, durationMinutes: null },
+      { name: 'Beef Bulgogi', description: 'Marinated grilled beef with steamed rice', price: 18, sortOrder: 3, prepTimeMinutes: 14, sku: null, durationMinutes: null },
+      { name: 'Chicken Teriyaki', description: 'Grilled chicken with teriyaki glaze and vegetables', price: 15, sortOrder: 4, prepTimeMinutes: 12, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Drinks', sortOrder: 3,
+    items: [
+      { name: 'Thai Iced Tea', description: 'Sweet creamy Thai tea over ice', price: 5, sortOrder: 1, prepTimeMinutes: 2, sku: null, durationMinutes: null },
+      { name: 'Hot Green Tea', description: 'Traditional brewed green tea', price: 3, sortOrder: 2, prepTimeMinutes: 2, sku: null, durationMinutes: null },
+    ],
+  },
+];
+
+const indianCategories: MenuTemplateCategory[] = [
+  {
+    name: 'Starters', sortOrder: 1,
+    items: [
+      { name: 'Samosas', description: 'Crispy pastry filled with spiced potatoes and peas', price: 8, sortOrder: 1, prepTimeMinutes: 6, sku: null, durationMinutes: null },
+      { name: 'Onion Bhaji', description: 'Spiced onion fritters with mint chutney', price: 7, sortOrder: 2, prepTimeMinutes: 6, sku: null, durationMinutes: null },
+      { name: 'Chicken Tikka', description: 'Tandoori-spiced chicken skewers', price: 12, sortOrder: 3, prepTimeMinutes: 10, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Curries & Mains', sortOrder: 2,
+    items: [
+      { name: 'Butter Chicken', description: 'Tandoori chicken in creamy tomato sauce with naan', price: 17, sortOrder: 1, prepTimeMinutes: 12, sku: null, durationMinutes: null },
+      { name: 'Lamb Rogan Josh', description: 'Slow-cooked lamb in aromatic Kashmiri spices', price: 19, sortOrder: 2, prepTimeMinutes: 14, sku: null, durationMinutes: null },
+      { name: 'Palak Paneer', description: 'Spinach and cottage cheese curry', price: 15, sortOrder: 3, prepTimeMinutes: 10, sku: null, durationMinutes: null },
+      { name: 'Chicken Biryani', description: 'Fragrant basmati rice with spiced chicken', price: 18, sortOrder: 4, prepTimeMinutes: 15, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Drinks', sortOrder: 3,
+    items: [
+      { name: 'Mango Lassi', description: 'Creamy yogurt mango smoothie', price: 5, sortOrder: 1, prepTimeMinutes: 2, sku: null, durationMinutes: null },
+      { name: 'Masala Chai', description: 'Spiced Indian tea with milk', price: 4, sortOrder: 2, prepTimeMinutes: 3, sku: null, durationMinutes: null },
+    ],
+  },
+];
+
+const mediterraneanCategories: MenuTemplateCategory[] = [
+  {
+    name: 'Mezze', sortOrder: 1,
+    items: [
+      { name: 'Hummus & Pita', description: 'Classic chickpea hummus with warm pita bread', price: 9, sortOrder: 1, prepTimeMinutes: 3, sku: null, durationMinutes: null },
+      { name: 'Falafel', description: 'Crispy chickpea fritters with tahini sauce', price: 10, sortOrder: 2, prepTimeMinutes: 8, sku: null, durationMinutes: null },
+      { name: 'Greek Salad', description: 'Tomato, cucumber, olives, red onion, feta', price: 11, sortOrder: 3, prepTimeMinutes: 5, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Mains', sortOrder: 2,
+    items: [
+      { name: 'Chicken Shawarma Plate', description: 'Marinated chicken, rice, salad, garlic sauce', price: 17, sortOrder: 1, prepTimeMinutes: 10, sku: null, durationMinutes: null },
+      { name: 'Lamb Kofta', description: 'Grilled lamb skewers with tzatziki and rice', price: 19, sortOrder: 2, prepTimeMinutes: 12, sku: null, durationMinutes: null },
+      { name: 'Grilled Salmon', description: 'Lemon herb salmon with couscous and vegetables', price: 22, sortOrder: 3, prepTimeMinutes: 14, sku: null, durationMinutes: null },
+      { name: 'Lamb Gyro Wrap', description: 'Seasoned lamb, tomato, onion, tzatziki in pita', price: 14, sortOrder: 4, prepTimeMinutes: 8, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Drinks', sortOrder: 3,
+    items: [
+      { name: 'Fresh Mint Lemonade', description: 'Lemonade with fresh mint leaves', price: 5, sortOrder: 1, prepTimeMinutes: 2, sku: null, durationMinutes: null },
+      { name: 'Turkish Coffee', description: 'Traditional finely ground coffee', price: 4, sortOrder: 2, prepTimeMinutes: 4, sku: null, durationMinutes: null },
+    ],
+  },
+];
+
+const seafoodCategories: MenuTemplateCategory[] = [
+  {
+    name: 'Raw Bar', sortOrder: 1,
+    items: [
+      { name: 'Oysters (Half Dozen)', description: 'East coast oysters on the half shell', price: 18, sortOrder: 1, prepTimeMinutes: 5, sku: null, durationMinutes: null },
+      { name: 'Shrimp Cocktail', description: 'Chilled jumbo shrimp with cocktail sauce', price: 16, sortOrder: 2, prepTimeMinutes: 3, sku: null, durationMinutes: null },
+      { name: 'Tuna Poke', description: 'Ahi tuna, sesame, soy, avocado, wonton chips', price: 15, sortOrder: 3, prepTimeMinutes: 5, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Entrees', sortOrder: 2,
+    items: [
+      { name: 'Fish & Chips', description: 'Beer-battered cod with fries and tartar sauce', price: 18, sortOrder: 1, prepTimeMinutes: 12, sku: null, durationMinutes: null },
+      { name: 'Grilled Salmon', description: 'Atlantic salmon with lemon butter and asparagus', price: 26, sortOrder: 2, prepTimeMinutes: 14, sku: null, durationMinutes: null },
+      { name: 'Lobster Roll', description: 'Maine lobster, butter, toasted split-top roll', price: 28, sortOrder: 3, prepTimeMinutes: 10, sku: null, durationMinutes: null },
+      { name: 'Seafood Pasta', description: 'Shrimp, mussels, clams in white wine garlic sauce', price: 24, sortOrder: 4, prepTimeMinutes: 15, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Drinks', sortOrder: 3,
+    items: [
+      { name: 'White Wine', description: 'Glass of house Sauvignon Blanc', price: 10, sortOrder: 1, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+      { name: 'Sparkling Water', description: 'Pellegrino or Perrier', price: 4, sortOrder: 2, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+    ],
+  },
+];
+
+const iceCreamCategories: MenuTemplateCategory[] = [
+  {
+    name: 'Scoops & Cups', sortOrder: 1,
+    items: [
+      { name: 'Single Scoop', description: 'One scoop in a cup or cone', price: 4, sortOrder: 1, prepTimeMinutes: 2, sku: null, durationMinutes: null },
+      { name: 'Double Scoop', description: 'Two scoops in a cup or waffle cone', price: 6, sortOrder: 2, prepTimeMinutes: 2, sku: null, durationMinutes: null },
+      { name: 'Waffle Bowl', description: 'Two scoops in a fresh waffle bowl', price: 8, sortOrder: 3, prepTimeMinutes: 3, sku: null, durationMinutes: null },
+      { name: 'Pint To Go', description: 'Take home a pint of any flavor', price: 9, sortOrder: 4, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Specialty', sortOrder: 2,
+    items: [
+      { name: 'Sundae', description: 'Two scoops with hot fudge, whipped cream, cherry', price: 8, sortOrder: 1, prepTimeMinutes: 4, sku: null, durationMinutes: null },
+      { name: 'Banana Split', description: 'Three scoops, banana, toppings, whipped cream', price: 10, sortOrder: 2, prepTimeMinutes: 5, sku: null, durationMinutes: null },
+      { name: 'Milkshake', description: 'Hand-spun milkshake, any flavor', price: 7, sortOrder: 3, prepTimeMinutes: 4, sku: null, durationMinutes: null },
+    ],
+  },
+  {
+    name: 'Drinks', sortOrder: 3,
+    items: [
+      { name: 'Root Beer Float', description: 'Vanilla ice cream in root beer', price: 6, sortOrder: 1, prepTimeMinutes: 2, sku: null, durationMinutes: null },
+      { name: 'Bottled Water', description: 'Still or sparkling', price: 2, sortOrder: 2, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+    ],
+  },
+];
+
 // --- Retail Templates ---
 
 const clothingBoutiqueCategories: MenuTemplateCategory[] = [
@@ -278,6 +467,62 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     description: 'Street tacos, burritos, and Mexican beverages',
     categories: tacoTruckCategories,
     itemCount: countItems(tacoTruckCategories),
+  },
+  {
+    id: 'tmpl-american-grill',
+    vertical: 'food_and_drink',
+    name: 'American Grill',
+    description: 'Southern-inspired starters, hearty mains, and classic drinks',
+    categories: americanGrillCategories,
+    itemCount: countItems(americanGrillCategories),
+  },
+  {
+    id: 'tmpl-bbq',
+    vertical: 'food_and_drink',
+    name: 'BBQ Restaurant',
+    description: 'Smoked meat platters, classic sides, and cold drinks',
+    categories: bbqCategories,
+    itemCount: countItems(bbqCategories),
+  },
+  {
+    id: 'tmpl-asian',
+    vertical: 'food_and_drink',
+    name: 'Asian Kitchen',
+    description: 'Appetizers, pan-Asian entrees, and hot and iced teas',
+    categories: asianKitchenCategories,
+    itemCount: countItems(asianKitchenCategories),
+  },
+  {
+    id: 'tmpl-indian',
+    vertical: 'food_and_drink',
+    name: 'Indian Restaurant',
+    description: 'Tandoori starters, curries, and traditional drinks',
+    categories: indianCategories,
+    itemCount: countItems(indianCategories),
+  },
+  {
+    id: 'tmpl-mediterranean',
+    vertical: 'food_and_drink',
+    name: 'Mediterranean Kitchen',
+    description: 'Mezze, grilled mains, and refreshing drinks',
+    categories: mediterraneanCategories,
+    itemCount: countItems(mediterraneanCategories),
+  },
+  {
+    id: 'tmpl-seafood',
+    vertical: 'food_and_drink',
+    name: 'Seafood Restaurant',
+    description: 'Raw bar, fresh seafood entrees, and wine',
+    categories: seafoodCategories,
+    itemCount: countItems(seafoodCategories),
+  },
+  {
+    id: 'tmpl-ice-cream',
+    vertical: 'food_and_drink',
+    name: 'Ice Cream Shop',
+    description: 'Scoops, sundaes, shakes, and floats',
+    categories: iceCreamCategories,
+    itemCount: countItems(iceCreamCategories),
   },
   {
     id: 'tmpl-clothing-boutique',
