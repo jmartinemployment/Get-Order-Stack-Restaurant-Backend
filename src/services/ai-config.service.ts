@@ -27,12 +27,12 @@ export function isValidFeatureKey(key: string): key is AIFeatureKey {
 
 function defaultAiFeatures(): Record<AIFeatureKey, boolean> {
   return {
-    aiCostEstimation: true,
-    menuEngineering: true,
-    salesInsights: true,
-    laborOptimization: true,
-    inventoryPredictions: true,
-    taxEstimation: true,
+    aiCostEstimation: false,
+    menuEngineering: false,
+    salesInsights: false,
+    laborOptimization: false,
+    inventoryPredictions: false,
+    taxEstimation: false,
   };
 }
 
