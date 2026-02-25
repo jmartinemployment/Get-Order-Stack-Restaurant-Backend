@@ -7,6 +7,48 @@ import { optionalAuth } from '../middleware/auth.middleware';
 const router = Router();
 const prisma = new PrismaClient();
 
+// Vertical -> enabled modules mapping (must match frontend BUSINESS_VERTICAL_CATALOG in platform.model.ts)
+const VERTICAL_MODULES: Record<string, string[]> = {
+  food_and_drink: [
+    'menu_management', 'table_management', 'kds', 'reservations',
+    'online_ordering', 'inventory', 'marketing', 'loyalty',
+    'delivery', 'gift_cards', 'staff_scheduling', 'payroll',
+    'reports', 'crm', 'multi_location',
+  ],
+  retail: [
+    'inventory', 'online_ordering', 'marketing', 'loyalty',
+    'gift_cards', 'staff_scheduling', 'payroll', 'reports',
+    'crm', 'multi_location',
+  ],
+  grocery: [
+    'inventory', 'online_ordering', 'marketing', 'loyalty',
+    'gift_cards', 'staff_scheduling', 'payroll', 'reports',
+    'crm', 'multi_location',
+  ],
+  beauty_wellness: [
+    'appointments', 'inventory', 'marketing', 'loyalty',
+    'gift_cards', 'staff_scheduling', 'payroll', 'reports',
+    'crm', 'multi_location',
+  ],
+  healthcare: [
+    'appointments', 'invoicing', 'marketing', 'staff_scheduling',
+    'payroll', 'reports', 'crm',
+  ],
+  sports_fitness: [
+    'appointments', 'inventory', 'marketing', 'loyalty',
+    'gift_cards', 'staff_scheduling', 'payroll', 'reports',
+    'crm', 'multi_location',
+  ],
+  home_repair: [
+    'invoicing', 'marketing', 'staff_scheduling', 'payroll',
+    'reports', 'crm',
+  ],
+  professional_services: [
+    'invoicing', 'marketing', 'staff_scheduling', 'payroll',
+    'reports', 'crm',
+  ],
+};
+
 // US state tax rate approximations (state + average local rate)
 const STATE_TAX_RATES: Record<string, number> = {
   AL: 9.22, AK: 1.76, AZ: 8.4, AR: 9.47, CA: 8.68,
@@ -253,7 +295,7 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
             verticals: verticals ?? ['food_and_drink'],
             primaryVertical: primaryVertical ?? 'food_and_drink',
             complexity: complexity ?? 'full',
-            enabledModules: [],
+            enabledModules: VERTICAL_MODULES[primaryVertical ?? 'food_and_drink'] ?? [],
             defaultDeviceMode: defaultDeviceMode ?? 'full_service',
             taxLocale: taxLocale ?? { taxRate: 0, taxInclusive: false, currency: 'USD', defaultLanguage: 'en' },
             businessHours: businessHours ?? [],
