@@ -329,6 +329,7 @@ router.get('/:restaurantId/menu/grouped', async (req: Request, res: Response) =>
     // Transform helper for menu items
     const transformItem = (item: any) => ({
       id: item.id,
+      categoryId: item.categoryId,
       name: lang === 'en' && item.nameEn ? item.nameEn : item.name,
       nameEs: item.name,
       nameEn: item.nameEn,
@@ -336,9 +337,15 @@ router.get('/:restaurantId/menu/grouped', async (req: Request, res: Response) =>
       descriptionEn: item.descriptionEn,
       price: item.price,
       image: item.image,
+      imageUrl: item.image,
       popular: item.popular,
+      isActive: item.available !== false,
+      available: item.available !== false,
+      eightySixed: item.eightySixed ?? false,
       dietary: item.dietary,
       prepTimeMinutes: item.prepTimeMinutes,
+      displayOrder: item.displayOrder ?? 0,
+      sku: item.sku ?? null,
       modifierGroups: item.modifierGroups.map((mg: any) => ({
         id: mg.modifierGroup.id,
         name: lang === 'en' && mg.modifierGroup.nameEn ? mg.modifierGroup.nameEn : mg.modifierGroup.name,
@@ -365,6 +372,8 @@ router.get('/:restaurantId/menu/grouped', async (req: Request, res: Response) =>
       description: cat.description,
       descriptionEn: cat.descriptionEn,
       image: cat.image,
+      displayOrder: cat.displayOrder ?? 0,
+      isActive: cat.active !== false,
       items: cat.menuItems.map(transformItem)
     });
 
