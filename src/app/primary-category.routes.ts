@@ -380,8 +380,16 @@ router.get('/:restaurantId/menu/grouped', async (req: Request, res: Response) =>
       subcategories: pc.menuCategories.map(transformSubcategory)
     }));
 
-    // Add orphan categories under an "Other" group if any exist
+    // Handle orphan categories (no primary category assigned)
     if (orphanCategories.length > 0) {
+      if (primaryCategories.length === 0) {
+        // No primary categories exist (e.g. fresh onboarding) — return orphans
+        // as flat top-level categories so the frontend receives MenuCategory[]
+        // with items directly, instead of a nested wrapper.
+        res.json(orphanCategories.map(transformSubcategory));
+        return;
+      }
+      // Mix of primary and orphan — group orphans under "Other"
       grouped.push({
         id: 'uncategorized',
         slug: 'other',
