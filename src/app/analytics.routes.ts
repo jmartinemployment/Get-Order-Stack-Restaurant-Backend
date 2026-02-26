@@ -782,6 +782,65 @@ router.get('/:restaurantId/purchase-orders', async (req: Request, res: Response)
   }
 });
 
+// ============ Order Templates ============
+
+const createOrderTemplateSchema = z.object({
+  name: z.string().min(1),
+  items: z.array(z.object({
+    menuItemId: z.string(),
+    quantity: z.number().int().min(1),
+    modifiers: z.array(z.string()),
+  })),
+});
+
+router.get('/:restaurantId/order-templates', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const templates = await prisma.orderTemplate.findMany({
+      where: { restaurantId },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(templates);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error getting order templates:', message);
+    res.status(500).json({ error: 'Failed to get order templates' });
+  }
+});
+
+router.post('/:restaurantId/order-templates', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const parsed = createOrderTemplateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      return;
+    }
+    const { name, items } = parsed.data;
+    const createdBy = (req as unknown as { user?: { id?: string } }).user?.id ?? 'system';
+    const template = await prisma.orderTemplate.create({
+      data: { restaurantId, name, items, createdBy },
+    });
+    res.status(201).json(template);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error creating order template:', message);
+    res.status(500).json({ error: 'Failed to create order template' });
+  }
+});
+
+router.delete('/:restaurantId/order-templates/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.orderTemplate.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error deleting order template:', message);
+    res.status(500).json({ error: 'Failed to delete order template' });
+  }
+});
+
 // ============ Saved Reports ============
 
 const createSavedReportSchema = z.object({

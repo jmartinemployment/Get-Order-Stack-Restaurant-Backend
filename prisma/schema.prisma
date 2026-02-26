@@ -83,6 +83,7 @@ model Restaurant {
   locationGroupMemberships LocationGroupMember[]
   savedReports         SavedReport[]
   reportSchedules      ReportSchedule[]
+  orderTemplates       OrderTemplate[]
 
   // Payment Connect (Stripe Connect / PayPal Partner Referrals)
   stripeConnectedAccountId  String?  @map("stripe_connected_account_id")
@@ -1747,4 +1748,19 @@ model ReportSchedule {
   @@index([restaurantId])
   @@index([savedReportId])
   @@map("report_schedules")
+}
+
+model OrderTemplate {
+  id           String   @id @default(uuid())
+  restaurantId String   @map("restaurant_id")
+  name         String
+  items        Json     @default("[]")
+  createdBy    String   @default("system") @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@map("order_templates")
 }
