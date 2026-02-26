@@ -1671,4 +1671,73 @@ router.post('/:restaurantId/staff/auto-clock-out', async (req: Request, res: Res
   }
 });
 
+// ============ Break Types ============
+
+// GET /:restaurantId/break-types
+router.get('/:restaurantId/break-types', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const breakTypes = await prisma.breakType.findMany({
+      where: { restaurantId },
+      orderBy: { name: 'asc' },
+    });
+    res.json(breakTypes);
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching break types:', error);
+    res.status(500).json({ error: 'Failed to fetch break types' });
+  }
+});
+
+// POST /:restaurantId/break-types
+router.post('/:restaurantId/break-types', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { name, expectedMinutes, isPaid, isActive } = req.body;
+
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    const breakType = await prisma.breakType.create({
+      data: {
+        restaurantId,
+        name: name.trim(),
+        expectedMinutes: expectedMinutes ?? 15,
+        isPaid: isPaid ?? false,
+        isActive: isActive ?? true,
+      },
+    });
+    res.status(201).json(breakType);
+  } catch (error: unknown) {
+    console.error('[Labor] Error creating break type:', error);
+    res.status(500).json({ error: 'Failed to create break type' });
+  }
+});
+
+// PATCH /:restaurantId/break-types/:id
+router.patch('/:restaurantId/break-types/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const data: Record<string, unknown> = {};
+    if (req.body.name !== undefined) data.name = req.body.name;
+    if (req.body.expectedMinutes !== undefined) data.expectedMinutes = req.body.expectedMinutes;
+    if (req.body.isPaid !== undefined) data.isPaid = req.body.isPaid;
+    if (req.body.isActive !== undefined) data.isActive = req.body.isActive;
+
+    const breakType = await prisma.breakType.update({
+      where: { id },
+      data,
+    });
+    res.json(breakType);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Break type not found' });
+      return;
+    }
+    console.error('[Labor] Error updating break type:', error);
+    res.status(500).json({ error: 'Failed to update break type' });
+  }
+});
+
 export default router;
