@@ -1097,8 +1097,8 @@ router.get('/:restaurantId/staff/workweek-config', async (req: Request, res: Res
     if (!config) {
       // Return defaults when no config exists
       res.json({
-        weekStartDay: 0,
-        dayStartTime: '04:00',
+        startDay: 0,
+        startTime: '04:00',
         overtimeThresholdHours: 40,
         overtimeMultiplier: 1.5,
       });
@@ -1106,8 +1106,8 @@ router.get('/:restaurantId/staff/workweek-config', async (req: Request, res: Res
     }
 
     res.json({
-      weekStartDay: config.weekStartDay,
-      dayStartTime: config.dayStartTime,
+      startDay: config.weekStartDay,
+      startTime: config.dayStartTime,
       overtimeThresholdHours: Number(config.overtimeThresholdHours),
       overtimeMultiplier: Number(config.overtimeMultiplier),
     });
@@ -1135,22 +1135,22 @@ router.put('/:restaurantId/staff/workweek-config', async (req: Request, res: Res
       where: { restaurantId },
       create: {
         restaurantId,
-        weekStartDay: parsed.data.weekStartDay,
-        dayStartTime: parsed.data.dayStartTime,
+        weekStartDay: parsed.data.startDay,
+        dayStartTime: parsed.data.startTime,
         overtimeThresholdHours: parsed.data.overtimeThresholdHours,
-        overtimeMultiplier: parsed.data.overtimeMultiplier,
+        overtimeMultiplier: parsed.data.overtimeMultiplier ?? 1.5,
       },
       update: {
-        weekStartDay: parsed.data.weekStartDay,
-        dayStartTime: parsed.data.dayStartTime,
+        weekStartDay: parsed.data.startDay,
+        dayStartTime: parsed.data.startTime,
         overtimeThresholdHours: parsed.data.overtimeThresholdHours,
-        overtimeMultiplier: parsed.data.overtimeMultiplier,
+        overtimeMultiplier: parsed.data.overtimeMultiplier ?? 1.5,
       },
     });
 
     res.json({
-      weekStartDay: config.weekStartDay,
-      dayStartTime: config.dayStartTime,
+      startDay: config.weekStartDay,
+      startTime: config.dayStartTime,
       overtimeThresholdHours: Number(config.overtimeThresholdHours),
       overtimeMultiplier: Number(config.overtimeMultiplier),
     });

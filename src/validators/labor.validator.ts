@@ -46,10 +46,10 @@ export const PublishWeekSchema = z.object({
 // --- Workweek Config ---
 
 export const WorkweekConfigSchema = z.object({
-  weekStartDay: z.number().int().min(0).max(6),
-  dayStartTime: z.string().regex(timeRegex, 'dayStartTime must be HH:mm format'),
+  startDay: z.number().int().min(0).max(6),
+  startTime: z.string().regex(timeRegex, 'startTime must be HH:mm format'),
   overtimeThresholdHours: z.number().min(1).max(168),
-  overtimeMultiplier: z.number().min(1).max(3),
+  overtimeMultiplier: z.number().min(1).max(3).optional(),
 });
 
 // --- Timecard Edit Requests ---
