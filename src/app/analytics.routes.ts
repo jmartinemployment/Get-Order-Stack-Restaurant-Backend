@@ -380,9 +380,18 @@ router.get('/:restaurantId/inventory/expiring', async (req: Request, res: Respon
       take: 50,
     });
 
-    const expiring = items.filter(item =>
-      Number(item.currentStock) <= Number(item.minStock) && Number(item.minStock) > 0
-    );
+    const expiring = items
+      .filter(item =>
+        Number(item.currentStock) <= Number(item.minStock) && Number(item.minStock) > 0
+      )
+      .map(item => ({
+        inventoryItemId: item.id,
+        itemName: item.name,
+        unit: item.unit,
+        currentStock: Number(item.currentStock),
+        expirationDate: item.updatedAt.toISOString(),
+        daysUntilExpiration: 0,
+      }));
 
     res.json(expiring);
   } catch (error: unknown) {
