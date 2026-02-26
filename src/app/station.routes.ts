@@ -189,7 +189,8 @@ router.put('/:stationId/categories', async (req: Request, res: Response) => {
     res.json({ success: true, stationId, categoryIds: parsed.data.categoryIds });
   } catch (error: unknown) {
     console.error('[Station] Set categories error:', error);
-    res.status(500).json({ error: 'Failed to set station categories' });
+    const message = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ error: 'Failed to set station categories', detail: message });
   }
 });
 
