@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
 import { menuEngineeringService } from '../services/menu-engineering.service';
 import { salesInsightsService } from '../services/sales-insights.service';
 import { inventoryService } from '../services/inventory.service';
@@ -778,6 +779,183 @@ router.get('/:restaurantId/purchase-orders', async (req: Request, res: Response)
     // If 'type' field doesn't exist yet, return empty array
     console.error('Error getting purchase orders:', error instanceof Error ? error.message : String(error));
     res.json([]);
+  }
+});
+
+// ============ Saved Reports ============
+
+const createSavedReportSchema = z.object({
+  name: z.string().min(1),
+  blocks: z.array(z.object({
+    type: z.string(),
+    label: z.string(),
+    displayOrder: z.number(),
+    columns: z.array(z.string()).optional(),
+  })),
+});
+
+const updateSavedReportSchema = z.object({
+  name: z.string().min(1).optional(),
+  blocks: z.array(z.object({
+    type: z.string(),
+    label: z.string(),
+    displayOrder: z.number(),
+    columns: z.array(z.string()).optional(),
+  })).optional(),
+});
+
+router.get('/:restaurantId/reports/saved', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const reports = await prisma.savedReport.findMany({
+      where: { restaurantId },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(reports);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error getting saved reports:', message);
+    res.status(500).json({ error: 'Failed to get saved reports' });
+  }
+});
+
+router.post('/:restaurantId/reports/saved', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const parsed = createSavedReportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      return;
+    }
+    const { name, blocks } = parsed.data;
+    const createdBy = (req as unknown as { user?: { id?: string } }).user?.id ?? 'system';
+    const report = await prisma.savedReport.create({
+      data: { restaurantId, name, blocks, createdBy },
+    });
+    res.status(201).json(report);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error creating saved report:', message);
+    res.status(500).json({ error: 'Failed to create saved report' });
+  }
+});
+
+router.patch('/:restaurantId/reports/saved/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const parsed = updateSavedReportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      return;
+    }
+    const report = await prisma.savedReport.update({
+      where: { id },
+      data: parsed.data,
+    });
+    res.json(report);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error updating saved report:', message);
+    res.status(500).json({ error: 'Failed to update saved report' });
+  }
+});
+
+router.delete('/:restaurantId/reports/saved/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.savedReport.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error deleting saved report:', message);
+    res.status(500).json({ error: 'Failed to delete saved report' });
+  }
+});
+
+// ============ Report Schedules ============
+
+const createScheduleSchema = z.object({
+  savedReportId: z.string().uuid(),
+  frequency: z.enum(['daily', 'weekly', 'monthly']),
+  dayOfWeek: z.number().int().min(0).max(6).optional(),
+  dayOfMonth: z.number().int().min(1).max(31).optional(),
+  timeOfDay: z.string().min(1),
+  recipientEmails: z.array(z.string().email()).min(1),
+});
+
+const updateScheduleSchema = z.object({
+  frequency: z.enum(['daily', 'weekly', 'monthly']).optional(),
+  dayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
+  dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  timeOfDay: z.string().min(1).optional(),
+  recipientEmails: z.array(z.string().email()).min(1).optional(),
+  isActive: z.boolean().optional(),
+});
+
+router.get('/:restaurantId/reports/schedules', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const schedules = await prisma.reportSchedule.findMany({
+      where: { restaurantId },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(schedules);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error getting report schedules:', message);
+    res.status(500).json({ error: 'Failed to get report schedules' });
+  }
+});
+
+router.post('/:restaurantId/reports/schedules', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const parsed = createScheduleSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      return;
+    }
+    const { savedReportId, frequency, dayOfWeek, dayOfMonth, timeOfDay, recipientEmails } = parsed.data;
+    const schedule = await prisma.reportSchedule.create({
+      data: { restaurantId, savedReportId, frequency, dayOfWeek, dayOfMonth, timeOfDay, recipientEmails },
+    });
+    res.status(201).json(schedule);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error creating report schedule:', message);
+    res.status(500).json({ error: 'Failed to create report schedule' });
+  }
+});
+
+router.patch('/:restaurantId/reports/schedules/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const parsed = updateScheduleSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      return;
+    }
+    const schedule = await prisma.reportSchedule.update({
+      where: { id },
+      data: parsed.data,
+    });
+    res.json(schedule);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error updating report schedule:', message);
+    res.status(500).json({ error: 'Failed to update report schedule' });
+  }
+});
+
+router.delete('/:restaurantId/reports/schedules/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.reportSchedule.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error deleting report schedule:', message);
+    res.status(500).json({ error: 'Failed to delete report schedule' });
   }
 });
 

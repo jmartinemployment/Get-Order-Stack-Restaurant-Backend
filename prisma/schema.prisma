@@ -81,6 +81,8 @@ model Restaurant {
   supplierCredentials  RestaurantSupplierCredentials?
   foodCostRecipes      FoodCostRecipe[]
   locationGroupMemberships LocationGroupMember[]
+  savedReports         SavedReport[]
+  reportSchedules      ReportSchedule[]
 
   // Payment Connect (Stripe Connect / PayPal Partner Referrals)
   stripeConnectedAccountId  String?  @map("stripe_connected_account_id")
@@ -1707,4 +1709,42 @@ model RestaurantSupplierCredentials {
   restaurant                      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@map("restaurant_supplier_credentials")
+}
+
+model SavedReport {
+  id           String   @id @default(uuid())
+  restaurantId String   @map("restaurant_id")
+  name         String
+  blocks       Json     @default("[]")
+  createdBy    String   @default("system") @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant   Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  schedules    ReportSchedule[]
+
+  @@index([restaurantId])
+  @@map("saved_reports")
+}
+
+model ReportSchedule {
+  id              String   @id @default(uuid())
+  restaurantId    String   @map("restaurant_id")
+  savedReportId   String   @map("saved_report_id")
+  frequency       String   @default("daily")
+  dayOfWeek       Int?     @map("day_of_week")
+  dayOfMonth      Int?     @map("day_of_month")
+  timeOfDay       String   @default("08:00") @map("time_of_day")
+  recipientEmails Json     @default("[]") @map("recipient_emails")
+  isActive        Boolean  @default(true) @map("is_active")
+  lastSentAt      DateTime? @map("last_sent_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  restaurant      Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  savedReport     SavedReport @relation(fields: [savedReportId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@index([savedReportId])
+  @@map("report_schedules")
 }
