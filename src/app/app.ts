@@ -27,6 +27,7 @@ import marketingCampaignRoutes from './marketing.routes';
 import comboRoutes from './combo.routes';
 import aiAdminRoutes from './ai-admin.routes';
 import foodCostRoutes from './food-cost.routes';
+import supplierOrderingRoutes from './supplier-ordering.routes';
 import multiLocationRoutes from './multi-location.routes';
 import onboardingRoutes from './onboarding.routes';
 import paymentConnectRoutes from './payment-connect.routes';
@@ -36,6 +37,7 @@ import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
 import { marketplaceService } from '../services/marketplace.service';
+import { requireAuth } from '../middleware/auth.middleware';
 
 const app = express();
 
@@ -74,7 +76,9 @@ app.post('/api/webhooks/paypal', express.raw({ type: 'application/json' }), asyn
   try {
     const webhookId = process.env.PAYPAL_WEBHOOK_ID;
     if (!webhookId || webhookId === 'placeholder') {
-      console.warn('[PayPal Webhook] Webhook ID not configured, processing without verification');
+      console.error('[PayPal Webhook] Webhook ID not configured — rejecting unverified event');
+      res.status(503).json({ error: 'PayPal webhook verification not configured' });
+      return;
     } else {
       const token = await paypalService.getAccessToken();
       const verifyResponse = await fetch(
@@ -155,7 +159,9 @@ app.post('/api/webhooks/doordash', express.raw({ type: 'application/json' }), as
         return;
       }
     } else {
-      console.warn('[DoorDash Webhook] No signing secret configured for delivery; skipping signature verification');
+      console.error('[DoorDash Webhook] No signing secret configured for delivery — rejecting unverified event');
+      res.status(503).json({ error: 'DoorDash webhook signing secret not configured' });
+      return;
     }
 
     if (externalId && ddStatus) {
@@ -221,7 +227,9 @@ app.post('/api/webhooks/uber', express.raw({ type: 'application/json' }), async 
         return;
       }
     } else {
-      console.warn('[Uber Webhook] No webhook signing key configured for delivery; skipping signature verification');
+      console.error('[Uber Webhook] No webhook signing key configured for delivery — rejecting unverified event');
+      res.status(503).json({ error: 'Uber webhook signing key not configured' });
+      return;
     }
 
     if (deliveryId && uberStatus) {
@@ -311,38 +319,42 @@ app.get('/health', (_req, res) => {
 });
 
 // Routes - ORDER MATTERS! More specific routes first
+// --- Public routes (no auth required) ---
 app.use('/api/auth', authRoutes);  // Authentication routes
 app.use('/api/cloudprnt', cloudprntRoutes);  // CloudPRNT protocol endpoints (no auth - uses token)
-app.use('/api/restaurant', laborRoutes);  // Labor/scheduling endpoints
-app.use('/api/restaurant', loyaltyRoutes);  // Loyalty program endpoints
-app.use('/api/restaurant', printerRoutes);  // Printer management API
-app.use('/api/restaurant/:restaurantId/orders', checkRoutes);  // Check management (POS) endpoints
-app.use('/api/restaurant/:restaurantId/orders', orderActionRoutes);  // Dining option action endpoints
-app.use('/api/restaurant/:restaurantId/delivery', deliveryRoutes);  // Third-party delivery endpoints
-app.use('/api/restaurant', marketplaceRoutes);  // Marketplace integration config endpoints
-app.use('/api/restaurant/:restaurantId/stations', stationRoutes);  // Station CRUD + category assignment
-app.use('/api/restaurant/:restaurantId/station-category-mappings', stationCategoryMappingRouter);  // Flat mapping list
-app.use('/api/restaurant', giftCardRoutes);  // Gift card CRUD + redemption
-app.use('/api/restaurant', invoiceRoutes);  // Invoice + house account CRUD
-app.use('/api/restaurant', marketingCampaignRoutes);  // Marketing campaign CRUD
-app.use('/api/restaurant', comboRoutes);  // Combo/bundle CRUD
-app.use('/api/restaurant', aiAdminRoutes);  // AI admin config, credentials, usage
-app.use('/api/restaurant', foodCostRoutes);  // Food cost: vendors, invoices, recipes, reports
-app.use('/api/restaurant-groups', multiLocationRoutes);  // Multi-location: groups, sync, settings propagation
-app.use('/api/analytics', analyticsStandaloneRoutes);  // Standalone analytics (pinned-widgets, proactive-insights)
-app.use('/api/restaurant', analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
-app.use('/api/restaurant', primaryCategoryRoutes);
-app.use('/api/restaurant', deviceRoutes);  // Device registration routes
 app.use('/api/devices', devicePairingRoutes);  // Device pairing (POST /pair) + lookup (GET /:id)
-app.use('/api/restaurant', deviceModeRoutes);  // Device mode CRUD
-app.use('/api/restaurant', printerProfileRoutes);  // Printer profile CRUD
-app.use('/api/restaurant', peripheralRoutes);  // Peripheral device CRUD
-app.use('/api/restaurant', kioskProfileRoutes);  // Kiosk profile CRUD
-app.use('/api/restaurant', menuRoutes);
-app.use('/api/restaurant', paymentConnectRoutes);  // Stripe Connect + PayPal Partner Referrals
-app.use('/api/restaurant', subscriptionRoutes);  // Subscription plan tier CRUD
-app.use('/api/restaurant', onboardingRoutes);  // Merchant profile + business hours
-app.use('/api/platform', onboardingRoutes);    // Menu templates + tax rate lookup
-app.use('/api/onboarding', onboardingRoutes);  // Create new merchant
+app.use('/api/platform', onboardingRoutes);    // Menu templates + tax rate lookup (public)
+app.use('/api/onboarding', onboardingRoutes);  // Create new merchant (public)
+
+// --- Authenticated routes (requireAuth) ---
+app.use('/api/restaurant', requireAuth, laborRoutes);  // Labor/scheduling endpoints
+app.use('/api/restaurant', requireAuth, loyaltyRoutes);  // Loyalty program endpoints
+app.use('/api/restaurant', requireAuth, printerRoutes);  // Printer management API
+app.use('/api/restaurant/:restaurantId/orders', requireAuth, checkRoutes);  // Check management (POS) endpoints
+app.use('/api/restaurant/:restaurantId/orders', requireAuth, orderActionRoutes);  // Dining option action endpoints
+app.use('/api/restaurant/:restaurantId/delivery', requireAuth, deliveryRoutes);  // Third-party delivery endpoints
+app.use('/api/restaurant', requireAuth, marketplaceRoutes);  // Marketplace integration config endpoints
+app.use('/api/restaurant/:restaurantId/stations', requireAuth, stationRoutes);  // Station CRUD + category assignment
+app.use('/api/restaurant/:restaurantId/station-category-mappings', requireAuth, stationCategoryMappingRouter);  // Flat mapping list
+app.use('/api/restaurant', requireAuth, giftCardRoutes);  // Gift card CRUD + redemption
+app.use('/api/restaurant', requireAuth, invoiceRoutes);  // Invoice + house account CRUD
+app.use('/api/restaurant', requireAuth, marketingCampaignRoutes);  // Marketing campaign CRUD
+app.use('/api/restaurant', requireAuth, comboRoutes);  // Combo/bundle CRUD
+app.use('/api/restaurant', requireAuth, aiAdminRoutes);  // AI admin config, credentials, usage
+app.use('/api/restaurant', requireAuth, foodCostRoutes);  // Food cost: vendors, invoices, recipes, reports
+app.use('/api/restaurant/:restaurantId', requireAuth, supplierOrderingRoutes);  // Supplier ordering: credentials, connection test
+app.use('/api/restaurant-groups', requireAuth, multiLocationRoutes);  // Multi-location: groups, sync, settings propagation
+app.use('/api/analytics', requireAuth, analyticsStandaloneRoutes);  // Standalone analytics (pinned-widgets, proactive-insights)
+app.use('/api/restaurant', requireAuth, analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
+app.use('/api/restaurant', requireAuth, primaryCategoryRoutes);
+app.use('/api/restaurant', requireAuth, deviceRoutes);  // Device registration routes
+app.use('/api/restaurant', requireAuth, deviceModeRoutes);  // Device mode CRUD
+app.use('/api/restaurant', requireAuth, printerProfileRoutes);  // Printer profile CRUD
+app.use('/api/restaurant', requireAuth, peripheralRoutes);  // Peripheral device CRUD
+app.use('/api/restaurant', requireAuth, kioskProfileRoutes);  // Kiosk profile CRUD
+app.use('/api/restaurant', requireAuth, menuRoutes);
+app.use('/api/restaurant', requireAuth, paymentConnectRoutes);  // Stripe Connect + PayPal Partner Referrals
+app.use('/api/restaurant', requireAuth, subscriptionRoutes);  // Subscription plan tier CRUD
+app.use('/api/restaurant', requireAuth, onboardingRoutes);  // Merchant profile + business hours
 
 export default app;
