@@ -46,6 +46,15 @@ router.get('/:restaurantId/devices', async (req: Request, res: Response) => {
     const { restaurantId } = req.params;
     const { status, type } = req.query;
 
+    // Clean up expired pending devices
+    await prisma.device.deleteMany({
+      where: {
+        restaurantId,
+        status: 'pending',
+        expiresAt: { lt: new Date() },
+      },
+    });
+
     const devices = await prisma.device.findMany({
       where: {
         restaurantId,
