@@ -26,7 +26,7 @@ router.get('/:restaurantId/staff/pins', async (req: Request, res: Response) => {
     const { restaurantId } = req.params;
     const pins = await prisma.staffPin.findMany({
       where: { restaurantId, isActive: true },
-      select: { id: true, name: true, role: true },
+      select: { id: true, name: true, role: true, teamMemberId: true },
       orderBy: { name: 'asc' },
     });
     res.json(pins);

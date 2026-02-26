@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import { authService } from '../services/auth.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -51,6 +52,12 @@ const updatePermissionSetSchema = z.object({
 
 // --- Team Member helpers ---
 
+const teamMemberInclude = {
+  jobs: true,
+  permissionSet: { select: { name: true } },
+  staffPin: { select: { id: true } },
+} as const;
+
 function formatTeamMember(member: {
   id: string;
   restaurantId: string;
@@ -65,6 +72,7 @@ function formatTeamMember(member: {
   status: string;
   createdAt: Date;
   permissionSet: { name: string } | null;
+  staffPin?: { id: string } | null;
   jobs: {
     id: string;
     teamMemberId: string;
@@ -90,6 +98,7 @@ function formatTeamMember(member: {
     hireDate: member.hireDate?.toISOString() ?? null,
     status: member.status,
     createdAt: member.createdAt.toISOString(),
+    staffPinId: member.staffPin?.id ?? null,
   };
 }
 
@@ -100,7 +109,7 @@ router.get('/:restaurantId/team-members', async (req: Request, res: Response) =>
     const { restaurantId } = req.params;
     const members = await prisma.teamMember.findMany({
       where: { restaurantId },
-      include: { jobs: true, permissionSet: { select: { name: true } } },
+      include: teamMemberInclude,
       orderBy: { displayName: 'asc' },
     });
     res.json(members.map(formatTeamMember));
@@ -120,20 +129,43 @@ router.post('/:restaurantId/team-members', async (req: Request, res: Response) =
       return;
     }
     const { displayName, email, phone, passcode, permissionSetId, assignedLocationIds, hireDate, jobs } = parsed.data;
-    const member = await prisma.teamMember.create({
-      data: {
-        restaurantId,
-        displayName,
-        email: email ?? null,
-        phone: phone ?? null,
-        passcode: passcode ?? null,
-        permissionSetId: permissionSetId ?? null,
-        assignedLocationIds: assignedLocationIds ?? [],
-        hireDate: hireDate ? new Date(hireDate) : null,
-        jobs: { create: jobs },
-      },
-      include: { jobs: true, permissionSet: { select: { name: true } } },
+
+    const primaryJob = jobs.find(j => j.isPrimary);
+    const staffRole = primaryJob?.jobTitle ?? 'staff';
+    const hashedPin = passcode ? await authService.hashPin(passcode) : await authService.hashPin('0000');
+
+    const member = await prisma.$transaction(async (tx) => {
+      const tm = await tx.teamMember.create({
+        data: {
+          restaurantId,
+          displayName,
+          email: email ?? null,
+          phone: phone ?? null,
+          passcode: passcode ?? null,
+          permissionSetId: permissionSetId ?? null,
+          assignedLocationIds: assignedLocationIds ?? [],
+          hireDate: hireDate ? new Date(hireDate) : null,
+          jobs: { create: jobs },
+        },
+        include: teamMemberInclude,
+      });
+
+      await tx.staffPin.create({
+        data: {
+          restaurantId,
+          teamMemberId: tm.id,
+          pin: hashedPin,
+          name: displayName,
+          role: staffRole,
+        },
+      });
+
+      return tx.teamMember.findUniqueOrThrow({
+        where: { id: tm.id },
+        include: teamMemberInclude,
+      });
     });
+
     res.status(201).json(formatTeamMember(member));
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -161,11 +193,36 @@ router.patch('/:restaurantId/team-members/:id', async (req: Request, res: Respon
     if (d.hireDate !== undefined) data.hireDate = d.hireDate ? new Date(d.hireDate) : null;
     if (d.status !== undefined) data.status = d.status;
 
-    const member = await prisma.teamMember.update({
-      where: { id },
-      data,
-      include: { jobs: true, permissionSet: { select: { name: true } } },
+    const member = await prisma.$transaction(async (tx) => {
+      const tm = await tx.teamMember.update({
+        where: { id },
+        data,
+        include: teamMemberInclude,
+      });
+
+      // Sync linked StaffPin if it exists
+      const linkedPin = await tx.staffPin.findUnique({
+        where: { teamMemberId: id },
+      });
+
+      if (linkedPin) {
+        const pinUpdate: Record<string, unknown> = {};
+        if (d.displayName !== undefined) pinUpdate.name = d.displayName;
+        if (d.status !== undefined) pinUpdate.isActive = d.status === 'active';
+        if (d.passcode !== undefined && d.passcode !== null) {
+          pinUpdate.pin = await authService.hashPin(d.passcode);
+        }
+        if (Object.keys(pinUpdate).length > 0) {
+          await tx.staffPin.update({
+            where: { id: linkedPin.id },
+            data: pinUpdate,
+          });
+        }
+      }
+
+      return tm;
     });
+
     res.json(formatTeamMember(member));
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -177,7 +234,22 @@ router.patch('/:restaurantId/team-members/:id', async (req: Request, res: Respon
 router.delete('/:restaurantId/team-members/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await prisma.teamMember.delete({ where: { id } });
+
+    await prisma.$transaction(async (tx) => {
+      // Deactivate linked StaffPin and unlink (preserves shift history)
+      const linkedPin = await tx.staffPin.findUnique({
+        where: { teamMemberId: id },
+      });
+      if (linkedPin) {
+        await tx.staffPin.update({
+          where: { id: linkedPin.id },
+          data: { isActive: false, teamMemberId: null },
+        });
+      }
+
+      await tx.teamMember.delete({ where: { id } });
+    });
+
     res.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -201,7 +273,7 @@ router.post('/:restaurantId/team-members/:memberId/jobs', async (req: Request, r
     });
     const member = await prisma.teamMember.findUnique({
       where: { id: memberId },
-      include: { jobs: true, permissionSet: { select: { name: true } } },
+      include: teamMemberInclude,
     });
     if (!member) {
       res.status(404).json({ error: 'Team member not found' });

@@ -919,14 +919,17 @@ model UserSession {
 }
 
 model StaffPin {
-  id           String   @id @default(uuid())
-  restaurantId String   @map("restaurant_id")
-  pin          String   // hashed 4-6 digit PIN
-  name         String   // display name
-  role         String   @default("staff")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid())
+  restaurantId   String   @map("restaurant_id")
+  teamMemberId   String?  @unique @map("team_member_id")
+  pin            String   // hashed 4-6 digit PIN
+  name           String   // display name
+  role           String   @default("staff")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  teamMember         TeamMember?         @relation(fields: [teamMemberId], references: [id], onDelete: SetNull)
   shifts             Shift[]
   timeEntries        TimeEntry[]
   availability       StaffAvailability[]
@@ -1142,6 +1145,7 @@ model Device {
   id             String    @id @default(uuid())
   restaurantId   String    @map("restaurant_id")
   locationId     String?   @map("location_id")
+  teamMemberId   String?   @map("team_member_id")
   deviceCode     String?   @unique @map("device_code")
   deviceName     String    @map("device_name")
   deviceType     String    @map("device_type") // 'pos_terminal', 'kds_station', 'kiosk', 'order_pad', 'printer_station'
@@ -1157,6 +1161,7 @@ model Device {
 
   restaurant     Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   mode           DeviceMode?     @relation(fields: [modeId], references: [id], onDelete: SetNull)
+  teamMember     TeamMember?     @relation(fields: [teamMemberId], references: [id], onDelete: SetNull)
   peripherals    PeripheralDevice[]
 
   @@index([restaurantId])
@@ -1818,6 +1823,8 @@ model TeamMember {
   restaurant        Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   permissionSet     PermissionSet?   @relation(fields: [permissionSetId], references: [id], onDelete: SetNull)
   jobs              TeamMemberJob[]
+  staffPin          StaffPin?
+  devices           Device[]
 
   @@index([restaurantId])
   @@map("team_members")

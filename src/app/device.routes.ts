@@ -36,6 +36,7 @@ const updateDeviceSchema = z.object({
   modeId: z.string().uuid().nullable().optional(),
   status: z.enum(['pending', 'active', 'revoked']).optional(),
   locationId: z.string().uuid().nullable().optional(),
+  teamMemberId: z.string().uuid().nullable().optional(),
 });
 
 // === Routes ===
@@ -61,7 +62,7 @@ router.get('/:restaurantId/devices', async (req: Request, res: Response) => {
         ...(status && { status: status as string }),
         ...(type && { deviceType: type as string }),
       },
-      include: { mode: true },
+      include: { mode: true, teamMember: { select: { id: true, displayName: true } } },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -153,7 +154,7 @@ router.get('/:restaurantId/devices/:id', async (req: Request, res: Response) => 
 
     const device = await prisma.device.findFirst({
       where: { id, restaurantId },
-      include: { mode: true },
+      include: { mode: true, teamMember: { select: { id: true, displayName: true } } },
     });
 
     if (!device) {
