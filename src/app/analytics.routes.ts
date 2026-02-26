@@ -84,7 +84,7 @@ router.get('/:restaurantId/analytics/menu-engineering', async (req: Request, res
 
     const report = await menuEngineeringService.generateReport(
       restaurantId,
-      parseInt(days as string)
+      Number.parseInt(days as string, 10)
     );
 
     if (!report) {
@@ -161,7 +161,7 @@ router.get('/:restaurantId/analytics/sales/weekly', async (req: Request, res: Re
 
     const report = await salesInsightsService.getWeeklyInsights(
       restaurantId,
-      parseInt(weeksAgo as string)
+      Number.parseInt(weeksAgo as string, 10)
     );
 
     if (!report) {
@@ -461,7 +461,7 @@ router.get('/:restaurantId/orders/recent-profit', async (req: Request, res: Resp
 
     const result = await orderProfitService.getRecentOrdersProfit(
       restaurantId,
-      parseInt(limit as string)
+      Number.parseInt(limit as string, 10)
     );
 
     res.json(result);

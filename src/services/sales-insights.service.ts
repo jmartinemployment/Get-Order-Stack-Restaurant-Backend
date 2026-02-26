@@ -411,7 +411,7 @@ export class SalesInsightsService {
     const peakHour = Object.entries(current.ordersByHour)
       .sort(([, a], [, b]) => b - a)[0];
     if (peakHour) {
-      const hour = parseInt(peakHour[0]);
+      const hour = Number.parseInt(peakHour[0], 10);
       const hourLabel = hour < 12 ? `${hour}am` : hour === 12 ? '12pm' : `${hour - 12}pm`;
       insights.push({
         type: 'info',
