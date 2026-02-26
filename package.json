@@ -7,6 +7,9 @@
     "dev": "tsx watch src/main.ts",
     "build": "prisma generate && tsc",
     "start": "node dist/main.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "verify:marketplace:phase5": "tsx scripts/verify-marketplace-phase5.ts all",
     "verify:marketplace:phase5:contract": "tsx scripts/verify-marketplace-phase5.ts contract",
     "verify:marketplace:phase5:e2e": "tsx scripts/verify-marketplace-phase5.ts e2e",
@@ -27,6 +30,7 @@
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "express": "^4.21.0",
+    "express-rate-limit": "^8.2.1",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
     "socket.io": "^4.7.4",
@@ -40,9 +44,12 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/multer": "^2.0.0",
     "@types/node": "^22.0.0",
+    "@types/supertest": "^6.0.3",
     "prisma": "^6.0.0",
+    "supertest": "^7.2.2",
     "tsx": "^4.0.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.18"
   },
   "overrides": {
     "socket.io": {
