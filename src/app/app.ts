@@ -33,6 +33,7 @@ import onboardingRoutes from './onboarding.routes';
 import paymentConnectRoutes from './payment-connect.routes';
 import subscriptionRoutes from './subscription.routes';
 import analyticsStandaloneRoutes from './analytics-standalone.routes';
+import teamManagementRoutes from './team-management.routes';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
@@ -342,6 +343,7 @@ app.use('/api/restaurant', requireAuth, marketingCampaignRoutes);  // Marketing 
 app.use('/api/restaurant', requireAuth, comboRoutes);  // Combo/bundle CRUD
 app.use('/api/restaurant', requireAuth, aiAdminRoutes);  // AI admin config, credentials, usage
 app.use('/api/restaurant', requireAuth, foodCostRoutes);  // Food cost: vendors, invoices, recipes, reports
+app.use('/api/restaurant', requireAuth, teamManagementRoutes);  // Team members + permission sets CRUD
 app.use('/api/restaurant/:restaurantId', requireAuth, supplierOrderingRoutes);  // Supplier ordering: credentials, connection test
 app.use('/api/restaurant-groups', requireAuth, multiLocationRoutes);  // Multi-location: groups, sync, settings propagation
 app.use('/api/analytics', requireAuth, analyticsStandaloneRoutes);  // Standalone analytics (pinned-widgets, proactive-insights)

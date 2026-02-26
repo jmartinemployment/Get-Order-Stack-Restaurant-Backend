@@ -85,6 +85,8 @@ model Restaurant {
   reportSchedules      ReportSchedule[]
   orderTemplates       OrderTemplate[]
   referralConfig       ReferralConfig?
+  teamMembers          TeamMember[]
+  permissionSets       PermissionSet[]
 
   // Payment Connect (Stripe Connect / PayPal Partner Referrals)
   stripeConnectedAccountId  String?  @map("stripe_connected_account_id")
@@ -1779,4 +1781,60 @@ model ReferralConfig {
   restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@map("referral_configs")
+}
+
+model PermissionSet {
+  id           String   @id @default(uuid())
+  restaurantId String   @map("restaurant_id")
+  name         String
+  permissions  Json     @default("{}")
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  teamMembers  TeamMember[]
+
+  @@index([restaurantId])
+  @@map("permission_sets")
+}
+
+model TeamMember {
+  id                String           @id @default(uuid())
+  restaurantId      String           @map("restaurant_id")
+  displayName       String           @map("display_name")
+  email             String?
+  phone             String?
+  passcode          String?
+  permissionSetId   String?          @map("permission_set_id")
+  assignedLocationIds Json           @default("[]") @map("assigned_location_ids")
+  avatarUrl         String?          @map("avatar_url")
+  hireDate          DateTime?        @map("hire_date")
+  status            String           @default("active")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  restaurant        Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  permissionSet     PermissionSet?   @relation(fields: [permissionSetId], references: [id], onDelete: SetNull)
+  jobs              TeamMemberJob[]
+
+  @@index([restaurantId])
+  @@map("team_members")
+}
+
+model TeamMemberJob {
+  id               String   @id @default(uuid())
+  teamMemberId     String   @map("team_member_id")
+  jobTitle         String   @map("job_title")
+  hourlyRate       Float    @default(0) @map("hourly_rate")
+  isTipEligible    Boolean  @default(false) @map("is_tip_eligible")
+  isPrimary        Boolean  @default(false) @map("is_primary")
+  overtimeEligible Boolean  @default(true) @map("overtime_eligible")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  teamMember       TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@index([teamMemberId])
+  @@map("team_member_jobs")
 }
