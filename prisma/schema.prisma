@@ -84,6 +84,7 @@ model Restaurant {
   savedReports         SavedReport[]
   reportSchedules      ReportSchedule[]
   orderTemplates       OrderTemplate[]
+  referralConfig       ReferralConfig?
 
   // Payment Connect (Stripe Connect / PayPal Partner Referrals)
   stripeConnectedAccountId  String?  @map("stripe_connected_account_id")
@@ -1763,4 +1764,19 @@ model OrderTemplate {
 
   @@index([restaurantId])
   @@map("order_templates")
+}
+
+model ReferralConfig {
+  id              String   @id @default(uuid())
+  restaurantId    String   @unique @map("restaurant_id")
+  enabled         Boolean  @default(false)
+  referrerReward  Json     @default("{\"type\":\"points\",\"value\":100,\"freeItemId\":null}") @map("referrer_reward")
+  refereeReward   Json     @default("{\"type\":\"discount_percentage\",\"value\":10,\"freeItemId\":null}") @map("referee_reward")
+  maxReferrals    Int?     @map("max_referrals")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("referral_configs")
 }

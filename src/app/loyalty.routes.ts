@@ -221,4 +221,56 @@ router.get('/:restaurantId/customers/lookup', async (req: Request, res: Response
   }
 });
 
+// ============ Referral Config ============
+
+router.get('/:restaurantId/referrals/config', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const config = await prisma.referralConfig.findUnique({
+      where: { restaurantId },
+    });
+    if (!config) {
+      res.json({
+        enabled: false,
+        referrerReward: { type: 'points', value: 100, freeItemId: null },
+        refereeReward: { type: 'discount_percentage', value: 10, freeItemId: null },
+        maxReferrals: null,
+      });
+      return;
+    }
+    res.json({
+      enabled: config.enabled,
+      referrerReward: config.referrerReward,
+      refereeReward: config.refereeReward,
+      maxReferrals: config.maxReferrals,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error getting referral config:', message);
+    res.status(500).json({ error: 'Failed to get referral config' });
+  }
+});
+
+router.put('/:restaurantId/referrals/config', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { enabled, referrerReward, refereeReward, maxReferrals } = req.body;
+    const config = await prisma.referralConfig.upsert({
+      where: { restaurantId },
+      create: { restaurantId, enabled, referrerReward, refereeReward, maxReferrals },
+      update: { enabled, referrerReward, refereeReward, maxReferrals },
+    });
+    res.json({
+      enabled: config.enabled,
+      referrerReward: config.referrerReward,
+      refereeReward: config.refereeReward,
+      maxReferrals: config.maxReferrals,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error saving referral config:', message);
+    res.status(500).json({ error: 'Failed to save referral config' });
+  }
+});
+
 export default router;
