@@ -1,15 +1,36 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import rateLimit from 'express-rate-limit';
 import { authService } from '../services/auth.service';
 import { requireAuth, requireAdmin, requireSuperAdmin, requireRestaurantManager } from '../middleware/auth.middleware';
 
 const router = Router();
 const prisma = new PrismaClient();
 
+// Rate limit auth endpoints to prevent brute-force attacks
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 10, // 10 attempts per window
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts. Please try again in 15 minutes.' },
+  keyGenerator: (req) => req.ip ?? 'unknown',
+});
+
+// Stricter rate limit for PIN auth (4-6 digit PINs are easily brute-forced)
+const pinRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 5, // 5 attempts per window
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many PIN attempts. Please try again in 15 minutes.' },
+  keyGenerator: (req) => req.ip ?? 'unknown',
+});
+
 // ============ User Authentication ============
 
 // Public signup — creates owner account + auto-login
-router.post('/signup', async (req: Request, res: Response) => {
+router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
   try {
     const { firstName, lastName, email, password } = req.body;
 
@@ -69,7 +90,7 @@ router.post('/signup', async (req: Request, res: Response) => {
 });
 
 // Login with email/password
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
@@ -96,6 +117,30 @@ router.post('/login', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Reset password by email (public, rate-limited)
+router.post('/reset-password', authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      res.status(400).json({ error: 'Email and new password are required' });
+      return;
+    }
+
+    const result = await authService.resetPasswordByEmail(email, newPassword);
+
+    if (!result.success) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+
+    res.json({ success: true, message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 
@@ -215,7 +260,7 @@ router.get('/me', async (req: Request, res: Response) => {
 // ============ Staff PIN Authentication ============
 
 // Verify staff PIN for a restaurant
-router.post('/:restaurantId/pin/verify', async (req: Request, res: Response) => {
+router.post('/:restaurantId/pin/verify', pinRateLimiter, async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
     const { pin } = req.body;

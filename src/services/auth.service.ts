@@ -4,10 +4,13 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Environment variables (should be set in production)
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+// JWT_SECRET is required — refuse to start if not configured
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is not set. The server cannot start without it.');
+}
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'; // Admin sessions: 7 days
-const DEVICE_TOKEN_EXPIRES_IN = '365d'; // Device sessions: 1 year (persistent)
+const DEVICE_TOKEN_EXPIRES_IN = '30d'; // Device sessions: 30 days (was 365d — reduced for security)
 const SALT_ROUNDS = 10;
 
 export interface TokenPayload {
@@ -508,6 +511,30 @@ class AuthService {
     } catch (error: unknown) {
       console.error('[Auth] Change password error:', error);
       return { success: false, error: 'Failed to change password' };
+    }
+  }
+
+  async resetPasswordByEmail(email: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (newPassword.length < 6) {
+        return { success: false, error: 'New password must be at least 6 characters' };
+      }
+
+      const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+      if (!user) {
+        return { success: false, error: 'No account found with that email address' };
+      }
+
+      const passwordHash = await this.hashPassword(newPassword);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash }
+      });
+
+      return { success: true };
+    } catch (error: unknown) {
+      console.error('[Auth] Reset password by email error:', error);
+      return { success: false, error: 'Failed to reset password' };
     }
   }
 
