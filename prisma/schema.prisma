@@ -78,6 +78,7 @@ model Restaurant {
   aiUsageLogs          AiUsageLog[]
   vendors              Vendor[]
   purchaseInvoices     PurchaseInvoice[]
+  supplierCredentials  RestaurantSupplierCredentials?
   foodCostRecipes      FoodCostRecipe[]
   locationGroupMemberships LocationGroupMember[]
 
@@ -1538,17 +1539,22 @@ model AiUsageLog {
 // === FOOD COST / AP AUTOMATION (T5-07) ===
 
 model Vendor {
-  id           String   @id @default(uuid())
-  restaurantId String   @map("restaurant_id")
-  name         String
-  contactName  String?  @map("contact_name")
-  contactEmail String?  @map("contact_email")
-  phone        String?
-  address      String?
-  notes        String?
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(uuid())
+  restaurantId  String   @map("restaurant_id")
+  name          String
+  contactName   String?  @map("contact_name")
+  contactEmail  String?  @map("contact_email")
+  phone         String?
+  address       String?
+  notes         String?
+  paymentTerms  String?  @map("payment_terms")
+  leadTimeDays  Int?     @map("lead_time_days")
+  website       String?
+  apiPortalUrl  String?  @map("api_portal_url")
+  isIntegrated  Boolean  @default(false) @map("is_integrated")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   restaurant       Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   purchaseInvoices PurchaseInvoice[]
@@ -1680,4 +1686,25 @@ model MenuSyncLog {
 
   @@index([restaurantGroupId])
   @@map("menu_sync_logs")
+}
+
+// === SUPPLIER ORDERING API CREDENTIALS ===
+
+model RestaurantSupplierCredentials {
+  id                              String    @id @default(uuid())
+  restaurantId                    String    @unique @map("restaurant_id")
+  syscoClientIdEncrypted          String?   @map("sysco_client_id_encrypted")
+  syscoClientSecretEncrypted      String?   @map("sysco_client_secret_encrypted")
+  syscoCustomerIdEncrypted        String?   @map("sysco_customer_id_encrypted")
+  syscoMode                       String?   @map("sysco_mode")
+  gfsClientIdEncrypted            String?   @map("gfs_client_id_encrypted")
+  gfsClientSecretEncrypted        String?   @map("gfs_client_secret_encrypted")
+  gfsCustomerIdEncrypted          String?   @map("gfs_customer_id_encrypted")
+  gfsMode                         String?   @map("gfs_mode")
+  createdAt                       DateTime  @default(now()) @map("created_at")
+  updatedAt                       DateTime  @updatedAt @map("updated_at")
+
+  restaurant                      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("restaurant_supplier_credentials")
 }

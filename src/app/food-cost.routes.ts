@@ -14,19 +14,38 @@ const createVendorSchema = z.object({
   name: z.string().min(1),
   contactName: z.string().optional(),
   contactEmail: z.string().email().optional(),
+  email: z.string().email().optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
   notes: z.string().optional(),
+  paymentTerms: z.string().optional(),
+  leadTimeDays: z.number().int().nonnegative().optional(),
+  website: z.string().optional(),
+  apiPortalUrl: z.string().optional(),
+}).transform((data) => {
+  const { email, ...rest } = data;
+  return { ...rest, contactEmail: rest.contactEmail ?? email };
 });
 
 const updateVendorSchema = z.object({
   name: z.string().min(1).optional(),
   contactName: z.string().nullable().optional(),
   contactEmail: z.string().email().nullable().optional(),
+  email: z.string().email().nullable().optional(),
   phone: z.string().nullable().optional(),
   address: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  paymentTerms: z.string().nullable().optional(),
+  leadTimeDays: z.number().int().nonnegative().nullable().optional(),
+  website: z.string().nullable().optional(),
+  apiPortalUrl: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
+}).transform((data) => {
+  const { email, ...rest } = data;
+  if (email !== undefined) {
+    return { ...rest, contactEmail: rest.contactEmail ?? email };
+  }
+  return rest;
 });
 
 const lineItemSchema = z.object({
