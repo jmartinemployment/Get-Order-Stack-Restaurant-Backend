@@ -636,6 +636,96 @@ class AuthService {
       throw new Error('Unable to verify restaurant access');
     }
   }
+
+  // ============ POS Login (PIN + Permissions) ============
+
+  async posLogin(restaurantId: string, passcode: string): Promise<{
+    token: string;
+    teamMemberId: string | null;
+    teamMemberName: string;
+    role: string;
+    permissions: Record<string, boolean>;
+    clockedIn: boolean;
+    activeTimecardId: string | null;
+  } | null> {
+    try {
+      // Find matching PIN
+      const staffPins = await prisma.staffPin.findMany({
+        where: { restaurantId, isActive: true },
+        include: {
+          teamMember: {
+            include: {
+              permissionSet: true,
+            },
+          },
+        },
+      });
+
+      let matchedPin: typeof staffPins[number] | null = null;
+      for (const pin of staffPins) {
+        const isValid = await this.verifyPin(passcode, pin.pin);
+        if (isValid) {
+          matchedPin = pin;
+          break;
+        }
+      }
+
+      if (!matchedPin) return null;
+
+      // Resolve permissions from TeamMember's PermissionSet
+      const teamMember = matchedPin.teamMember;
+      const permissions: Record<string, boolean> = teamMember?.permissionSet
+        ? (teamMember.permissionSet.permissions as Record<string, boolean>)
+        : {};
+
+      // Check for active time entry
+      const activeTimeEntry = await prisma.timeEntry.findFirst({
+        where: {
+          staffPinId: matchedPin.id,
+          clockOut: null,
+        },
+        orderBy: { clockIn: 'desc' },
+      });
+
+      // Generate a POS session token (short-lived, pin type)
+      const sessionToken = this.generateSessionToken();
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 16); // POS sessions: 16 hours
+
+      const session = await prisma.userSession.create({
+        data: {
+          userId: matchedPin.id, // Use staffPin ID as user reference for POS sessions
+          token: sessionToken,
+          deviceInfo: 'POS Terminal',
+          expiresAt,
+        },
+      });
+
+      const token = this.generateToken(
+        {
+          userId: matchedPin.id,
+          email: matchedPin.name, // POS sessions don't have email; store name for logging
+          role: matchedPin.role,
+          type: 'pin',
+        },
+        session.id,
+        '16h'
+      );
+
+      return {
+        token,
+        teamMemberId: teamMember?.id ?? null,
+        teamMemberName: matchedPin.name,
+        role: matchedPin.role,
+        permissions,
+        clockedIn: activeTimeEntry !== null,
+        activeTimecardId: activeTimeEntry?.id ?? null,
+      };
+    } catch (error) {
+      console.error('[Auth] POS login error:', error);
+      return null;
+    }
+  }
 }
 
 export const authService = new AuthService();

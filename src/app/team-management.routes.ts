@@ -477,4 +477,31 @@ router.delete('/:restaurantId/permission-sets/:id', async (req: Request, res: Re
   }
 });
 
+// ============ POS Login ============
+
+router.post('/:restaurantId/pos/login', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { passcode } = req.body;
+
+    if (!passcode) {
+      res.status(400).json({ error: 'Passcode is required' });
+      return;
+    }
+
+    const result = await authService.posLogin(restaurantId, passcode);
+
+    if (!result) {
+      res.status(401).json({ error: 'Invalid passcode' });
+      return;
+    }
+
+    res.json(result);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('POS login error:', message);
+    res.status(500).json({ error: 'POS login failed' });
+  }
+});
+
 export default router;
