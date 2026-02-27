@@ -124,6 +124,195 @@ router.get('/:restaurantId/analytics/upsell-suggestions', async (req: Request, r
   }
 });
 
+// ============ Menu Engineering — Advanced Analytics ============
+
+/**
+ * GET /:restaurantId/analytics/menu/price-elasticity
+ * Price vs demand data derived from OrderItem + MenuItem
+ */
+router.get('/:restaurantId/analytics/menu/price-elasticity', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const menuItems = await prisma.menuItem.findMany({
+      where: { restaurantId },
+      select: { id: true, name: true, price: true },
+    });
+
+    const orderItems = await prisma.orderItem.findMany({
+      where: {
+        order: { restaurantId, status: { in: ['completed', 'delivered', 'ready', 'preparing'] } },
+      },
+      select: { menuItemId: true, quantity: true, unitPrice: true },
+    });
+
+    const itemStats = new Map<string, { orderCount: number; totalRevenue: number }>();
+    for (const oi of orderItems) {
+      if (!oi.menuItemId) continue;
+      const existing = itemStats.get(oi.menuItemId) ?? { orderCount: 0, totalRevenue: 0 };
+      existing.orderCount += oi.quantity;
+      existing.totalRevenue += Number(oi.unitPrice) * oi.quantity;
+      itemStats.set(oi.menuItemId, existing);
+    }
+
+    const items = menuItems.map((mi) => {
+      const stats = itemStats.get(mi.id) ?? { orderCount: 0, totalRevenue: 0 };
+      return {
+        menuItemId: mi.id,
+        name: mi.name,
+        currentPrice: Number(mi.price),
+        orderCount: stats.orderCount,
+        revenuePerItem: stats.orderCount > 0
+          ? Math.round((stats.totalRevenue / stats.orderCount) * 100) / 100
+          : 0,
+      };
+    });
+
+    res.json({ items });
+  } catch (error: unknown) {
+    console.error('[Analytics] Error fetching price elasticity:', error);
+    res.json({ items: [] });
+  }
+});
+
+/**
+ * GET /:restaurantId/analytics/menu/cannibalization
+ * Items frequently ordered together or competing in the same category
+ */
+router.get('/:restaurantId/analytics/menu/cannibalization', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        status: { in: ['completed', 'delivered', 'ready', 'preparing'] },
+      },
+      select: {
+        orderItems: {
+          select: { menuItemId: true },
+        },
+      },
+      take: 1000,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const menuItems = await prisma.menuItem.findMany({
+      where: { restaurantId },
+      select: { id: true, name: true, categoryId: true },
+    });
+
+    const menuItemMap = new Map(menuItems.map((mi) => [mi.id, mi]));
+    const pairCounts = new Map<string, number>();
+
+    for (const order of orders) {
+      const itemIds = order.orderItems
+        .map((i) => i.menuItemId)
+        .filter((id): id is string => id !== null);
+      const unique = [...new Set(itemIds)];
+
+      for (let i = 0; i < unique.length; i++) {
+        for (let j = i + 1; j < unique.length; j++) {
+          const key = [unique[i], unique[j]].sort().join('|');
+          pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+        }
+      }
+    }
+
+    const pairs = [...pairCounts.entries()]
+      .filter(([, count]) => count >= 2)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 50)
+      .map(([key, count]) => {
+        const [idA, idB] = key.split('|');
+        const itemA = menuItemMap.get(idA);
+        const itemB = menuItemMap.get(idB);
+        return {
+          itemA: { menuItemId: idA, name: itemA?.name ?? 'Unknown' },
+          itemB: { menuItemId: idB, name: itemB?.name ?? 'Unknown' },
+          coOccurrenceCount: count,
+          sameCategory: itemA?.categoryId !== null
+            && itemA?.categoryId === itemB?.categoryId,
+        };
+      });
+
+    res.json({ pairs });
+  } catch (error: unknown) {
+    console.error('[Analytics] Error fetching cannibalization data:', error);
+    res.json({ pairs: [] });
+  }
+});
+
+/**
+ * GET /:restaurantId/analytics/prep-time-accuracy
+ * Estimated vs actual prep time per menu item
+ */
+router.get('/:restaurantId/analytics/prep-time-accuracy', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const menuItems = await prisma.menuItem.findMany({
+      where: { restaurantId },
+      select: { id: true, name: true, prepTimeMinutes: true },
+    });
+
+    // Use OrderItem sentToKitchenAt -> completedAt as actual prep time
+    const completedOrderItems = await prisma.orderItem.findMany({
+      where: {
+        order: {
+          restaurantId,
+          status: { in: ['completed', 'delivered', 'ready'] },
+        },
+        sentToKitchenAt: { not: null },
+        completedAt: { not: null },
+        menuItemId: { not: null },
+      },
+      select: {
+        menuItemId: true,
+        sentToKitchenAt: true,
+        completedAt: true,
+      },
+      take: 2000,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const actualTimes = new Map<string, number[]>();
+    for (const oi of completedOrderItems) {
+      if (!oi.sentToKitchenAt || !oi.completedAt || !oi.menuItemId) continue;
+      const minutes = (oi.completedAt.getTime() - oi.sentToKitchenAt.getTime()) / 60000;
+      if (minutes <= 0 || minutes > 180) continue;
+
+      const arr = actualTimes.get(oi.menuItemId) ?? [];
+      arr.push(minutes);
+      actualTimes.set(oi.menuItemId, arr);
+    }
+
+    const items = menuItems.map((mi) => {
+      const times = actualTimes.get(mi.id) ?? [];
+      const actualAvg = times.length > 0
+        ? Math.round((times.reduce((sum, t) => sum + t, 0) / times.length) * 10) / 10
+        : null;
+      const estimated = mi.prepTimeMinutes ?? null;
+      const accuracy = estimated !== null && actualAvg !== null
+        ? Math.round((1 - Math.abs(actualAvg - estimated) / estimated) * 100)
+        : null;
+
+      return {
+        menuItemId: mi.id,
+        name: mi.name,
+        estimatedMinutes: estimated,
+        actualAvgMinutes: actualAvg,
+        accuracy,
+      };
+    });
+
+    res.json({ items });
+  } catch (error: unknown) {
+    console.error('[Analytics] Error fetching prep time accuracy:', error);
+    res.json({ items: [] });
+  }
+});
+
 // ============ Sales Insights ============
 
 /**
@@ -400,9 +589,137 @@ router.get('/:restaurantId/inventory/expiring', async (req: Request, res: Respon
   }
 });
 
+// ============ Inventory Unit Conversions (must be before /:itemId catch-all) ============
+
+router.get('/:restaurantId/inventory/unit-conversions', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const conversions = await prisma.unitConversion.findMany({
+      where: { restaurantId },
+      orderBy: { fromUnit: 'asc' },
+    });
+    res.json(conversions);
+  } catch (error: unknown) {
+    console.error('[Inventory] Error fetching unit conversions:', error);
+    res.status(500).json({ error: 'Failed to fetch unit conversions' });
+  }
+});
+
+router.post('/:restaurantId/inventory/unit-conversions', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { fromUnit, toUnit, factor } = req.body;
+
+    if (!fromUnit || !toUnit || !factor) {
+      res.status(400).json({ error: 'fromUnit, toUnit, and factor are required' });
+      return;
+    }
+
+    const conversion = await prisma.unitConversion.create({
+      data: { restaurantId, fromUnit, toUnit, factor },
+    });
+    res.status(201).json(conversion);
+  } catch (error: unknown) {
+    console.error('[Inventory] Error creating unit conversion:', error);
+    res.status(500).json({ error: 'Failed to create unit conversion' });
+  }
+});
+
+router.patch('/:restaurantId/inventory/unit-conversions/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const data: Record<string, unknown> = {};
+    if (req.body.fromUnit !== undefined) data.fromUnit = req.body.fromUnit;
+    if (req.body.toUnit !== undefined) data.toUnit = req.body.toUnit;
+    if (req.body.factor !== undefined) data.factor = req.body.factor;
+
+    const conversion = await prisma.unitConversion.update({ where: { id }, data });
+    res.json(conversion);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Unit conversion not found' });
+      return;
+    }
+    console.error('[Inventory] Error updating unit conversion:', error);
+    res.status(500).json({ error: 'Failed to update unit conversion' });
+  }
+});
+
+// ============ Inventory Cycle Counts (must be before /:itemId catch-all) ============
+
+router.get('/:restaurantId/inventory/cycle-counts', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const counts = await prisma.cycleCount.findMany({
+      where: { restaurantId },
+      include: { items: true },
+      orderBy: { date: 'desc' },
+    });
+    res.json(counts);
+  } catch (error: unknown) {
+    console.error('[Inventory] Error fetching cycle counts:', error);
+    res.status(500).json({ error: 'Failed to fetch cycle counts' });
+  }
+});
+
+router.post('/:restaurantId/inventory/cycle-counts', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { date, items } = req.body;
+
+    const createdBy = (req as unknown as { user?: { id?: string } }).user?.id ?? 'system';
+
+    const count = await prisma.cycleCount.create({
+      data: {
+        restaurantId,
+        date: date ? new Date(date) : new Date(),
+        createdBy,
+        items: items ? {
+          create: (items as Array<{ inventoryItemId: string; expectedQty: number; actualQty?: number }>).map((i) => ({
+            inventoryItemId: i.inventoryItemId,
+            expectedQty: i.expectedQty,
+            actualQty: i.actualQty ?? null,
+            variance: i.actualQty !== undefined ? i.actualQty - i.expectedQty : null,
+          })),
+        } : undefined,
+      },
+      include: { items: true },
+    });
+    res.status(201).json(count);
+  } catch (error: unknown) {
+    console.error('[Inventory] Error creating cycle count:', error);
+    res.status(500).json({ error: 'Failed to create cycle count' });
+  }
+});
+
+router.patch('/:restaurantId/inventory/cycle-counts/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const data: Record<string, unknown> = {};
+    if (req.body.status !== undefined) {
+      data.status = req.body.status;
+      if (req.body.status === 'completed') data.completedAt = new Date();
+    }
+
+    const count = await prisma.cycleCount.update({
+      where: { id },
+      data,
+      include: { items: true },
+    });
+    res.json(count);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Cycle count not found' });
+      return;
+    }
+    console.error('[Inventory] Error updating cycle count:', error);
+    res.status(500).json({ error: 'Failed to update cycle count' });
+  }
+});
+
 /**
  * GET /:restaurantId/inventory/:itemId
- * Get a single inventory item (must be after /alerts, /predictions, /report, /expiring)
+ * Get a single inventory item (must be after /alerts, /predictions, /report, /expiring, /unit-conversions, /cycle-counts)
  */
 router.get('/:restaurantId/inventory/:itemId', async (req: Request, res: Response) => {
   try {
@@ -1511,134 +1828,6 @@ router.delete('/:restaurantId/customers/messages/templates/:templateId', async (
     }
     console.error('[CRM] Error deleting message template:', error);
     res.status(500).json({ error: 'Failed to delete message template' });
-  }
-});
-
-// ============ Inventory Unit Conversions ============
-
-router.get('/:restaurantId/inventory/unit-conversions', async (req: Request, res: Response) => {
-  try {
-    const { restaurantId } = req.params;
-    const conversions = await prisma.unitConversion.findMany({
-      where: { restaurantId },
-      orderBy: { fromUnit: 'asc' },
-    });
-    res.json(conversions);
-  } catch (error: unknown) {
-    console.error('[Inventory] Error fetching unit conversions:', error);
-    res.status(500).json({ error: 'Failed to fetch unit conversions' });
-  }
-});
-
-router.post('/:restaurantId/inventory/unit-conversions', async (req: Request, res: Response) => {
-  try {
-    const { restaurantId } = req.params;
-    const { fromUnit, toUnit, factor } = req.body;
-
-    if (!fromUnit || !toUnit || !factor) {
-      res.status(400).json({ error: 'fromUnit, toUnit, and factor are required' });
-      return;
-    }
-
-    const conversion = await prisma.unitConversion.create({
-      data: { restaurantId, fromUnit, toUnit, factor },
-    });
-    res.status(201).json(conversion);
-  } catch (error: unknown) {
-    console.error('[Inventory] Error creating unit conversion:', error);
-    res.status(500).json({ error: 'Failed to create unit conversion' });
-  }
-});
-
-router.patch('/:restaurantId/inventory/unit-conversions/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const data: Record<string, unknown> = {};
-    if (req.body.fromUnit !== undefined) data.fromUnit = req.body.fromUnit;
-    if (req.body.toUnit !== undefined) data.toUnit = req.body.toUnit;
-    if (req.body.factor !== undefined) data.factor = req.body.factor;
-
-    const conversion = await prisma.unitConversion.update({ where: { id }, data });
-    res.json(conversion);
-  } catch (error: unknown) {
-    if ((error as { code?: string }).code === 'P2025') {
-      res.status(404).json({ error: 'Unit conversion not found' });
-      return;
-    }
-    console.error('[Inventory] Error updating unit conversion:', error);
-    res.status(500).json({ error: 'Failed to update unit conversion' });
-  }
-});
-
-// ============ Inventory Cycle Counts ============
-
-router.get('/:restaurantId/inventory/cycle-counts', async (req: Request, res: Response) => {
-  try {
-    const { restaurantId } = req.params;
-    const counts = await prisma.cycleCount.findMany({
-      where: { restaurantId },
-      include: { items: true },
-      orderBy: { date: 'desc' },
-    });
-    res.json(counts);
-  } catch (error: unknown) {
-    console.error('[Inventory] Error fetching cycle counts:', error);
-    res.status(500).json({ error: 'Failed to fetch cycle counts' });
-  }
-});
-
-router.post('/:restaurantId/inventory/cycle-counts', async (req: Request, res: Response) => {
-  try {
-    const { restaurantId } = req.params;
-    const { date, items } = req.body;
-
-    const createdBy = (req as unknown as { user?: { id?: string } }).user?.id ?? 'system';
-
-    const count = await prisma.cycleCount.create({
-      data: {
-        restaurantId,
-        date: date ? new Date(date) : new Date(),
-        createdBy,
-        items: items ? {
-          create: (items as Array<{ inventoryItemId: string; expectedQty: number; actualQty?: number }>).map((i) => ({
-            inventoryItemId: i.inventoryItemId,
-            expectedQty: i.expectedQty,
-            actualQty: i.actualQty ?? null,
-            variance: i.actualQty !== undefined ? i.actualQty - i.expectedQty : null,
-          })),
-        } : undefined,
-      },
-      include: { items: true },
-    });
-    res.status(201).json(count);
-  } catch (error: unknown) {
-    console.error('[Inventory] Error creating cycle count:', error);
-    res.status(500).json({ error: 'Failed to create cycle count' });
-  }
-});
-
-router.patch('/:restaurantId/inventory/cycle-counts/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const data: Record<string, unknown> = {};
-    if (req.body.status !== undefined) {
-      data.status = req.body.status;
-      if (req.body.status === 'completed') data.completedAt = new Date();
-    }
-
-    const count = await prisma.cycleCount.update({
-      where: { id },
-      data,
-      include: { items: true },
-    });
-    res.json(count);
-  } catch (error: unknown) {
-    if ((error as { code?: string }).code === 'P2025') {
-      res.status(404).json({ error: 'Cycle count not found' });
-      return;
-    }
-    console.error('[Inventory] Error updating cycle count:', error);
-    res.status(500).json({ error: 'Failed to update cycle count' });
   }
 });
 
