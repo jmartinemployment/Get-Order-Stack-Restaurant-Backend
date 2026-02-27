@@ -91,10 +91,26 @@ router.post('/:restaurantId/auth/validate-pin', async (req: Request, res: Respon
       return;
     }
 
+    // Load permissions from linked TeamMember's PermissionSet
+    let permissions: Record<string, boolean> = {};
+    const staffPin = await prisma.staffPin.findUnique({
+      where: { id: result.staffPin.id },
+      include: {
+        teamMember: {
+          include: { permissionSet: true },
+        },
+      },
+    });
+    if (staffPin?.teamMember?.permissionSet) {
+      permissions = staffPin.teamMember.permissionSet.permissions as Record<string, boolean>;
+    }
+
     res.json({
       valid: true,
-      staffName: result.staffPin.name,
-      staffRole: result.staffPin.role,
+      staffPinId: result.staffPin.id,
+      name: result.staffPin.name,
+      role: result.staffPin.role,
+      permissions,
     });
   } catch (error) {
     console.error('[Auth] Error validating PIN:', error);
