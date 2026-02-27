@@ -272,14 +272,31 @@ router.post('/:restaurantId/pin/verify', pinRateLimiter, async (req: Request, re
 
     const result = await authService.verifyStaffPin(restaurantId, pin);
 
-    if (!result.success) {
+    if (!result.success || !result.staffPin) {
       res.status(401).json({ error: result.error });
       return;
     }
 
+    // Load permissions from linked TeamMember's PermissionSet
+    let permissions: Record<string, boolean> = {};
+    const staffPin = await prisma.staffPin.findUnique({
+      where: { id: result.staffPin.id },
+      include: {
+        teamMember: {
+          include: { permissionSet: true },
+        },
+      },
+    });
+    if (staffPin?.teamMember?.permissionSet) {
+      permissions = staffPin.teamMember.permissionSet.permissions as Record<string, boolean>;
+    }
+
     res.json({
       success: true,
-      staff: result.staffPin
+      staff: {
+        ...result.staffPin,
+        permissions,
+      },
     });
   } catch (error) {
     console.error('PIN verification error:', error);
