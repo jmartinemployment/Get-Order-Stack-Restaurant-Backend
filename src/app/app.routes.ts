@@ -8,6 +8,7 @@ import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { broadcastOrderEvent, sendOrderEventToDevice, broadcastToSourceAndKDS } from '../services/socket.service';
 import { cloudPrntService } from '../services/cloudprnt.service';
+import { notificationService } from '../services/notification.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
 import { validateDiningData } from '../validators/dining.validator';
 import { AISettingsPatchSchema } from '../validators/settings.validator';
@@ -1593,10 +1594,13 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
       const enrichedOrder = enrichOrderResponse(order);
       broadcastToSourceAndKDS(order.restaurantId, order.sourceDeviceId, 'order:updated', enrichedOrder);
 
-      // Queue print job when order becomes ready
+      // Queue print job + send notifications when order becomes ready
       if (status === 'ready') {
         cloudPrntService.queuePrintJob(orderId).catch((error: unknown) => {
           console.error(`[Order Status] Failed to queue print job for order ${order.orderNumber}:`, error);
+        });
+        notificationService.onOrderReady(orderId).catch((error: unknown) => {
+          console.error(`[Order Status] Failed to send notification for order ${order.orderNumber}:`, error);
         });
       }
     }
