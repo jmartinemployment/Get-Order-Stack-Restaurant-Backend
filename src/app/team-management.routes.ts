@@ -131,8 +131,6 @@ router.post('/:restaurantId/team-members', async (req: Request, res: Response) =
     }
     const { displayName, email, phone, passcode, permissionSetId, assignedLocationIds, hireDate, jobs } = parsed.data;
 
-    const primaryJob = jobs.find(j => j.isPrimary);
-    const staffRole = primaryJob?.jobTitle ?? 'staff';
     const hashedPin = passcode ? await authService.hashPin(passcode) : await authService.hashPin('0000');
 
     const member = await prisma.$transaction(async (tx) => {
@@ -157,7 +155,7 @@ router.post('/:restaurantId/team-members', async (req: Request, res: Response) =
           teamMemberId: tm.id,
           pin: hashedPin,
           name: displayName,
-          role: staffRole,
+          role: 'team_member',
         },
       });
 

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { MENU_TEMPLATES } from '../data/menu-templates';
+import { DEFAULT_PERMISSION_SETS } from '../data/default-permission-sets';
 import { authService } from '../services/auth.service';
 import { optionalAuth } from '../middleware/auth.middleware';
 
@@ -387,14 +388,47 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
         },
       });
 
-      // Create owner PIN
+      // Seed default permission sets
+      const createdPermSets: { id: string; name: string }[] = [];
+      for (const def of DEFAULT_PERMISSION_SETS) {
+        const ps = await tx.permissionSet.create({
+          data: {
+            restaurantId: restaurant.id,
+            name: def.name,
+            permissions: def.permissions,
+            isDefault: true,
+          },
+        });
+        createdPermSets.push({ id: ps.id, name: ps.name });
+      }
+      const fullAccessSetId = createdPermSets.find(s => s.name === 'Full Access')?.id ?? null;
+
+      // Create owner PIN + TeamMember with Full Access permission set
       if (ownerPin?.pin) {
+        const ownerTeamMember = await tx.teamMember.create({
+          data: {
+            restaurantId: restaurant.id,
+            displayName: ownerPin.displayName ?? 'Owner',
+            permissionSetId: fullAccessSetId,
+            jobs: {
+              create: {
+                jobTitle: 'Owner',
+                hourlyRate: 0,
+                isTipEligible: false,
+                isPrimary: true,
+                overtimeEligible: false,
+              },
+            },
+          },
+        });
+
         await tx.staffPin.create({
           data: {
             restaurantId: restaurant.id,
+            teamMemberId: ownerTeamMember.id,
             pin: ownerPin.pin,
             name: ownerPin.displayName ?? 'Owner',
-            role: 'owner',
+            role: 'team_member',
           },
         });
       }
