@@ -10,7 +10,7 @@ ALTER TABLE "team_members" ADD COLUMN IF NOT EXISTS "email" TEXT;
 ALTER TABLE "team_members" ADD COLUMN IF NOT EXISTS "role" TEXT NOT NULL DEFAULT 'staff';
 ALTER TABLE "team_members" ADD COLUMN IF NOT EXISTS "is_active" BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE "team_members" ADD COLUMN IF NOT EXISTS "last_login_at" TIMESTAMPTZ;
-ALTER TABLE "team_members" ADD COLUMN IF NOT EXISTS "restaurant_group_id" UUID;
+ALTER TABLE "team_members" ADD COLUMN IF NOT EXISTS "restaurant_group_id" TEXT;
 
 -- Step 2: Make restaurant_id nullable (signup creates TeamMember before restaurant exists)
 ALTER TABLE "team_members" ALTER COLUMN "restaurant_id" DROP NOT NULL;
