@@ -7,7 +7,7 @@ services:
     runtime: node
     region: ohio
     plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: npm install && rm -rf dist && npm run build
     startCommand: npm start
     healthCheckPath: /health
     envVars:
@@ -17,6 +17,8 @@ services:
         sync: false
       - key: DIRECT_URL
         sync: false
+      - key: JWT_SECRET
+        sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: STRIPE_SECRET_KEY
@@ -24,6 +26,20 @@ services:
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: DELIVERY_CREDENTIALS_ENCRYPTION_KEY
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: PAYPAL_MODE
+        sync: false
+      - key: PAYPAL_PARTNER_ID
+        sync: false
+      - key: PAYPAL_BN_CODE
+        sync: false
+      - key: FRONTEND_URL
         sync: false
       - key: CORS_ORIGINS
         sync: false
