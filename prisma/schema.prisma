@@ -858,7 +858,7 @@ model RestaurantGroup {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  users       User[]
+  teamMembers TeamMember[]
   restaurants Restaurant[]
   locationGroups LocationGroup[]
   menuSyncLogs   MenuSyncLog[]
@@ -866,39 +866,18 @@ model RestaurantGroup {
   @@map("restaurant_groups")
 }
 
-model User {
-  id                String    @id @default(uuid())
-  restaurantGroupId String?   @map("restaurant_group_id")
-  email             String    @unique
-  passwordHash      String    @map("password_hash")
-  firstName         String?   @map("first_name")
-  lastName          String?   @map("last_name")
-  role              String    @default("staff") // super_admin, owner, manager, staff
-  isActive          Boolean   @default(true) @map("is_active")
-  lastLoginAt       DateTime? @map("last_login_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-
-  restaurantGroup  RestaurantGroup?       @relation(fields: [restaurantGroupId], references: [id], onDelete: SetNull)
-  restaurantAccess UserRestaurantAccess[]
-  sessions         UserSession[]
-
-  @@index([restaurantGroupId])
-  @@map("users")
-}
-
 model UserRestaurantAccess {
-  id           String   @id @default(uuid())
-  userId       String   @map("user_id")
-  restaurantId String   @map("restaurant_id")
-  role         String   @default("staff") // owner, manager, staff
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid())
+  teamMemberId   String   @map("user_id")
+  restaurantId   String   @map("restaurant_id")
+  role           String   @default("staff") // owner, manager, staff
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamMember TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
   restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, restaurantId])
+  @@unique([teamMemberId, restaurantId])
   @@index([restaurantId])
   @@map("user_restaurant_access")
 }
@@ -913,7 +892,7 @@ model UserSession {
   expiresAt  DateTime @map("expires_at")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamMember TeamMember @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("user_sessions")
@@ -1807,27 +1786,38 @@ model PermissionSet {
 }
 
 model TeamMember {
-  id                String           @id @default(uuid())
-  restaurantId      String           @map("restaurant_id")
-  displayName       String           @map("display_name")
-  email             String?
-  phone             String?
-  passcode          String?
-  permissionSetId   String?          @map("permission_set_id")
-  assignedLocationIds Json           @default("[]") @map("assigned_location_ids")
-  avatarUrl         String?          @map("avatar_url")
-  hireDate          DateTime?        @map("hire_date")
-  status            String           @default("active")
-  createdAt         DateTime         @default(now()) @map("created_at")
-  updatedAt         DateTime         @updatedAt @map("updated_at")
+  id                  String           @id @default(uuid())
+  restaurantId        String?          @map("restaurant_id")
+  displayName         String           @map("display_name")
+  email               String?          @unique
+  phone               String?
+  passcode            String?
+  passwordHash        String?          @map("password_hash")
+  firstName           String?          @map("first_name")
+  lastName            String?          @map("last_name")
+  role                String           @default("staff") // super_admin, owner, manager, staff
+  isActive            Boolean          @default(true) @map("is_active")
+  lastLoginAt         DateTime?        @map("last_login_at")
+  restaurantGroupId   String?          @map("restaurant_group_id")
+  permissionSetId     String?          @map("permission_set_id")
+  assignedLocationIds Json             @default("[]") @map("assigned_location_ids")
+  avatarUrl           String?          @map("avatar_url")
+  hireDate            DateTime?        @map("hire_date")
+  status              String           @default("active")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
 
-  restaurant        Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  permissionSet     PermissionSet?   @relation(fields: [permissionSetId], references: [id], onDelete: SetNull)
-  jobs              TeamMemberJob[]
-  staffPin          StaffPin?
-  devices           Device[]
+  restaurant          Restaurant?      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurantGroup     RestaurantGroup? @relation(fields: [restaurantGroupId], references: [id], onDelete: SetNull)
+  permissionSet       PermissionSet?   @relation(fields: [permissionSetId], references: [id], onDelete: SetNull)
+  jobs                TeamMemberJob[]
+  staffPin            StaffPin?
+  devices             Device[]
+  restaurantAccess    UserRestaurantAccess[]
+  sessions            UserSession[]
 
   @@index([restaurantId])
+  @@index([restaurantGroupId])
   @@map("team_members")
 }
 

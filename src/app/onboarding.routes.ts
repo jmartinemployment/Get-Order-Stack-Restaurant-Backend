@@ -276,8 +276,8 @@ router.post('/:restaurantId/business-hours', async (req: Request, res: Response)
 
 // POST /api/onboarding/create
 // Supports two flows:
-// 1. Authenticated (JWT present from /signup) — uses existing user, creates restaurant + links
-// 2. Unauthenticated (ownerEmail + ownerPassword) — creates user + restaurant in one transaction
+// 1. Authenticated (JWT present from /signup) — uses existing TeamMember, creates restaurant + links
+// 2. Unauthenticated (ownerEmail + ownerPassword) — creates TeamMember + restaurant in one transaction
 router.post('/create', optionalAuth, async (req: Request, res: Response) => {
   try {
     const {
@@ -309,14 +309,14 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    // Look up authenticated user if present
-    let existingUser: { id: string; email: string; firstName: string | null; lastName: string | null } | null = null;
+    // Look up authenticated team member if present
+    let existingMember: { id: string; email: string | null; firstName: string | null; lastName: string | null } | null = null;
     if (isAuthenticated) {
-      existingUser = await prisma.user.findUnique({
-        where: { id: req.user!.userId },
+      existingMember = await prisma.teamMember.findUnique({
+        where: { id: req.user!.teamMemberId },
         select: { id: true, email: true, firstName: true, lastName: true },
       });
-      if (!existingUser) {
+      if (!existingMember) {
         res.status(401).json({ error: 'Authenticated user not found' });
         return;
       }
@@ -358,31 +358,38 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
         },
       });
 
-      // Create or reuse user
-      let userId: string;
-      if (existingUser) {
-        // Authenticated flow — reuse existing user from signup
-        userId = existingUser.id;
+      // Create or reuse team member
+      let teamMemberId: string;
+      if (existingMember) {
+        // Authenticated flow — update existing TeamMember's restaurantId
+        teamMemberId = existingMember.id;
+        await tx.teamMember.update({
+          where: { id: existingMember.id },
+          data: { restaurantId: restaurant.id },
+        });
       } else {
-        // Legacy flow — create user inline
+        // Legacy flow — create TeamMember with passwordHash inline
         const hashedPassword = await authService.hashPassword(ownerPassword);
-        const user = await tx.user.create({
+        const ownerDisplayName = ownerPin?.displayName ?? 'Owner';
+        const member = await tx.teamMember.create({
           data: {
             email: ownerEmail,
             passwordHash: hashedPassword,
             firstName: ownerPin?.displayName?.split(' ')[0] ?? 'Owner',
             lastName: ownerPin?.displayName?.split(' ').slice(1).join(' ') ?? '',
+            displayName: ownerDisplayName,
             role: 'owner',
             isActive: true,
+            restaurantId: restaurant.id,
           },
         });
-        userId = user.id;
+        teamMemberId = member.id;
       }
 
       // Create user-restaurant access
       await tx.userRestaurantAccess.create({
         data: {
-          userId,
+          teamMemberId,
           restaurantId: restaurant.id,
           role: 'owner',
         },
@@ -403,29 +410,32 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
       }
       const fullAccessSetId = createdPermSets.find(s => s.name === 'Full Access')?.id ?? null;
 
-      // Create owner PIN + TeamMember with Full Access permission set
+      // Create owner PIN + link to the TeamMember with Full Access permission set
       if (ownerPin?.pin) {
-        const ownerTeamMember = await tx.teamMember.create({
+        // Update the TeamMember with the Full Access permission set
+        await tx.teamMember.update({
+          where: { id: teamMemberId },
           data: {
-            restaurantId: restaurant.id,
-            displayName: ownerPin.displayName ?? 'Owner',
             permissionSetId: fullAccessSetId,
-            jobs: {
-              create: {
-                jobTitle: 'Owner',
-                hourlyRate: 0,
-                isTipEligible: false,
-                isPrimary: true,
-                overtimeEligible: false,
-              },
-            },
+          },
+        });
+
+        // Create a job for the owner
+        await tx.teamMemberJob.create({
+          data: {
+            teamMemberId,
+            jobTitle: 'Owner',
+            hourlyRate: 0,
+            isTipEligible: false,
+            isPrimary: true,
+            overtimeEligible: false,
           },
         });
 
         await tx.staffPin.create({
           data: {
             restaurantId: restaurant.id,
-            teamMemberId: ownerTeamMember.id,
+            teamMemberId,
             pin: ownerPin.pin,
             name: ownerPin.displayName ?? 'Owner',
             role: 'team_member',
@@ -530,7 +540,7 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
         }
       }
 
-      return { restaurant, userId, device };
+      return { restaurant, teamMemberId, device };
     });
 
     // For authenticated flow, return existing token info (no re-login needed)

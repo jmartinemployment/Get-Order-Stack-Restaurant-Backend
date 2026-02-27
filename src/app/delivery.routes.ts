@@ -98,7 +98,7 @@ router.put('/credentials/security-profile', requireAuth, requireRestaurantManage
     const profile = await deliveryCredentialsService.setSecurityProfile(
       restaurantId,
       parsed.data.mode,
-      req.user?.userId ?? null,
+      req.user?.teamMemberId ?? null,
     );
     res.json(profile);
   } catch (error: unknown) {
@@ -124,7 +124,7 @@ router.put('/credentials/doordash', requireAuth, requireRestaurantManager, async
     const summary = await deliveryCredentialsService.upsertDoorDash(
       restaurantId,
       parsed.data,
-      req.user?.userId ?? null,
+      req.user?.teamMemberId ?? null,
     );
     res.json(summary);
   } catch (error: unknown) {
@@ -143,7 +143,7 @@ router.delete('/credentials/doordash', requireAuth, requireRestaurantManager, as
     const { restaurantId } = req.params;
     const summary = await deliveryCredentialsService.clearDoorDash(
       restaurantId,
-      req.user?.userId ?? null,
+      req.user?.teamMemberId ?? null,
     );
     res.json(summary);
   } catch (error: unknown) {
@@ -164,7 +164,7 @@ router.put('/credentials/uber', requireAuth, requireRestaurantManager, async (re
     const summary = await deliveryCredentialsService.upsertUber(
       restaurantId,
       parsed.data,
-      req.user?.userId ?? null,
+      req.user?.teamMemberId ?? null,
     );
     res.json(summary);
   } catch (error: unknown) {
@@ -183,7 +183,7 @@ router.delete('/credentials/uber', requireAuth, requireRestaurantManager, async 
     const { restaurantId } = req.params;
     const summary = await deliveryCredentialsService.clearUber(
       restaurantId,
-      req.user?.userId ?? null,
+      req.user?.teamMemberId ?? null,
     );
     res.json(summary);
   } catch (error: unknown) {

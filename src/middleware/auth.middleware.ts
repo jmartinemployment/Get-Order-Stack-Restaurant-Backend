@@ -126,7 +126,7 @@ export const requireRestaurantAccess = async (req: Request, res: Response, next:
     }
 
     // Check access
-    const access = await authService.checkRestaurantAccess(req.user.userId, restaurantId);
+    const access = await authService.checkRestaurantAccess(req.user.teamMemberId, restaurantId);
 
     if (!access.hasAccess) {
       res.status(403).json({ error: 'Access to this restaurant denied' });
@@ -157,7 +157,7 @@ export const requireRestaurantManager = async (req: Request, res: Response, next
       return;
     }
 
-    const access = await authService.checkRestaurantAccess(req.user.userId, restaurantId);
+    const access = await authService.checkRestaurantAccess(req.user.teamMemberId, restaurantId);
 
     if (!access.hasAccess) {
       res.status(403).json({ error: 'Access to this restaurant denied' });
@@ -194,7 +194,7 @@ export const requireRestaurantOwner = async (req: Request, res: Response, next: 
       return;
     }
 
-    const access = await authService.checkRestaurantAccess(req.user.userId, restaurantId);
+    const access = await authService.checkRestaurantAccess(req.user.teamMemberId, restaurantId);
 
     if (!access.hasAccess) {
       res.status(403).json({ error: 'Access to this restaurant denied' });

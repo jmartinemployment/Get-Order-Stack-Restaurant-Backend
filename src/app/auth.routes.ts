@@ -49,7 +49,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    // Create the user as an owner
+    // Create the user as an owner — no restaurant yet, onboarding creates it and links them
     const createResult = await authService.createUser({
       email,
       password,
@@ -197,9 +197,9 @@ router.get('/me', async (req: Request, res: Response) => {
       return;
     }
 
-    // Get full user info
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
+    // Get full team member info
+    const member = await prisma.teamMember.findUnique({
+      where: { id: payload.teamMemberId },
       include: {
         restaurantAccess: {
           include: {
@@ -211,7 +211,7 @@ router.get('/me', async (req: Request, res: Response) => {
       }
     });
 
-    if (!user || !user.isActive) {
+    if (!member || !member.isActive) {
       res.status(401).json({ error: 'User not found or disabled' });
       return;
     }
@@ -219,35 +219,35 @@ router.get('/me', async (req: Request, res: Response) => {
     // Get accessible restaurants
     let restaurants: Array<{ id: string; name: string; slug: string; role: string }> = [];
 
-    if (user.role === 'super_admin') {
+    if (member.role === 'super_admin') {
       const allRestaurants = await prisma.restaurant.findMany({
         where: { active: true },
         select: { id: true, name: true, slug: true }
       });
       restaurants = allRestaurants.map(r => ({ ...r, role: 'super_admin' }));
-    } else if (user.restaurantAccess.length > 0) {
-      restaurants = user.restaurantAccess.map(access => ({
+    } else if (member.restaurantAccess.length > 0) {
+      restaurants = member.restaurantAccess.map(access => ({
         id: access.restaurant.id,
         name: access.restaurant.name,
         slug: access.restaurant.slug,
         role: access.role
       }));
-    } else if (user.restaurantGroupId) {
+    } else if (member.restaurantGroupId) {
       const groupRestaurants = await prisma.restaurant.findMany({
-        where: { restaurantGroupId: user.restaurantGroupId, active: true },
+        where: { restaurantGroupId: member.restaurantGroupId, active: true },
         select: { id: true, name: true, slug: true }
       });
-      restaurants = groupRestaurants.map(r => ({ ...r, role: user.role }));
+      restaurants = groupRestaurants.map(r => ({ ...r, role: member.role }));
     }
 
     res.json({
       user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        restaurantGroupId: user.restaurantGroupId
+        id: member.id,
+        email: member.email,
+        firstName: member.firstName,
+        lastName: member.lastName,
+        role: member.role,
+        restaurantGroupId: member.restaurantGroupId
       },
       restaurants
     });
@@ -404,7 +404,7 @@ router.delete('/:restaurantId/pins/:pinId', requireAuth, requireRestaurantManage
 
 // ============ User Management ============
 
-// List all users (admin: owner or super_admin)
+// List all users (admin: owner or super_admin) — returns TeamMembers with passwordHash (dashboard accounts)
 router.get('/users', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const restaurantGroupId = req.query.restaurantGroupId as string | undefined;
@@ -421,7 +421,7 @@ router.get('/users/:userId', requireAuth, requireAdmin, async (req: Request, res
   try {
     const { userId } = req.params;
 
-    const user = await prisma.user.findUnique({
+    const member = await prisma.teamMember.findUnique({
       where: { id: userId },
       include: {
         restaurantAccess: {
@@ -434,21 +434,21 @@ router.get('/users/:userId', requireAuth, requireAdmin, async (req: Request, res
       }
     });
 
-    if (!user) {
+    if (!member) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
 
     res.json({
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      role: user.role,
-      isActive: user.isActive,
-      lastLoginAt: user.lastLoginAt,
-      createdAt: user.createdAt,
-      restaurants: user.restaurantAccess.map(a => ({
+      id: member.id,
+      email: member.email,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      role: member.role,
+      isActive: member.isActive,
+      lastLoginAt: member.lastLoginAt,
+      createdAt: member.createdAt,
+      restaurants: member.restaurantAccess.map(a => ({
         id: a.restaurant.id,
         name: a.restaurant.name,
         slug: a.restaurant.slug,
@@ -502,7 +502,7 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
       return;
     }
 
-    const result = await authService.changePassword(req.user!.userId, oldPassword, newPassword);
+    const result = await authService.changePassword(req.user!.teamMemberId, oldPassword, newPassword);
 
     if (!result.success) {
       res.status(400).json({ error: result.error });
@@ -519,7 +519,7 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
 // Create a new user (super_admin only)
 router.post('/users', requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
   try {
-    const { email, password, firstName, lastName, role, restaurantGroupId } = req.body;
+    const { email, password, firstName, lastName, role, restaurantGroupId, restaurantId } = req.body;
 
     if (!email || !password) {
       res.status(400).json({ error: 'Email and password are required' });
@@ -532,7 +532,8 @@ router.post('/users', requireAuth, requireSuperAdmin, async (req: Request, res: 
       firstName,
       lastName,
       role: role || 'staff',
-      restaurantGroupId
+      restaurantGroupId,
+      restaurantId: restaurantId ?? undefined,
     });
 
     if (!result.success) {
@@ -555,10 +556,10 @@ router.post('/users/:userId/restaurants/:restaurantId', requireAuth, requireAdmi
 
     const access = await prisma.userRestaurantAccess.upsert({
       where: {
-        userId_restaurantId: { userId, restaurantId }
+        teamMemberId_restaurantId: { teamMemberId: userId, restaurantId }
       },
       create: {
-        userId,
+        teamMemberId: userId,
         restaurantId,
         role
       },
@@ -581,7 +582,7 @@ router.delete('/users/:userId/restaurants/:restaurantId', requireAuth, requireAd
 
     await prisma.userRestaurantAccess.delete({
       where: {
-        userId_restaurantId: { userId, restaurantId }
+        teamMemberId_restaurantId: { teamMemberId: userId, restaurantId }
       }
     });
 
@@ -622,7 +623,7 @@ router.get('/groups', requireAuth, requireSuperAdmin, async (req: Request, res: 
       where: { active: true },
       include: {
         _count: {
-          select: { restaurants: true, users: true }
+          select: { restaurants: true, teamMembers: true }
         }
       },
       orderBy: { name: 'asc' }

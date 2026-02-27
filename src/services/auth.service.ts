@@ -14,7 +14,7 @@ const DEVICE_TOKEN_EXPIRES_IN = '30d'; // Device sessions: 30 days (was 365d —
 const SALT_ROUNDS = 10;
 
 export interface TokenPayload {
-  userId: string;
+  teamMemberId: string;
   email: string;
   role: string;
   restaurantGroupId?: string;
@@ -110,8 +110,8 @@ class AuthService {
 
   async loginUser(email: string, password: string, deviceInfo?: string, ipAddress?: string): Promise<AuthResult> {
     try {
-      // Find user by email
-      const user = await prisma.user.findUnique({
+      // Find team member by email (only those with passwordHash can do email/password login)
+      const member = await prisma.teamMember.findUnique({
         where: { email: email.toLowerCase() },
         include: {
           restaurantGroup: true,
@@ -125,16 +125,20 @@ class AuthService {
         }
       });
 
-      if (!user) {
+      if (!member) {
         return { success: false, error: 'Invalid email or password' };
       }
 
-      if (!user.isActive) {
+      if (!member.isActive) {
         return { success: false, error: 'Account is disabled' };
       }
 
+      if (!member.passwordHash) {
+        return { success: false, error: 'Invalid email or password' };
+      }
+
       // Verify password
-      const isValid = await this.verifyPassword(password, user.passwordHash);
+      const isValid = await this.verifyPassword(password, member.passwordHash);
       if (!isValid) {
         return { success: false, error: 'Invalid email or password' };
       }
@@ -145,7 +149,7 @@ class AuthService {
 
       const session = await prisma.userSession.create({
         data: {
-          userId: user.id,
+          userId: member.id,
           token: this.generateSessionToken(),
           deviceInfo,
           ipAddress,
@@ -156,58 +160,58 @@ class AuthService {
       // Generate JWT
       const token = this.generateToken(
         {
-          userId: user.id,
-          email: user.email,
-          role: user.role,
-          restaurantGroupId: user.restaurantGroupId || undefined,
+          teamMemberId: member.id,
+          email: member.email!,
+          role: member.role,
+          restaurantGroupId: member.restaurantGroupId ?? undefined,
           type: 'user'
         },
         session.id
       );
 
       // Update last login
-      await prisma.user.update({
-        where: { id: user.id },
+      await prisma.teamMember.update({
+        where: { id: member.id },
         data: { lastLoginAt: new Date() }
       });
 
       // Get accessible restaurants
       let restaurants: Array<{ id: string; name: string; slug: string; role: string }> = [];
 
-      if (user.role === 'super_admin') {
+      if (member.role === 'super_admin') {
         // Super admin can access all restaurants
         const allRestaurants = await prisma.restaurant.findMany({
           where: { active: true },
           select: { id: true, name: true, slug: true }
         });
         restaurants = allRestaurants.map(r => ({ ...r, role: 'super_admin' }));
-      } else if (user.restaurantAccess.length > 0) {
-        // User has specific restaurant access
-        restaurants = user.restaurantAccess.map(access => ({
+      } else if (member.restaurantAccess.length > 0) {
+        // Member has specific restaurant access
+        restaurants = member.restaurantAccess.map(access => ({
           id: access.restaurant.id,
           name: access.restaurant.name,
           slug: access.restaurant.slug,
           role: access.role
         }));
-      } else if (user.restaurantGroupId) {
-        // User belongs to a group - can access all restaurants in group
+      } else if (member.restaurantGroupId) {
+        // Member belongs to a group - can access all restaurants in group
         const groupRestaurants = await prisma.restaurant.findMany({
-          where: { restaurantGroupId: user.restaurantGroupId, active: true },
+          where: { restaurantGroupId: member.restaurantGroupId, active: true },
           select: { id: true, name: true, slug: true }
         });
-        restaurants = groupRestaurants.map(r => ({ ...r, role: user.role }));
+        restaurants = groupRestaurants.map(r => ({ ...r, role: member.role }));
       }
 
       return {
         success: true,
         token,
         user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          restaurantGroupId: user.restaurantGroupId
+          id: member.id,
+          email: member.email!,
+          firstName: member.firstName,
+          lastName: member.lastName,
+          role: member.role,
+          restaurantGroupId: member.restaurantGroupId
         },
         restaurants
       };
@@ -264,10 +268,10 @@ class AuthService {
     }
   }
 
-  async logoutAllSessions(userId: string): Promise<ServiceResult> {
+  async logoutAllSessions(teamMemberId: string): Promise<ServiceResult> {
     try {
       await prisma.userSession.updateMany({
-        where: { userId },
+        where: { userId: teamMemberId }, // userId is the Prisma field name on UserSession (mapped to user_id column)
         data: { isActive: false }
       });
       return { success: true };
@@ -312,10 +316,11 @@ class AuthService {
     lastName?: string;
     role: string;
     restaurantGroupId?: string;
+    restaurantId?: string;
   }): Promise<{ success: boolean; user?: any; error?: string }> {
     try {
       // Check if email already exists
-      const existing = await prisma.user.findUnique({
+      const existing = await prisma.teamMember.findUnique({
         where: { email: data.email.toLowerCase() }
       });
 
@@ -325,25 +330,27 @@ class AuthService {
 
       const passwordHash = await this.hashPassword(data.password);
 
-      const user = await prisma.user.create({
+      const member = await prisma.teamMember.create({
         data: {
           email: data.email.toLowerCase(),
           passwordHash,
           firstName: data.firstName,
           lastName: data.lastName,
+          displayName: [data.firstName, data.lastName].filter(Boolean).join(' ') || data.email,
           role: data.role,
-          restaurantGroupId: data.restaurantGroupId
+          restaurantGroupId: data.restaurantGroupId,
+          restaurantId: data.restaurantId ?? null,
         }
       });
 
       return {
         success: true,
         user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role
+          id: member.id,
+          email: member.email,
+          firstName: member.firstName,
+          lastName: member.lastName,
+          role: member.role
         }
       };
     } catch (error) {
@@ -424,12 +431,12 @@ class AuthService {
     createdAt: Date;
     restaurants: Array<{ id: string; name: string; slug: string; role: string }>;
   }>> {
-    const where: any = {};
+    const where: any = { passwordHash: { not: null } };
     if (restaurantGroupId) {
       where.restaurantGroupId = restaurantGroupId;
     }
 
-    const users = await prisma.user.findMany({
+    const members = await prisma.teamMember.findMany({
       where,
       include: {
         restaurantAccess: {
@@ -443,16 +450,16 @@ class AuthService {
       orderBy: { email: 'asc' }
     });
 
-    return users.map(u => ({
-      id: u.id,
-      email: u.email,
-      firstName: u.firstName,
-      lastName: u.lastName,
-      role: u.role,
-      isActive: u.isActive,
-      lastLoginAt: u.lastLoginAt,
-      createdAt: u.createdAt,
-      restaurants: u.restaurantAccess.map(a => ({
+    return members.map(m => ({
+      id: m.id,
+      email: m.email!,
+      firstName: m.firstName,
+      lastName: m.lastName,
+      role: m.role,
+      isActive: m.isActive,
+      lastLoginAt: m.lastLoginAt,
+      createdAt: m.createdAt,
+      restaurants: m.restaurantAccess.map(a => ({
         id: a.restaurant.id,
         name: a.restaurant.name,
         slug: a.restaurant.slug,
@@ -461,21 +468,21 @@ class AuthService {
     }));
   }
 
-  async updateUser(userId: string, data: {
+  async updateUser(teamMemberId: string, data: {
     firstName?: string;
     lastName?: string;
     role?: string;
     isActive?: boolean;
   }): Promise<{ success: boolean; error?: string }> {
     try {
-      await prisma.user.update({
-        where: { id: userId },
+      await prisma.teamMember.update({
+        where: { id: teamMemberId },
         data
       });
 
       // If deactivated, invalidate all sessions
       if (data.isActive === false) {
-        await this.logoutAllSessions(userId);
+        await this.logoutAllSessions(teamMemberId);
       }
 
       return { success: true };
@@ -485,14 +492,14 @@ class AuthService {
     }
   }
 
-  async changePassword(userId: string, oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+  async changePassword(teamMemberId: string, oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user) {
+      const member = await prisma.teamMember.findUnique({ where: { id: teamMemberId } });
+      if (!member || !member.passwordHash) {
         return { success: false, error: 'User not found' };
       }
 
-      const isValid = await this.verifyPassword(oldPassword, user.passwordHash);
+      const isValid = await this.verifyPassword(oldPassword, member.passwordHash);
       if (!isValid) {
         return { success: false, error: 'Current password is incorrect' };
       }
@@ -502,8 +509,8 @@ class AuthService {
       }
 
       const passwordHash = await this.hashPassword(newPassword);
-      await prisma.user.update({
-        where: { id: userId },
+      await prisma.teamMember.update({
+        where: { id: teamMemberId },
         data: { passwordHash }
       });
 
@@ -520,14 +527,14 @@ class AuthService {
         return { success: false, error: 'New password must be at least 6 characters' };
       }
 
-      const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-      if (!user) {
+      const member = await prisma.teamMember.findUnique({ where: { email: email.toLowerCase() } });
+      if (!member) {
         return { success: false, error: 'No account found with that email address' };
       }
 
       const passwordHash = await this.hashPassword(newPassword);
-      await prisma.user.update({
-        where: { id: user.id },
+      await prisma.teamMember.update({
+        where: { id: member.id },
         data: { passwordHash }
       });
 
@@ -593,11 +600,11 @@ class AuthService {
     return token;
   }
 
-  // Check if user has access to a specific restaurant
-  async checkRestaurantAccess(userId: string, restaurantId: string): Promise<{ hasAccess: boolean; role?: string }> {
+  // Check if team member has access to a specific restaurant
+  async checkRestaurantAccess(teamMemberId: string, restaurantId: string): Promise<{ hasAccess: boolean; role?: string }> {
     try {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
+      const member = await prisma.teamMember.findUnique({
+        where: { id: teamMemberId },
         include: {
           restaurantAccess: {
             where: { restaurantId }
@@ -605,28 +612,33 @@ class AuthService {
         }
       });
 
-      if (!user) {
+      if (!member) {
         return { hasAccess: false };
       }
 
       // Super admin has access to everything
-      if (user.role === 'super_admin') {
+      if (member.role === 'super_admin') {
         return { hasAccess: true, role: 'super_admin' };
       }
 
       // Check specific restaurant access
-      if (user.restaurantAccess.length > 0) {
-        return { hasAccess: true, role: user.restaurantAccess[0].role };
+      if (member.restaurantAccess.length > 0) {
+        return { hasAccess: true, role: member.restaurantAccess[0].role };
       }
 
-      // Check if restaurant belongs to user's group
-      if (user.restaurantGroupId) {
+      // Check if restaurant belongs to member's group
+      if (member.restaurantGroupId) {
         const restaurant = await prisma.restaurant.findFirst({
-          where: { id: restaurantId, restaurantGroupId: user.restaurantGroupId }
+          where: { id: restaurantId, restaurantGroupId: member.restaurantGroupId }
         });
         if (restaurant) {
-          return { hasAccess: true, role: user.role };
+          return { hasAccess: true, role: member.role };
         }
+      }
+
+      // Check if the team member's own restaurant matches
+      if (member.restaurantId === restaurantId) {
+        return { hasAccess: true, role: member.role };
       }
 
       return { hasAccess: false };
@@ -694,7 +706,7 @@ class AuthService {
 
       const session = await prisma.userSession.create({
         data: {
-          userId: matchedPin.id, // Use staffPin ID as user reference for POS sessions
+          userId: matchedPin.teamMember?.id ?? matchedPin.id, // Use TeamMember ID if linked, staffPin ID as fallback
           token: sessionToken,
           deviceInfo: 'POS Terminal',
           expiresAt,
@@ -703,7 +715,7 @@ class AuthService {
 
       const token = this.generateToken(
         {
-          userId: matchedPin.id,
+          teamMemberId: matchedPin.teamMember?.id ?? matchedPin.id,
           email: matchedPin.name, // POS sessions don't have email; store name for logging
           role: matchedPin.role,
           type: 'pin',
