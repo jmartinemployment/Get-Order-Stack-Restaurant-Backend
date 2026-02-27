@@ -272,6 +272,102 @@ router.post('/:restaurantId/business-hours', async (req: Request, res: Response)
   }
 });
 
+// GET /api/restaurant/:restaurantId/business-hours/check
+// Returns whether the restaurant is currently open based on stored business hours
+interface BusinessHoursDay {
+  day: string;
+  open: string;
+  close: string;
+  closed: boolean;
+}
+
+const DAYS_OF_WEEK = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+
+router.get('/:restaurantId/business-hours/check', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { businessHours: true },
+    });
+
+    if (!restaurant) {
+      res.status(404).json({ error: 'Restaurant not found' });
+      return;
+    }
+
+    const hours = restaurant.businessHours as unknown as BusinessHoursDay[] | null;
+    const now = new Date();
+    const currentDayIndex = now.getDay(); // 0 = Sunday
+    const currentDay = DAYS_OF_WEEK[currentDayIndex];
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // No business hours configured — assume open
+    if (!hours || !Array.isArray(hours) || hours.length === 0) {
+      res.json({
+        isOpen: true,
+        currentDay,
+        openTime: null,
+        closeTime: null,
+        nextOpenDay: null,
+        nextOpenTime: null,
+        specialHoursReason: null,
+      });
+      return;
+    }
+
+    const todayHours = hours.find(h => h.day === currentDay);
+    let isOpen = false;
+    let openTime: string | null = null;
+    let closeTime: string | null = null;
+
+    if (todayHours && !todayHours.closed) {
+      openTime = todayHours.open;
+      closeTime = todayHours.close;
+      isOpen = currentTime >= todayHours.open && currentTime < todayHours.close;
+    }
+
+    // Find next open day/time if currently closed
+    let nextOpenDay: string | null = null;
+    let nextOpenTime: string | null = null;
+
+    if (!isOpen) {
+      // Check remaining time today first (if today has hours and we're before open)
+      if (todayHours && !todayHours.closed && currentTime < todayHours.open) {
+        nextOpenDay = currentDay;
+        nextOpenTime = todayHours.open;
+      } else {
+        // Check subsequent days (up to 7 to loop back around)
+        for (let offset = 1; offset <= 7; offset++) {
+          const checkDayIndex = (currentDayIndex + offset) % 7;
+          const checkDay = DAYS_OF_WEEK[checkDayIndex];
+          const dayHours = hours.find(h => h.day === checkDay);
+
+          if (dayHours && !dayHours.closed) {
+            nextOpenDay = checkDay;
+            nextOpenTime = dayHours.open;
+            break;
+          }
+        }
+      }
+    }
+
+    res.json({
+      isOpen,
+      currentDay,
+      openTime,
+      closeTime,
+      nextOpenDay,
+      nextOpenTime,
+      specialHoursReason: null,
+    });
+  } catch (error) {
+    console.error('Failed to check business hours:', error);
+    res.status(500).json({ error: 'Failed to check business hours' });
+  }
+});
+
 // ============ Onboarding Create ============
 
 // POST /api/onboarding/create
