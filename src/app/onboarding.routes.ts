@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { MENU_TEMPLATES } from '../data/menu-templates';
+import { MENU_TEMPLATES, type MenuTemplate } from '../data/menu-templates';
 import { DEFAULT_PERMISSION_SETS } from '../data/default-permission-sets';
 import { authService } from '../services/auth.service';
 import { optionalAuth } from '../middleware/auth.middleware';
@@ -138,7 +138,7 @@ router.post('/:restaurantId/apply-menu-template', async (req: Request, res: Resp
     const { restaurantId } = req.params;
     const { templateId } = req.body;
 
-    const template = MENU_TEMPLATES.find(t => t.id === templateId);
+    const template: MenuTemplate | undefined = MENU_TEMPLATES.find(t => t.id === templateId);
     if (!template) {
       res.status(404).json({ error: 'Template not found' });
       return;
@@ -448,7 +448,7 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
 
       // Apply menu template if selected
       if (menuTemplateId) {
-        const template = MENU_TEMPLATES.find(t => t.id === menuTemplateId);
+        const template: MenuTemplate | undefined = MENU_TEMPLATES.find(t => t.id === menuTemplateId);
         if (template) {
           // Track created items by name for modifier group assignment
           const createdItemsByName = new Map<string, string>();
