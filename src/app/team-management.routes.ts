@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { authService } from '../services/auth.service';
+import { DEFAULT_PERMISSION_SETS, ROLE_TO_PERMISSION_SET } from '../data/default-permission-sets';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -308,6 +309,97 @@ router.patch('/:restaurantId/team-members/:memberId/jobs/:jobId', async (req: Re
 });
 
 // ============ Permission Sets ============
+
+// Seed default permission sets (idempotent) + migrate orphan StaffPins
+router.post('/:restaurantId/permission-sets/seed-defaults', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Check which defaults already exist (by name + isDefault)
+      const existing = await tx.permissionSet.findMany({
+        where: { restaurantId, isDefault: true },
+        select: { name: true, id: true },
+      });
+      const existingNames = new Set(existing.map(e => e.name));
+
+      // Create missing defaults
+      const created: string[] = [];
+      for (const def of DEFAULT_PERMISSION_SETS) {
+        if (!existingNames.has(def.name)) {
+          await tx.permissionSet.create({
+            data: {
+              restaurantId,
+              name: def.name,
+              permissions: def.permissions,
+              isDefault: true,
+            },
+          });
+          created.push(def.name);
+        }
+      }
+
+      // Reload all default sets for role mapping
+      const allDefaults = await tx.permissionSet.findMany({
+        where: { restaurantId, isDefault: true },
+        select: { id: true, name: true },
+      });
+      const setByName = new Map(allDefaults.map(s => [s.name, s.id]));
+
+      // Migrate orphan StaffPins (those without a linked TeamMember)
+      const orphanPins = await tx.staffPin.findMany({
+        where: { restaurantId, teamMemberId: null, isActive: true },
+      });
+
+      const migrated: string[] = [];
+      for (const pin of orphanPins) {
+        const permSetName = ROLE_TO_PERMISSION_SET[pin.role] ?? 'Standard';
+        const permSetId = setByName.get(permSetName) ?? setByName.get('Standard') ?? null;
+
+        const tm = await tx.teamMember.create({
+          data: {
+            restaurantId,
+            displayName: pin.name,
+            permissionSetId: permSetId,
+            jobs: {
+              create: {
+                jobTitle: pin.role === 'owner' ? 'Owner' : pin.role === 'manager' ? 'Manager' : 'Staff',
+                hourlyRate: 0,
+                isTipEligible: false,
+                isPrimary: true,
+                overtimeEligible: false,
+              },
+            },
+          },
+        });
+
+        await tx.staffPin.update({
+          where: { id: pin.id },
+          data: { teamMemberId: tm.id },
+        });
+
+        migrated.push(pin.name);
+      }
+
+      return { created, migrated };
+    });
+
+    const allSets = await prisma.permissionSet.findMany({
+      where: { restaurantId: req.params.restaurantId },
+      orderBy: { name: 'asc' },
+    });
+
+    res.json({
+      seeded: result.created,
+      migratedPins: result.migrated,
+      permissionSets: allSets,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error seeding default permission sets:', message);
+    res.status(500).json({ error: 'Failed to seed default permission sets' });
+  }
+});
 
 router.get('/:restaurantId/permission-sets', async (req: Request, res: Response) => {
   try {
