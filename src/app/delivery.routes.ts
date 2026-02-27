@@ -317,4 +317,74 @@ router.get('/drivers', async (req: Request, res: Response) => {
   }
 });
 
+// ============ Delivery Analytics ============
+
+router.get('/analytics', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { startDate, endDate } = req.query;
+
+    const where: Record<string, unknown> = {
+      restaurantId,
+      deliveryProvider: { not: null },
+    };
+
+    if (startDate && endDate) {
+      where.createdAt = { gte: new Date(startDate as string), lte: new Date(endDate as string) };
+    }
+
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    const deliveryOrders = await prisma.order.findMany({
+      where,
+      select: {
+        deliveryProvider: true,
+        dispatchStatus: true,
+        dispatchedAt: true,
+        deliveredAt: true,
+        deliveryFee: true,
+        createdAt: true,
+      },
+    });
+
+    const totalDeliveries = deliveryOrders.length;
+    const byProvider: Record<string, number> = {};
+
+    let totalDeliveryTimeMinutes = 0;
+    let deliveriesWithTime = 0;
+
+    for (const order of deliveryOrders) {
+      const provider = order.deliveryProvider ?? 'unknown';
+      byProvider[provider] = (byProvider[provider] ?? 0) + 1;
+
+      if (order.dispatchedAt && order.deliveredAt) {
+        const minutes = (order.deliveredAt.getTime() - order.dispatchedAt.getTime()) / 60000;
+        if (minutes > 0 && minutes < 240) {
+          totalDeliveryTimeMinutes += minutes;
+          deliveriesWithTime += 1;
+        }
+      }
+    }
+
+    const avgDeliveryTime = deliveriesWithTime > 0
+      ? Math.round(totalDeliveryTimeMinutes / deliveriesWithTime)
+      : 0;
+
+    const totalFees = deliveryOrders.reduce((sum, o) => sum + Number(o.deliveryFee), 0);
+
+    await prisma.$disconnect();
+
+    res.json({
+      totalDeliveries,
+      avgDeliveryTimeMinutes: avgDeliveryTime,
+      totalDeliveryFees: Math.round(totalFees * 100) / 100,
+      byProvider,
+    });
+  } catch (error: unknown) {
+    console.error('[Delivery] Analytics error:', error);
+    res.status(500).json({ error: 'Failed to get delivery analytics' });
+  }
+});
+
 export default router;

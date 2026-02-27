@@ -34,6 +34,7 @@ import paymentConnectRoutes from './payment-connect.routes';
 import subscriptionRoutes from './subscription.routes';
 import analyticsStandaloneRoutes from './analytics-standalone.routes';
 import teamManagementRoutes from './team-management.routes';
+import retailRoutes from './retail.routes';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
@@ -347,6 +348,7 @@ app.use('/api/restaurant', requireAuth, teamManagementRoutes);  // Team members 
 app.use('/api/restaurant/:restaurantId', requireAuth, supplierOrderingRoutes);  // Supplier ordering: credentials, connection test
 app.use('/api/restaurant-groups', requireAuth, multiLocationRoutes);  // Multi-location: groups, sync, settings propagation
 app.use('/api/analytics', requireAuth, analyticsStandaloneRoutes);  // Standalone analytics (pinned-widgets, proactive-insights)
+app.use('/api/restaurant', requireAuth, retailRoutes);  // Retail module CRUD
 app.use('/api/restaurant', requireAuth, analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
 app.use('/api/restaurant', requireAuth, primaryCategoryRoutes);
 app.use('/api/restaurant', requireAuth, deviceRoutes);  // Device registration routes

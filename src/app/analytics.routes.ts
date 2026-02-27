@@ -1027,4 +1027,904 @@ router.delete('/:restaurantId/reports/schedules/:id', async (req: Request, res: 
   }
 });
 
+// ============ Recurring Reservations ============
+
+router.get('/:restaurantId/reservations/recurring', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const recurring = await prisma.recurringReservation.findMany({
+      where: { restaurantId },
+      orderBy: { dayOfWeek: 'asc' },
+    });
+    res.json(recurring);
+  } catch (error: unknown) {
+    console.error('[Reservations] Error fetching recurring:', error);
+    res.status(500).json({ error: 'Failed to fetch recurring reservations' });
+  }
+});
+
+router.post('/:restaurantId/reservations/recurring', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { customerId, customerName, customerPhone, dayOfWeek, time, partySize, notes } = req.body;
+
+    if (!customerName || dayOfWeek === undefined || !time || !partySize) {
+      res.status(400).json({ error: 'customerName, dayOfWeek, time, and partySize are required' });
+      return;
+    }
+
+    const recurring = await prisma.recurringReservation.create({
+      data: { restaurantId, customerId, customerName, customerPhone, dayOfWeek, time, partySize, notes },
+    });
+    res.status(201).json(recurring);
+  } catch (error: unknown) {
+    console.error('[Reservations] Error creating recurring:', error);
+    res.status(500).json({ error: 'Failed to create recurring reservation' });
+  }
+});
+
+router.patch('/:restaurantId/reservations/recurring/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const data: Record<string, unknown> = {};
+    if (req.body.dayOfWeek !== undefined) data.dayOfWeek = req.body.dayOfWeek;
+    if (req.body.time !== undefined) data.time = req.body.time;
+    if (req.body.partySize !== undefined) data.partySize = req.body.partySize;
+    if (req.body.isActive !== undefined) data.isActive = req.body.isActive;
+    if (req.body.notes !== undefined) data.notes = req.body.notes;
+
+    const recurring = await prisma.recurringReservation.update({ where: { id }, data });
+    res.json(recurring);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Recurring reservation not found' });
+      return;
+    }
+    console.error('[Reservations] Error updating recurring:', error);
+    res.status(500).json({ error: 'Failed to update recurring reservation' });
+  }
+});
+
+router.delete('/:restaurantId/reservations/recurring/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.recurringReservation.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Recurring reservation not found' });
+      return;
+    }
+    console.error('[Reservations] Error deleting recurring:', error);
+    res.status(500).json({ error: 'Failed to delete recurring reservation' });
+  }
+});
+
+// ============ Waitlist Config (JSON on merchantProfile) ============
+
+router.get('/:restaurantId/waitlist/virtual-config', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { merchantProfile: true },
+    });
+    const profile = restaurant?.merchantProfile as Record<string, unknown> | null;
+    res.json(profile?.virtualWaitlistConfig ?? { enabled: false, estimatedWaitDisplay: true, maxPartySize: 20 });
+  } catch (error: unknown) {
+    console.error('[Waitlist] Error getting virtual config:', error);
+    res.status(500).json({ error: 'Failed to get virtual waitlist config' });
+  }
+});
+
+router.put('/:restaurantId/waitlist/virtual-config', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { merchantProfile: true },
+    });
+    const profile = (restaurant?.merchantProfile as Record<string, unknown>) ?? {};
+    profile.virtualWaitlistConfig = req.body;
+    await prisma.restaurant.update({ where: { id: restaurantId }, data: { merchantProfile: profile as object } });
+    res.json(req.body);
+  } catch (error: unknown) {
+    console.error('[Waitlist] Error saving virtual config:', error);
+    res.status(500).json({ error: 'Failed to save virtual waitlist config' });
+  }
+});
+
+router.get('/:restaurantId/waitlist/sms-config', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { merchantProfile: true },
+    });
+    const profile = restaurant?.merchantProfile as Record<string, unknown> | null;
+    res.json(profile?.waitlistSmsConfig ?? { enabled: false, provider: null, notifyOnReady: true, notifyOnCancel: true });
+  } catch (error: unknown) {
+    console.error('[Waitlist] Error getting SMS config:', error);
+    res.status(500).json({ error: 'Failed to get waitlist SMS config' });
+  }
+});
+
+router.put('/:restaurantId/waitlist/sms-config', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { merchantProfile: true },
+    });
+    const profile = (restaurant?.merchantProfile as Record<string, unknown>) ?? {};
+    profile.waitlistSmsConfig = req.body;
+    await prisma.restaurant.update({ where: { id: restaurantId }, data: { merchantProfile: profile as object } });
+    res.json(req.body);
+  } catch (error: unknown) {
+    console.error('[Waitlist] Error saving SMS config:', error);
+    res.status(500).json({ error: 'Failed to save waitlist SMS config' });
+  }
+});
+
+// GET /:restaurantId/waitlist/analytics
+router.get('/:restaurantId/waitlist/analytics', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    // Derive from waitlisted reservations that were eventually seated (status = completed or confirmed)
+    const seatedReservations = await prisma.reservation.findMany({
+      where: {
+        restaurantId,
+        status: { in: ['completed', 'confirmed', 'seated'] },
+      },
+      select: { reservationTime: true, updatedAt: true, status: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 200,
+    });
+
+    const noShows = await prisma.reservation.count({
+      where: { restaurantId, status: 'no_show' },
+    });
+
+    const totalSeated = seatedReservations.length;
+
+    // Compute avg wait (difference between creation and reservation time as proxy)
+    const waitTimes = seatedReservations
+      .map((r) => Math.round((r.updatedAt.getTime() - r.reservationTime.getTime()) / 60000))
+      .filter((m) => m > 0 && m < 240);
+
+    const avgWaitTime = waitTimes.length > 0
+      ? Math.round(waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length)
+      : 0;
+
+    const totalWithNoShows = totalSeated + noShows;
+    const noShowRate = totalWithNoShows > 0 ? Math.round((noShows / totalWithNoShows) * 1000) / 10 : 0;
+
+    res.json({ avgWaitTime, totalSeated, noShows, noShowRate });
+  } catch (error: unknown) {
+    console.error('[Waitlist] Error getting analytics:', error);
+    res.status(500).json({ error: 'Failed to get waitlist analytics' });
+  }
+});
+
+// ============ Calendar Connection (JSON on merchantProfile) ============
+
+router.get('/:restaurantId/calendar/connection', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { merchantProfile: true },
+    });
+    const profile = restaurant?.merchantProfile as Record<string, unknown> | null;
+    res.json(profile?.calendarConnection ?? { provider: null, connected: false, syncEnabled: false });
+  } catch (error: unknown) {
+    console.error('[Calendar] Error getting connection:', error);
+    res.status(500).json({ error: 'Failed to get calendar connection' });
+  }
+});
+
+router.put('/:restaurantId/calendar/connection', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { merchantProfile: true },
+    });
+    const profile = (restaurant?.merchantProfile as Record<string, unknown>) ?? {};
+    profile.calendarConnection = req.body;
+    await prisma.restaurant.update({ where: { id: restaurantId }, data: { merchantProfile: profile as object } });
+    res.json(req.body);
+  } catch (error: unknown) {
+    console.error('[Calendar] Error saving connection:', error);
+    res.status(500).json({ error: 'Failed to save calendar connection' });
+  }
+});
+
+// ============ Events ============
+
+router.get('/:restaurantId/events', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const events = await prisma.event.findMany({
+      where: { restaurantId },
+      orderBy: { date: 'asc' },
+    });
+    res.json(events);
+  } catch (error: unknown) {
+    console.error('[Events] Error listing events:', error);
+    res.status(500).json({ error: 'Failed to list events' });
+  }
+});
+
+router.post('/:restaurantId/events', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { name, description, date, startTime, endTime, maxCapacity } = req.body;
+
+    if (!name || !date || !startTime || !endTime) {
+      res.status(400).json({ error: 'name, date, startTime, and endTime are required' });
+      return;
+    }
+
+    const event = await prisma.event.create({
+      data: { restaurantId, name, description, date: new Date(date), startTime, endTime, maxCapacity },
+    });
+    res.status(201).json(event);
+  } catch (error: unknown) {
+    console.error('[Events] Error creating event:', error);
+    res.status(500).json({ error: 'Failed to create event' });
+  }
+});
+
+router.patch('/:restaurantId/events/:eventId', async (req: Request, res: Response) => {
+  try {
+    const { eventId } = req.params;
+    const data: Record<string, unknown> = {};
+    if (req.body.name !== undefined) data.name = req.body.name;
+    if (req.body.description !== undefined) data.description = req.body.description;
+    if (req.body.date !== undefined) data.date = new Date(req.body.date);
+    if (req.body.startTime !== undefined) data.startTime = req.body.startTime;
+    if (req.body.endTime !== undefined) data.endTime = req.body.endTime;
+    if (req.body.maxCapacity !== undefined) data.maxCapacity = req.body.maxCapacity;
+    if (req.body.currentRsvps !== undefined) data.currentRsvps = req.body.currentRsvps;
+    if (req.body.isActive !== undefined) data.isActive = req.body.isActive;
+
+    const event = await prisma.event.update({ where: { id: eventId }, data });
+    res.json(event);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    console.error('[Events] Error updating event:', error);
+    res.status(500).json({ error: 'Failed to update event' });
+  }
+});
+
+router.delete('/:restaurantId/events/:eventId', async (req: Request, res: Response) => {
+  try {
+    const { eventId } = req.params;
+    await prisma.event.delete({ where: { id: eventId } });
+    res.json({ success: true });
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    console.error('[Events] Error deleting event:', error);
+    res.status(500).json({ error: 'Failed to delete event' });
+  }
+});
+
+// ============ Customer Feedback ============
+
+router.get('/:restaurantId/customers/feedback', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const feedback = await prisma.customerFeedback.findMany({
+      where: { restaurantId },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    res.json(feedback);
+  } catch (error: unknown) {
+    console.error('[CRM] Error fetching feedback:', error);
+    res.status(500).json({ error: 'Failed to fetch customer feedback' });
+  }
+});
+
+router.post('/:restaurantId/customers/feedback', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { customerId, orderId, rating, comment, source } = req.body;
+
+    if (!rating || rating < 1 || rating > 5) {
+      res.status(400).json({ error: 'rating (1-5) is required' });
+      return;
+    }
+
+    const feedback = await prisma.customerFeedback.create({
+      data: { restaurantId, customerId, orderId, rating, comment, source },
+    });
+    res.status(201).json(feedback);
+  } catch (error: unknown) {
+    console.error('[CRM] Error creating feedback:', error);
+    res.status(500).json({ error: 'Failed to create feedback' });
+  }
+});
+
+// ============ Smart Groups ============
+
+router.get('/:restaurantId/customers/smart-groups', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const groups = await prisma.smartGroup.findMany({
+      where: { restaurantId },
+      orderBy: { name: 'asc' },
+    });
+    res.json(groups);
+  } catch (error: unknown) {
+    console.error('[CRM] Error fetching smart groups:', error);
+    res.status(500).json({ error: 'Failed to fetch smart groups' });
+  }
+});
+
+router.post('/:restaurantId/customers/smart-groups', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { name, rules } = req.body;
+
+    if (!name) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    const group = await prisma.smartGroup.create({
+      data: { restaurantId, name, rules: rules ?? [] },
+    });
+    res.status(201).json(group);
+  } catch (error: unknown) {
+    console.error('[CRM] Error creating smart group:', error);
+    res.status(500).json({ error: 'Failed to create smart group' });
+  }
+});
+
+router.patch('/:restaurantId/customers/smart-groups/:groupId', async (req: Request, res: Response) => {
+  try {
+    const { groupId } = req.params;
+    const data: Record<string, unknown> = {};
+    if (req.body.name !== undefined) data.name = req.body.name;
+    if (req.body.rules !== undefined) data.rules = req.body.rules;
+
+    const group = await prisma.smartGroup.update({ where: { id: groupId }, data });
+    res.json(group);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Smart group not found' });
+      return;
+    }
+    console.error('[CRM] Error updating smart group:', error);
+    res.status(500).json({ error: 'Failed to update smart group' });
+  }
+});
+
+router.delete('/:restaurantId/customers/smart-groups/:groupId', async (req: Request, res: Response) => {
+  try {
+    const { groupId } = req.params;
+    await prisma.smartGroup.delete({ where: { id: groupId } });
+    res.json({ success: true });
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Smart group not found' });
+      return;
+    }
+    console.error('[CRM] Error deleting smart group:', error);
+    res.status(500).json({ error: 'Failed to delete smart group' });
+  }
+});
+
+// ============ Message Threads ============
+
+router.get('/:restaurantId/customers/messages/threads', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const threads = await prisma.messageThread.findMany({
+      where: { restaurantId },
+      include: { messages: { orderBy: { sentAt: 'desc' }, take: 1 } },
+      orderBy: { lastMessageAt: 'desc' },
+    });
+    res.json(threads);
+  } catch (error: unknown) {
+    console.error('[CRM] Error fetching message threads:', error);
+    res.status(500).json({ error: 'Failed to fetch message threads' });
+  }
+});
+
+// ============ Message Templates ============
+
+router.get('/:restaurantId/customers/messages/templates', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const templates = await prisma.messageTemplate.findMany({
+      where: { restaurantId },
+      orderBy: { name: 'asc' },
+    });
+    res.json(templates);
+  } catch (error: unknown) {
+    console.error('[CRM] Error fetching message templates:', error);
+    res.status(500).json({ error: 'Failed to fetch message templates' });
+  }
+});
+
+router.post('/:restaurantId/customers/messages/templates', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { name, channel, subject, body, variables } = req.body;
+
+    if (!name || !channel || !body) {
+      res.status(400).json({ error: 'name, channel, and body are required' });
+      return;
+    }
+
+    const template = await prisma.messageTemplate.create({
+      data: { restaurantId, name, channel, subject, body, variables: variables ?? [] },
+    });
+    res.status(201).json(template);
+  } catch (error: unknown) {
+    console.error('[CRM] Error creating message template:', error);
+    res.status(500).json({ error: 'Failed to create message template' });
+  }
+});
+
+router.patch('/:restaurantId/customers/messages/templates/:templateId', async (req: Request, res: Response) => {
+  try {
+    const { templateId } = req.params;
+    const data: Record<string, unknown> = {};
+    if (req.body.name !== undefined) data.name = req.body.name;
+    if (req.body.channel !== undefined) data.channel = req.body.channel;
+    if (req.body.subject !== undefined) data.subject = req.body.subject;
+    if (req.body.body !== undefined) data.body = req.body.body;
+    if (req.body.variables !== undefined) data.variables = req.body.variables;
+
+    const template = await prisma.messageTemplate.update({ where: { id: templateId }, data });
+    res.json(template);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Message template not found' });
+      return;
+    }
+    console.error('[CRM] Error updating message template:', error);
+    res.status(500).json({ error: 'Failed to update message template' });
+  }
+});
+
+router.delete('/:restaurantId/customers/messages/templates/:templateId', async (req: Request, res: Response) => {
+  try {
+    const { templateId } = req.params;
+    await prisma.messageTemplate.delete({ where: { id: templateId } });
+    res.json({ success: true });
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Message template not found' });
+      return;
+    }
+    console.error('[CRM] Error deleting message template:', error);
+    res.status(500).json({ error: 'Failed to delete message template' });
+  }
+});
+
+// ============ Inventory Unit Conversions ============
+
+router.get('/:restaurantId/inventory/unit-conversions', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const conversions = await prisma.unitConversion.findMany({
+      where: { restaurantId },
+      orderBy: { fromUnit: 'asc' },
+    });
+    res.json(conversions);
+  } catch (error: unknown) {
+    console.error('[Inventory] Error fetching unit conversions:', error);
+    res.status(500).json({ error: 'Failed to fetch unit conversions' });
+  }
+});
+
+router.post('/:restaurantId/inventory/unit-conversions', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { fromUnit, toUnit, factor } = req.body;
+
+    if (!fromUnit || !toUnit || !factor) {
+      res.status(400).json({ error: 'fromUnit, toUnit, and factor are required' });
+      return;
+    }
+
+    const conversion = await prisma.unitConversion.create({
+      data: { restaurantId, fromUnit, toUnit, factor },
+    });
+    res.status(201).json(conversion);
+  } catch (error: unknown) {
+    console.error('[Inventory] Error creating unit conversion:', error);
+    res.status(500).json({ error: 'Failed to create unit conversion' });
+  }
+});
+
+router.patch('/:restaurantId/inventory/unit-conversions/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const data: Record<string, unknown> = {};
+    if (req.body.fromUnit !== undefined) data.fromUnit = req.body.fromUnit;
+    if (req.body.toUnit !== undefined) data.toUnit = req.body.toUnit;
+    if (req.body.factor !== undefined) data.factor = req.body.factor;
+
+    const conversion = await prisma.unitConversion.update({ where: { id }, data });
+    res.json(conversion);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Unit conversion not found' });
+      return;
+    }
+    console.error('[Inventory] Error updating unit conversion:', error);
+    res.status(500).json({ error: 'Failed to update unit conversion' });
+  }
+});
+
+// ============ Inventory Cycle Counts ============
+
+router.get('/:restaurantId/inventory/cycle-counts', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const counts = await prisma.cycleCount.findMany({
+      where: { restaurantId },
+      include: { items: true },
+      orderBy: { date: 'desc' },
+    });
+    res.json(counts);
+  } catch (error: unknown) {
+    console.error('[Inventory] Error fetching cycle counts:', error);
+    res.status(500).json({ error: 'Failed to fetch cycle counts' });
+  }
+});
+
+router.post('/:restaurantId/inventory/cycle-counts', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { date, items } = req.body;
+
+    const createdBy = (req as unknown as { user?: { id?: string } }).user?.id ?? 'system';
+
+    const count = await prisma.cycleCount.create({
+      data: {
+        restaurantId,
+        date: date ? new Date(date) : new Date(),
+        createdBy,
+        items: items ? {
+          create: (items as Array<{ inventoryItemId: string; expectedQty: number; actualQty?: number }>).map((i) => ({
+            inventoryItemId: i.inventoryItemId,
+            expectedQty: i.expectedQty,
+            actualQty: i.actualQty ?? null,
+            variance: i.actualQty !== undefined ? i.actualQty - i.expectedQty : null,
+          })),
+        } : undefined,
+      },
+      include: { items: true },
+    });
+    res.status(201).json(count);
+  } catch (error: unknown) {
+    console.error('[Inventory] Error creating cycle count:', error);
+    res.status(500).json({ error: 'Failed to create cycle count' });
+  }
+});
+
+router.patch('/:restaurantId/inventory/cycle-counts/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const data: Record<string, unknown> = {};
+    if (req.body.status !== undefined) {
+      data.status = req.body.status;
+      if (req.body.status === 'completed') data.completedAt = new Date();
+    }
+
+    const count = await prisma.cycleCount.update({
+      where: { id },
+      data,
+      include: { items: true },
+    });
+    res.json(count);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Cycle count not found' });
+      return;
+    }
+    console.error('[Inventory] Error updating cycle count:', error);
+    res.status(500).json({ error: 'Failed to update cycle count' });
+  }
+});
+
+// ============ Team Sales Analytics ============
+
+router.get('/:restaurantId/analytics/team/sales', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { startDate, endDate } = req.query;
+
+    const where: Record<string, unknown> = {
+      restaurantId,
+      status: { in: ['completed', 'delivered', 'ready', 'preparing'] },
+      serverId: { not: null },
+    };
+
+    if (startDate && endDate) {
+      where.createdAt = { gte: new Date(startDate as string), lte: new Date(endDate as string) };
+    }
+
+    const orders = await prisma.order.findMany({
+      where,
+      select: { serverId: true, total: true, tax: true, tip: true },
+    });
+
+    const byServer = new Map<string, { totalSales: number; orderCount: number; totalTips: number }>();
+    for (const order of orders) {
+      const sid = order.serverId ?? 'unknown';
+      const existing = byServer.get(sid) ?? { totalSales: 0, orderCount: 0, totalTips: 0 };
+      existing.totalSales += Number(order.total) - Number(order.tax);
+      existing.orderCount += 1;
+      existing.totalTips += Number(order.tip);
+      byServer.set(sid, existing);
+    }
+
+    const results = [...byServer.entries()].map(([serverId, stats]) => ({
+      serverId,
+      totalSales: Math.round(stats.totalSales * 100) / 100,
+      orderCount: stats.orderCount,
+      totalTips: Math.round(stats.totalTips * 100) / 100,
+      avgOrderValue: stats.orderCount > 0 ? Math.round((stats.totalSales / stats.orderCount) * 100) / 100 : 0,
+    }));
+
+    res.json(results);
+  } catch (error: unknown) {
+    console.error('[Analytics] Error getting team sales:', error);
+    res.status(500).json({ error: 'Failed to get team sales analytics' });
+  }
+});
+
+// ============ Reports: Team Member Sales ============
+
+router.get('/:restaurantId/reports/team-member-sales', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { startDate, endDate } = req.query;
+
+    const where: Record<string, unknown> = {
+      restaurantId,
+      status: { in: ['completed', 'delivered'] },
+      serverId: { not: null },
+    };
+
+    if (startDate && endDate) {
+      where.createdAt = { gte: new Date(startDate as string), lte: new Date(endDate as string) };
+    }
+
+    const orders = await prisma.order.findMany({
+      where,
+      select: { serverId: true, total: true, tax: true, tip: true, createdAt: true },
+    });
+
+    const byServer = new Map<string, { totalSales: number; orderCount: number; totalTips: number }>();
+    for (const order of orders) {
+      const sid = order.serverId ?? 'unknown';
+      const existing = byServer.get(sid) ?? { totalSales: 0, orderCount: 0, totalTips: 0 };
+      existing.totalSales += Number(order.total) - Number(order.tax);
+      existing.orderCount += 1;
+      existing.totalTips += Number(order.tip);
+      byServer.set(sid, existing);
+    }
+
+    res.json([...byServer.entries()].map(([serverId, stats]) => ({
+      serverId,
+      ...stats,
+      totalSales: Math.round(stats.totalSales * 100) / 100,
+      totalTips: Math.round(stats.totalTips * 100) / 100,
+    })));
+  } catch (error: unknown) {
+    console.error('[Reports] Error getting team member sales:', error);
+    res.status(500).json({ error: 'Failed to get team member sales report' });
+  }
+});
+
+// ============ Reports: Tax & Service Charges ============
+
+router.get('/:restaurantId/reports/tax-service-charges', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { startDate, endDate } = req.query;
+
+    const where: Record<string, unknown> = {
+      restaurantId,
+      status: { in: ['completed', 'delivered'] },
+    };
+
+    if (startDate && endDate) {
+      where.createdAt = { gte: new Date(startDate as string), lte: new Date(endDate as string) };
+    }
+
+    const orders = await prisma.order.findMany({
+      where,
+      select: { tax: true, total: true, createdAt: true },
+    });
+
+    const totalTax = orders.reduce((sum, o) => sum + Number(o.tax), 0);
+    const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total), 0);
+
+    res.json({
+      totalTax: Math.round(totalTax * 100) / 100,
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      orderCount: orders.length,
+      effectiveTaxRate: totalRevenue > 0 ? Math.round((totalTax / totalRevenue) * 10000) / 100 : 0,
+    });
+  } catch (error: unknown) {
+    console.error('[Reports] Error getting tax report:', error);
+    res.status(500).json({ error: 'Failed to get tax & service charges report' });
+  }
+});
+
+// ============ Analytics Forecasts (empty-data-aware) ============
+
+router.get('/:restaurantId/analytics/conversion-funnel', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    // Derive from order data: views -> cart -> checkout -> completed
+    const completedStatuses = ['completed', 'delivered'];
+    const allOrders = await prisma.order.count({ where: { restaurantId } });
+    const completedOrders = await prisma.order.count({
+      where: { restaurantId, status: { in: completedStatuses } },
+    });
+    const cancelledOrders = await prisma.order.count({
+      where: { restaurantId, status: 'cancelled' },
+    });
+
+    res.json({
+      stages: [
+        { name: 'Orders Placed', count: allOrders },
+        { name: 'Completed', count: completedOrders },
+        { name: 'Cancelled', count: cancelledOrders },
+      ],
+      conversionRate: allOrders > 0 ? Math.round((completedOrders / allOrders) * 1000) / 10 : 0,
+    });
+  } catch (error: unknown) {
+    console.error('[Analytics] Error getting conversion funnel:', error);
+    res.status(500).json({ error: 'Failed to get conversion funnel' });
+  }
+});
+
+router.get('/:restaurantId/analytics/forecast/revenue', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    // Simple forecast: average daily revenue over last 30 days projected forward
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        status: { in: ['completed', 'delivered'] },
+        createdAt: { gte: thirtyDaysAgo },
+      },
+      select: { total: true, createdAt: true },
+    });
+
+    const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total), 0);
+    const avgDailyRevenue = orders.length > 0 ? totalRevenue / 30 : 0;
+
+    const forecast = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() + i + 1);
+      return {
+        date: date.toISOString().split('T')[0],
+        projectedRevenue: Math.round(avgDailyRevenue * 100) / 100,
+      };
+    });
+
+    res.json({
+      forecast,
+      avgDailyRevenue: Math.round(avgDailyRevenue * 100) / 100,
+      basedOnDays: 30,
+      confidence: orders.length > 100 ? 'medium' : orders.length > 0 ? 'low' : null,
+    });
+  } catch (error: unknown) {
+    console.error('[Analytics] Error getting revenue forecast:', error);
+    res.status(500).json({ error: 'Failed to get revenue forecast' });
+  }
+});
+
+router.get('/:restaurantId/analytics/forecast/demand', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        status: { in: ['completed', 'delivered'] },
+        createdAt: { gte: thirtyDaysAgo },
+      },
+      select: { createdAt: true },
+    });
+
+    // Group by day of week
+    const byDayOfWeek: Record<number, number> = {};
+    for (const order of orders) {
+      const dow = order.createdAt.getDay();
+      byDayOfWeek[dow] = (byDayOfWeek[dow] ?? 0) + 1;
+    }
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const forecast = dayNames.map((name, i) => ({
+      dayOfWeek: i,
+      dayName: name,
+      avgOrders: Math.round(((byDayOfWeek[i] ?? 0) / 4) * 10) / 10, // ~4 weeks in 30 days
+    }));
+
+    res.json({
+      forecast,
+      basedOnDays: 30,
+      confidence: orders.length > 100 ? 'medium' : orders.length > 0 ? 'low' : null,
+    });
+  } catch (error: unknown) {
+    console.error('[Analytics] Error getting demand forecast:', error);
+    res.status(500).json({ error: 'Failed to get demand forecast' });
+  }
+});
+
+router.get('/:restaurantId/analytics/forecast/staffing', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Get order demand by day of week
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        status: { in: ['completed', 'delivered'] },
+        createdAt: { gte: thirtyDaysAgo },
+      },
+      select: { createdAt: true },
+    });
+
+    const byDayOfWeek: Record<number, number> = {};
+    for (const order of orders) {
+      const dow = order.createdAt.getDay();
+      byDayOfWeek[dow] = (byDayOfWeek[dow] ?? 0) + 1;
+    }
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    // Rough heuristic: 1 staff per 10 orders/day
+    const forecast = dayNames.map((name, i) => {
+      const avgOrders = ((byDayOfWeek[i] ?? 0) / 4);
+      return {
+        dayOfWeek: i,
+        dayName: name,
+        avgOrders: Math.round(avgOrders * 10) / 10,
+        recommendedStaff: Math.max(1, Math.ceil(avgOrders / 10)),
+      };
+    });
+
+    res.json({
+      forecast,
+      basedOnDays: 30,
+      confidence: orders.length > 100 ? 'medium' : orders.length > 0 ? 'low' : null,
+    });
+  } catch (error: unknown) {
+    console.error('[Analytics] Error getting staffing forecast:', error);
+    res.status(500).json({ error: 'Failed to get staffing forecast' });
+  }
+});
+
 export default router;

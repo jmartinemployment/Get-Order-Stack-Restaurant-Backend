@@ -1740,4 +1740,210 @@ router.patch('/:restaurantId/break-types/:id', async (req: Request, res: Respons
   }
 });
 
+// ============ Payroll Periods ============
+
+// GET /:restaurantId/labor/payroll
+router.get('/:restaurantId/labor/payroll', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const periods = await prisma.payrollPeriod.findMany({
+      where: { restaurantId },
+      orderBy: { startDate: 'desc' },
+    });
+    res.json(periods);
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching payroll periods:', error);
+    res.status(500).json({ error: 'Failed to fetch payroll periods' });
+  }
+});
+
+// POST /:restaurantId/labor/payroll
+router.post('/:restaurantId/labor/payroll', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { startDate, endDate } = req.body;
+
+    if (!startDate || !endDate) {
+      res.status(400).json({ error: 'startDate and endDate are required' });
+      return;
+    }
+
+    const period = await prisma.payrollPeriod.create({
+      data: {
+        restaurantId,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+      },
+    });
+    res.status(201).json(period);
+  } catch (error: unknown) {
+    console.error('[Labor] Error creating payroll period:', error);
+    res.status(500).json({ error: 'Failed to create payroll period' });
+  }
+});
+
+// PATCH /:restaurantId/labor/payroll/:id
+router.patch('/:restaurantId/labor/payroll/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const data: Record<string, unknown> = {};
+    if (req.body.status !== undefined) data.status = req.body.status;
+    if (req.body.summaries !== undefined) data.summaries = req.body.summaries;
+
+    const period = await prisma.payrollPeriod.update({
+      where: { id },
+      data,
+    });
+    res.json(period);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Payroll period not found' });
+      return;
+    }
+    console.error('[Labor] Error updating payroll period:', error);
+    res.status(500).json({ error: 'Failed to update payroll period' });
+  }
+});
+
+// ============ Commission Rules ============
+
+// GET /:restaurantId/labor/commissions/rules
+router.get('/:restaurantId/labor/commissions/rules', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const rules = await prisma.commissionRule.findMany({
+      where: { restaurantId },
+      orderBy: { name: 'asc' },
+    });
+    res.json(rules);
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching commission rules:', error);
+    res.status(500).json({ error: 'Failed to fetch commission rules' });
+  }
+});
+
+// POST /:restaurantId/labor/commissions/rules
+router.post('/:restaurantId/labor/commissions/rules', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { name, type, value, appliesTo, jobTitles, isActive } = req.body;
+
+    if (!name || !type || value === undefined) {
+      res.status(400).json({ error: 'name, type, and value are required' });
+      return;
+    }
+
+    const rule = await prisma.commissionRule.create({
+      data: {
+        restaurantId,
+        name,
+        type,
+        value,
+        appliesTo: appliesTo ?? 'sales',
+        jobTitles: jobTitles ?? [],
+        isActive: isActive ?? true,
+      },
+    });
+    res.status(201).json(rule);
+  } catch (error: unknown) {
+    console.error('[Labor] Error creating commission rule:', error);
+    res.status(500).json({ error: 'Failed to create commission rule' });
+  }
+});
+
+// PATCH /:restaurantId/labor/commissions/rules/:ruleId
+router.patch('/:restaurantId/labor/commissions/rules/:ruleId', async (req: Request, res: Response) => {
+  try {
+    const { ruleId } = req.params;
+    const data: Record<string, unknown> = {};
+    if (req.body.name !== undefined) data.name = req.body.name;
+    if (req.body.type !== undefined) data.type = req.body.type;
+    if (req.body.value !== undefined) data.value = req.body.value;
+    if (req.body.appliesTo !== undefined) data.appliesTo = req.body.appliesTo;
+    if (req.body.jobTitles !== undefined) data.jobTitles = req.body.jobTitles;
+    if (req.body.isActive !== undefined) data.isActive = req.body.isActive;
+
+    const rule = await prisma.commissionRule.update({
+      where: { id: ruleId },
+      data,
+    });
+    res.json(rule);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Commission rule not found' });
+      return;
+    }
+    console.error('[Labor] Error updating commission rule:', error);
+    res.status(500).json({ error: 'Failed to update commission rule' });
+  }
+});
+
+// DELETE /:restaurantId/labor/commissions/rules/:ruleId
+router.delete('/:restaurantId/labor/commissions/rules/:ruleId', async (req: Request, res: Response) => {
+  try {
+    const { ruleId } = req.params;
+    await prisma.commissionRule.delete({ where: { id: ruleId } });
+    res.json({ success: true });
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Commission rule not found' });
+      return;
+    }
+    console.error('[Labor] Error deleting commission rule:', error);
+    res.status(500).json({ error: 'Failed to delete commission rule' });
+  }
+});
+
+// ============ Compliance Alerts ============
+
+// GET /:restaurantId/labor/compliance/alerts
+router.get('/:restaurantId/labor/compliance/alerts', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+    const { resolved } = req.query;
+
+    const where: Record<string, unknown> = { restaurantId };
+    if (resolved === 'false') where.isResolved = false;
+    if (resolved === 'true') where.isResolved = true;
+
+    const alerts = await prisma.complianceAlert.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    res.json(alerts);
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching compliance alerts:', error);
+    res.status(500).json({ error: 'Failed to fetch compliance alerts' });
+  }
+});
+
+// GET /:restaurantId/labor/compliance/summary
+router.get('/:restaurantId/labor/compliance/summary', async (req: Request, res: Response) => {
+  try {
+    const { restaurantId } = req.params;
+
+    const alerts = await prisma.complianceAlert.findMany({
+      where: { restaurantId, isResolved: false },
+    });
+
+    const byType: Record<string, number> = {};
+    const bySeverity: Record<string, number> = {};
+
+    for (const alert of alerts) {
+      byType[alert.type] = (byType[alert.type] ?? 0) + 1;
+      bySeverity[alert.severity] = (bySeverity[alert.severity] ?? 0) + 1;
+    }
+
+    res.json({
+      totalOpen: alerts.length,
+      byType,
+      bySeverity,
+    });
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching compliance summary:', error);
+    res.status(500).json({ error: 'Failed to fetch compliance summary' });
+  }
+});
+
 export default router;

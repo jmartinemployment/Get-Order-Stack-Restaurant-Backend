@@ -268,4 +268,112 @@ router.post('/:restaurantId/campaigns/audience-estimate', async (req: Request, r
   }
 });
 
+// ============ Marketing Automations ============
+
+const createAutomationSchema = z.object({
+  name: z.string().min(1),
+  trigger: z.string().min(1),
+  action: z.object({
+    type: z.string().min(1),
+    templateId: z.string().uuid().optional(),
+    points: z.number().int().optional(),
+  }).optional(),
+  isActive: z.boolean().optional(),
+});
+
+const updateAutomationSchema = z.object({
+  name: z.string().min(1).optional(),
+  trigger: z.string().min(1).optional(),
+  action: z.object({
+    type: z.string().min(1),
+    templateId: z.string().uuid().optional(),
+    points: z.number().int().optional(),
+  }).optional(),
+  isActive: z.boolean().optional(),
+});
+
+// GET /:restaurantId/marketing/automations
+router.get('/:restaurantId/marketing/automations', async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  try {
+    const automations = await prisma.marketingAutomation.findMany({
+      where: { restaurantId },
+      orderBy: { name: 'asc' },
+    });
+    res.json(automations);
+  } catch (error: unknown) {
+    console.error('[Marketing] Automations list error:', error);
+    res.status(500).json({ error: 'Failed to list automations' });
+  }
+});
+
+// POST /:restaurantId/marketing/automations
+router.post('/:restaurantId/marketing/automations', async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  const parsed = createAutomationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+    return;
+  }
+
+  try {
+    const automation = await prisma.marketingAutomation.create({
+      data: {
+        restaurantId,
+        name: parsed.data.name,
+        trigger: parsed.data.trigger,
+        action: parsed.data.action ?? {},
+        isActive: parsed.data.isActive ?? true,
+      },
+    });
+    res.status(201).json(automation);
+  } catch (error: unknown) {
+    console.error('[Marketing] Create automation error:', error);
+    res.status(500).json({ error: 'Failed to create automation' });
+  }
+});
+
+// PATCH /:restaurantId/marketing/automations/:automationId
+router.patch('/:restaurantId/marketing/automations/:automationId', async (req: Request, res: Response) => {
+  const { restaurantId, automationId } = req.params;
+  const parsed = updateAutomationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+    return;
+  }
+
+  try {
+    const automation = await prisma.marketingAutomation.update({
+      where: { id: automationId, restaurantId },
+      data: parsed.data,
+    });
+    res.json(automation);
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Automation not found' });
+      return;
+    }
+    console.error('[Marketing] Update automation error:', error);
+    res.status(500).json({ error: 'Failed to update automation' });
+  }
+});
+
+// DELETE /:restaurantId/marketing/automations/:automationId
+router.delete('/:restaurantId/marketing/automations/:automationId', async (req: Request, res: Response) => {
+  const { restaurantId, automationId } = req.params;
+  try {
+    await prisma.marketingAutomation.delete({
+      where: { id: automationId, restaurantId },
+    });
+    res.json({ success: true });
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code === 'P2025') {
+      res.status(404).json({ error: 'Automation not found' });
+      return;
+    }
+    console.error('[Marketing] Delete automation error:', error);
+    res.status(500).json({ error: 'Failed to delete automation' });
+  }
+});
+
 export default router;
