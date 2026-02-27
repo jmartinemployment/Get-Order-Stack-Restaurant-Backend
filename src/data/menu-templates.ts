@@ -14,12 +14,31 @@ interface MenuTemplateCategory {
   items: MenuTemplateItem[];
 }
 
+interface MenuTemplateModifier {
+  name: string;
+  priceAdjustment: number;
+  isDefault: boolean;
+  sortOrder: number;
+}
+
+interface MenuTemplateModifierGroup {
+  name: string;
+  required: boolean;
+  multiSelect: boolean;
+  minSelections: number;
+  maxSelections: number;
+  sortOrder: number;
+  modifiers: MenuTemplateModifier[];
+  applyTo: 'all' | string[]; // 'all' or array of item names
+}
+
 export interface MenuTemplate {
   id: string;
   vertical: string;
   name: string;
   description: string;
   categories: MenuTemplateCategory[];
+  modifierGroups: MenuTemplateModifierGroup[];
   itemCount: number;
 }
 
@@ -433,6 +452,353 @@ const fitnessStudioCategories: MenuTemplateCategory[] = [
   },
 ];
 
+// --- Modifier Group Definitions ---
+
+const coffeeShopModifiers: MenuTemplateModifierGroup[] = [
+  {
+    name: 'Size', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 1,
+    modifiers: [
+      { name: 'Small (12 oz)', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Medium (16 oz)', priceAdjustment: 0.75, isDefault: false, sortOrder: 2 },
+      { name: 'Large (20 oz)', priceAdjustment: 1.50, isDefault: false, sortOrder: 3 },
+    ],
+    applyTo: ['Drip Coffee', 'Americano', 'Latte', 'Cappuccino', 'Mocha', 'Hot Tea', 'Iced Coffee', 'Iced Latte', 'Cold Brew', 'Smoothie'],
+  },
+  {
+    name: 'Milk', required: false, multiSelect: false, minSelections: 0, maxSelections: 1, sortOrder: 2,
+    modifiers: [
+      { name: 'Whole Milk', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Oat Milk', priceAdjustment: 0.75, isDefault: false, sortOrder: 2 },
+      { name: 'Almond Milk', priceAdjustment: 0.75, isDefault: false, sortOrder: 3 },
+      { name: 'Soy Milk', priceAdjustment: 0.50, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Latte', 'Cappuccino', 'Mocha', 'Iced Latte', 'Smoothie'],
+  },
+  {
+    name: 'Extras', required: false, multiSelect: true, minSelections: 0, maxSelections: 3, sortOrder: 3,
+    modifiers: [
+      { name: 'Extra Shot', priceAdjustment: 1, isDefault: false, sortOrder: 1 },
+      { name: 'Vanilla Syrup', priceAdjustment: 0.50, isDefault: false, sortOrder: 2 },
+      { name: 'Caramel Syrup', priceAdjustment: 0.50, isDefault: false, sortOrder: 3 },
+      { name: 'Whipped Cream', priceAdjustment: 0.50, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Drip Coffee', 'Americano', 'Latte', 'Cappuccino', 'Mocha', 'Iced Coffee', 'Iced Latte', 'Cold Brew'],
+  },
+];
+
+const pizzaModifiers: MenuTemplateModifierGroup[] = [
+  {
+    name: 'Size', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 1,
+    modifiers: [
+      { name: 'Small (10")', priceAdjustment: 0, isDefault: false, sortOrder: 1 },
+      { name: 'Medium (12")', priceAdjustment: 2, isDefault: true, sortOrder: 2 },
+      { name: 'Large (16")', priceAdjustment: 4, isDefault: false, sortOrder: 3 },
+    ],
+    applyTo: ['Margherita', 'Pepperoni', 'Supreme', 'BBQ Chicken', 'Veggie'],
+  },
+  {
+    name: 'Crust', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 2,
+    modifiers: [
+      { name: 'Hand Tossed', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Thin Crust', priceAdjustment: 0, isDefault: false, sortOrder: 2 },
+      { name: 'Deep Dish', priceAdjustment: 2, isDefault: false, sortOrder: 3 },
+    ],
+    applyTo: ['Margherita', 'Pepperoni', 'Supreme', 'BBQ Chicken', 'Veggie'],
+  },
+  {
+    name: 'Extra Toppings', required: false, multiSelect: true, minSelections: 0, maxSelections: 5, sortOrder: 3,
+    modifiers: [
+      { name: 'Extra Cheese', priceAdjustment: 1.50, isDefault: false, sortOrder: 1 },
+      { name: 'Mushrooms', priceAdjustment: 1, isDefault: false, sortOrder: 2 },
+      { name: 'Jalapeños', priceAdjustment: 1, isDefault: false, sortOrder: 3 },
+      { name: 'Bacon', priceAdjustment: 1.50, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Margherita', 'Pepperoni', 'Supreme', 'BBQ Chicken', 'Veggie'],
+  },
+  {
+    name: 'Wing Sauce', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 4,
+    modifiers: [
+      { name: 'Buffalo', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'BBQ', priceAdjustment: 0, isDefault: false, sortOrder: 2 },
+      { name: 'Garlic Parmesan', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+    ],
+    applyTo: ['Wings'],
+  },
+];
+
+const barAndGrillModifiers: MenuTemplateModifierGroup[] = [
+  {
+    name: 'Burger Temperature', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 1,
+    modifiers: [
+      { name: 'Medium Rare', priceAdjustment: 0, isDefault: false, sortOrder: 1 },
+      { name: 'Medium', priceAdjustment: 0, isDefault: true, sortOrder: 2 },
+      { name: 'Medium Well', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'Well Done', priceAdjustment: 0, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Classic Burger', 'Bacon Cheeseburger', 'Mushroom Swiss'],
+  },
+  {
+    name: 'Side Choice', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 2,
+    modifiers: [
+      { name: 'French Fries', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Onion Rings', priceAdjustment: 1, isDefault: false, sortOrder: 2 },
+      { name: 'Side Salad', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'Coleslaw', priceAdjustment: 0, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Classic Burger', 'Bacon Cheeseburger', 'Mushroom Swiss'],
+  },
+  {
+    name: 'Add-Ons', required: false, multiSelect: true, minSelections: 0, maxSelections: 4, sortOrder: 3,
+    modifiers: [
+      { name: 'Extra Cheese', priceAdjustment: 1, isDefault: false, sortOrder: 1 },
+      { name: 'Avocado', priceAdjustment: 1.50, isDefault: false, sortOrder: 2 },
+      { name: 'Fried Egg', priceAdjustment: 1.50, isDefault: false, sortOrder: 3 },
+    ],
+    applyTo: ['Classic Burger', 'Bacon Cheeseburger', 'Mushroom Swiss'],
+  },
+];
+
+const tacoTruckModifiers: MenuTemplateModifierGroup[] = [
+  {
+    name: 'Tortilla', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 1,
+    modifiers: [
+      { name: 'Corn', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Flour', priceAdjustment: 0, isDefault: false, sortOrder: 2 },
+    ],
+    applyTo: ['Carne Asada Taco', 'Al Pastor Taco', 'Chicken Taco', 'Fish Taco'],
+  },
+  {
+    name: 'Salsa', required: false, multiSelect: true, minSelections: 0, maxSelections: 3, sortOrder: 2,
+    modifiers: [
+      { name: 'Salsa Verde', priceAdjustment: 0, isDefault: false, sortOrder: 1 },
+      { name: 'Salsa Roja', priceAdjustment: 0, isDefault: false, sortOrder: 2 },
+      { name: 'Pico de Gallo', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'Habanero', priceAdjustment: 0, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: 'all',
+  },
+  {
+    name: 'Extras', required: false, multiSelect: true, minSelections: 0, maxSelections: 3, sortOrder: 3,
+    modifiers: [
+      { name: 'Extra Meat', priceAdjustment: 2, isDefault: false, sortOrder: 1 },
+      { name: 'Sour Cream', priceAdjustment: 0.75, isDefault: false, sortOrder: 2 },
+      { name: 'Guacamole', priceAdjustment: 1.50, isDefault: false, sortOrder: 3 },
+      { name: 'Cheese', priceAdjustment: 1, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Carne Asada Taco', 'Al Pastor Taco', 'Chicken Taco', 'Fish Taco', 'Carne Asada Burrito', 'Chicken Burrito'],
+  },
+];
+
+const americanGrillModifiers: MenuTemplateModifierGroup[] = [
+  {
+    name: 'Steak Temperature', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 1,
+    modifiers: [
+      { name: 'Rare', priceAdjustment: 0, isDefault: false, sortOrder: 1 },
+      { name: 'Medium Rare', priceAdjustment: 0, isDefault: true, sortOrder: 2 },
+      { name: 'Medium', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'Medium Well', priceAdjustment: 0, isDefault: false, sortOrder: 4 },
+      { name: 'Well Done', priceAdjustment: 0, isDefault: false, sortOrder: 5 },
+    ],
+    applyTo: ['Grilled Ribeye'],
+  },
+  {
+    name: 'Side Choice', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 2,
+    modifiers: [
+      { name: 'Mashed Potatoes', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Fries', priceAdjustment: 0, isDefault: false, sortOrder: 2 },
+      { name: 'Collard Greens', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'Mac & Cheese', priceAdjustment: 1, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Grilled Ribeye', 'Southern Fried Chicken', 'Smothered Pork Chops'],
+  },
+];
+
+const bbqModifiers: MenuTemplateModifierGroup[] = [
+  {
+    name: 'First Meat', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 1,
+    modifiers: [
+      { name: 'Brisket', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Pulled Pork', priceAdjustment: 0, isDefault: false, sortOrder: 2 },
+      { name: 'Ribs', priceAdjustment: 2, isDefault: false, sortOrder: 3 },
+      { name: 'Smoked Sausage', priceAdjustment: 0, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Combo Platter'],
+  },
+  {
+    name: 'Second Meat', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 2,
+    modifiers: [
+      { name: 'Brisket', priceAdjustment: 0, isDefault: false, sortOrder: 1 },
+      { name: 'Pulled Pork', priceAdjustment: 0, isDefault: true, sortOrder: 2 },
+      { name: 'Ribs', priceAdjustment: 2, isDefault: false, sortOrder: 3 },
+      { name: 'Smoked Sausage', priceAdjustment: 0, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Combo Platter'],
+  },
+  {
+    name: 'Sauce', required: false, multiSelect: false, minSelections: 0, maxSelections: 1, sortOrder: 3,
+    modifiers: [
+      { name: 'Original BBQ', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Spicy', priceAdjustment: 0, isDefault: false, sortOrder: 2 },
+      { name: 'Carolina Mustard', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'No Sauce (Dry Rub)', priceAdjustment: 0, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Brisket Platter', 'Pulled Pork Platter', 'Smoked Ribs (Half Rack)', 'Combo Platter'],
+  },
+  {
+    name: 'Side Choice', required: true, multiSelect: true, minSelections: 2, maxSelections: 2, sortOrder: 4,
+    modifiers: [
+      { name: 'Coleslaw', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Baked Beans', priceAdjustment: 0, isDefault: true, sortOrder: 2 },
+      { name: 'Cornbread', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'Mac & Cheese', priceAdjustment: 1, isDefault: false, sortOrder: 4 },
+      { name: 'Fries', priceAdjustment: 0, isDefault: false, sortOrder: 5 },
+    ],
+    applyTo: ['Brisket Platter', 'Pulled Pork Platter', 'Smoked Ribs (Half Rack)', 'Combo Platter'],
+  },
+];
+
+const asianKitchenModifiers: MenuTemplateModifierGroup[] = [
+  {
+    name: 'Protein', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 1,
+    modifiers: [
+      { name: 'Chicken', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Shrimp', priceAdjustment: 3, isDefault: false, sortOrder: 2 },
+      { name: 'Tofu', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'Beef', priceAdjustment: 2, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Pad Thai', 'Chicken Teriyaki'],
+  },
+  {
+    name: 'Spice Level', required: false, multiSelect: false, minSelections: 0, maxSelections: 1, sortOrder: 2,
+    modifiers: [
+      { name: 'Mild', priceAdjustment: 0, isDefault: false, sortOrder: 1 },
+      { name: 'Medium', priceAdjustment: 0, isDefault: true, sortOrder: 2 },
+      { name: 'Spicy', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'Extra Spicy', priceAdjustment: 0, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Pad Thai', 'General Tso\'s Chicken', 'Beef Bulgogi', 'Chicken Teriyaki'],
+  },
+  {
+    name: 'Add Rice', required: false, multiSelect: false, minSelections: 0, maxSelections: 1, sortOrder: 3,
+    modifiers: [
+      { name: 'Steamed White Rice', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Brown Rice', priceAdjustment: 0.50, isDefault: false, sortOrder: 2 },
+      { name: 'Fried Rice', priceAdjustment: 2, isDefault: false, sortOrder: 3 },
+    ],
+    applyTo: ['General Tso\'s Chicken', 'Chicken Teriyaki'],
+  },
+];
+
+const indianModifiers: MenuTemplateModifierGroup[] = [
+  {
+    name: 'Spice Level', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 1,
+    modifiers: [
+      { name: 'Mild', priceAdjustment: 0, isDefault: false, sortOrder: 1 },
+      { name: 'Medium', priceAdjustment: 0, isDefault: true, sortOrder: 2 },
+      { name: 'Hot', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'Extra Hot', priceAdjustment: 0, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Butter Chicken', 'Lamb Rogan Josh', 'Palak Paneer', 'Chicken Biryani'],
+  },
+  {
+    name: 'Bread', required: false, multiSelect: false, minSelections: 0, maxSelections: 1, sortOrder: 2,
+    modifiers: [
+      { name: 'Naan', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Garlic Naan', priceAdjustment: 1, isDefault: false, sortOrder: 2 },
+      { name: 'Roti', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'Paratha', priceAdjustment: 1.50, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Butter Chicken', 'Lamb Rogan Josh', 'Palak Paneer'],
+  },
+  {
+    name: 'Rice', required: false, multiSelect: false, minSelections: 0, maxSelections: 1, sortOrder: 3,
+    modifiers: [
+      { name: 'Basmati Rice', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Jeera Rice', priceAdjustment: 1, isDefault: false, sortOrder: 2 },
+      { name: 'No Rice', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+    ],
+    applyTo: ['Butter Chicken', 'Lamb Rogan Josh', 'Palak Paneer'],
+  },
+];
+
+const mediterraneanModifiers: MenuTemplateModifierGroup[] = [
+  {
+    name: 'Protein', required: false, multiSelect: false, minSelections: 0, maxSelections: 1, sortOrder: 1,
+    modifiers: [
+      { name: 'Chicken', priceAdjustment: 3, isDefault: false, sortOrder: 1 },
+      { name: 'Lamb', priceAdjustment: 4, isDefault: false, sortOrder: 2 },
+      { name: 'Falafel', priceAdjustment: 2, isDefault: false, sortOrder: 3 },
+    ],
+    applyTo: ['Hummus & Pita', 'Greek Salad'],
+  },
+  {
+    name: 'Sauce', required: false, multiSelect: true, minSelections: 0, maxSelections: 2, sortOrder: 2,
+    modifiers: [
+      { name: 'Tzatziki', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Tahini', priceAdjustment: 0, isDefault: false, sortOrder: 2 },
+      { name: 'Garlic Sauce', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'Hot Sauce', priceAdjustment: 0, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Chicken Shawarma Plate', 'Lamb Kofta', 'Lamb Gyro Wrap', 'Falafel'],
+  },
+];
+
+const seafoodModifiers: MenuTemplateModifierGroup[] = [
+  {
+    name: 'Preparation', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 1,
+    modifiers: [
+      { name: 'Grilled', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Blackened', priceAdjustment: 0, isDefault: false, sortOrder: 2 },
+      { name: 'Pan-Seared', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+    ],
+    applyTo: ['Grilled Salmon'],
+  },
+  {
+    name: 'Side Choice', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 2,
+    modifiers: [
+      { name: 'Fries', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Coleslaw', priceAdjustment: 0, isDefault: false, sortOrder: 2 },
+      { name: 'Asparagus', priceAdjustment: 1, isDefault: false, sortOrder: 3 },
+      { name: 'Rice Pilaf', priceAdjustment: 0, isDefault: false, sortOrder: 4 },
+    ],
+    applyTo: ['Fish & Chips', 'Grilled Salmon', 'Lobster Roll'],
+  },
+];
+
+const iceCreamModifiers: MenuTemplateModifierGroup[] = [
+  {
+    name: 'Flavor', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 1,
+    modifiers: [
+      { name: 'Vanilla', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Chocolate', priceAdjustment: 0, isDefault: false, sortOrder: 2 },
+      { name: 'Strawberry', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
+      { name: 'Cookies & Cream', priceAdjustment: 0, isDefault: false, sortOrder: 4 },
+      { name: 'Mint Chip', priceAdjustment: 0, isDefault: false, sortOrder: 5 },
+    ],
+    applyTo: ['Single Scoop', 'Double Scoop', 'Waffle Bowl', 'Pint To Go', 'Sundae', 'Milkshake'],
+  },
+  {
+    name: 'Toppings', required: false, multiSelect: true, minSelections: 0, maxSelections: 3, sortOrder: 2,
+    modifiers: [
+      { name: 'Hot Fudge', priceAdjustment: 0.75, isDefault: false, sortOrder: 1 },
+      { name: 'Sprinkles', priceAdjustment: 0.50, isDefault: false, sortOrder: 2 },
+      { name: 'Crushed Oreos', priceAdjustment: 0.75, isDefault: false, sortOrder: 3 },
+      { name: 'Caramel Sauce', priceAdjustment: 0.75, isDefault: false, sortOrder: 4 },
+      { name: 'Whipped Cream', priceAdjustment: 0.50, isDefault: false, sortOrder: 5 },
+    ],
+    applyTo: ['Single Scoop', 'Double Scoop', 'Waffle Bowl'],
+  },
+  {
+    name: 'Cone Type', required: true, multiSelect: false, minSelections: 1, maxSelections: 1, sortOrder: 3,
+    modifiers: [
+      { name: 'Cup', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
+      { name: 'Sugar Cone', priceAdjustment: 0, isDefault: false, sortOrder: 2 },
+      { name: 'Waffle Cone', priceAdjustment: 1, isDefault: false, sortOrder: 3 },
+    ],
+    applyTo: ['Single Scoop', 'Double Scoop'],
+  },
+];
+
 // --- Assemble all templates ---
 
 export const MENU_TEMPLATES: MenuTemplate[] = [
@@ -442,6 +808,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Coffee Shop',
     description: 'Hot & cold drinks, pastries, and light bites',
     categories: coffeeShopCategories,
+    modifierGroups: coffeeShopModifiers,
     itemCount: countItems(coffeeShopCategories),
   },
   {
@@ -450,6 +817,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Pizza Restaurant',
     description: 'Pizzas, sides, and beverages',
     categories: pizzaCategories,
+    modifierGroups: pizzaModifiers,
     itemCount: countItems(pizzaCategories),
   },
   {
@@ -458,6 +826,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Bar & Grill',
     description: 'Appetizers, burgers, and drinks',
     categories: barAndGrillCategories,
+    modifierGroups: barAndGrillModifiers,
     itemCount: countItems(barAndGrillCategories),
   },
   {
@@ -466,6 +835,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Taco Truck',
     description: 'Street tacos, burritos, and Mexican beverages',
     categories: tacoTruckCategories,
+    modifierGroups: tacoTruckModifiers,
     itemCount: countItems(tacoTruckCategories),
   },
   {
@@ -474,6 +844,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'American Grill',
     description: 'Southern-inspired starters, hearty mains, and classic drinks',
     categories: americanGrillCategories,
+    modifierGroups: americanGrillModifiers,
     itemCount: countItems(americanGrillCategories),
   },
   {
@@ -482,6 +853,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'BBQ Restaurant',
     description: 'Smoked meat platters, classic sides, and cold drinks',
     categories: bbqCategories,
+    modifierGroups: bbqModifiers,
     itemCount: countItems(bbqCategories),
   },
   {
@@ -490,6 +862,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Asian Kitchen',
     description: 'Appetizers, pan-Asian entrees, and hot and iced teas',
     categories: asianKitchenCategories,
+    modifierGroups: asianKitchenModifiers,
     itemCount: countItems(asianKitchenCategories),
   },
   {
@@ -498,6 +871,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Indian Restaurant',
     description: 'Tandoori starters, curries, and traditional drinks',
     categories: indianCategories,
+    modifierGroups: indianModifiers,
     itemCount: countItems(indianCategories),
   },
   {
@@ -506,6 +880,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Mediterranean Kitchen',
     description: 'Mezze, grilled mains, and refreshing drinks',
     categories: mediterraneanCategories,
+    modifierGroups: mediterraneanModifiers,
     itemCount: countItems(mediterraneanCategories),
   },
   {
@@ -514,6 +889,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Seafood Restaurant',
     description: 'Raw bar, fresh seafood entrees, and wine',
     categories: seafoodCategories,
+    modifierGroups: seafoodModifiers,
     itemCount: countItems(seafoodCategories),
   },
   {
@@ -522,6 +898,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Ice Cream Shop',
     description: 'Scoops, sundaes, shakes, and floats',
     categories: iceCreamCategories,
+    modifierGroups: iceCreamModifiers,
     itemCount: countItems(iceCreamCategories),
   },
   {
@@ -530,6 +907,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Clothing Boutique',
     description: 'Tops, bottoms, and accessories',
     categories: clothingBoutiqueCategories,
+    modifierGroups: [],
     itemCount: countItems(clothingBoutiqueCategories),
   },
   {
@@ -538,6 +916,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Hair Salon',
     description: 'Cuts, color, and treatments',
     categories: hairSalonCategories,
+    modifierGroups: [],
     itemCount: countItems(hairSalonCategories),
   },
   {
@@ -546,6 +925,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Consulting Firm',
     description: 'Consultations and service packages',
     categories: consultingCategories,
+    modifierGroups: [],
     itemCount: countItems(consultingCategories),
   },
   {
@@ -554,6 +934,7 @@ export const MENU_TEMPLATES: MenuTemplate[] = [
     name: 'Fitness Studio',
     description: 'Classes, personal training, and memberships',
     categories: fitnessStudioCategories,
+    modifierGroups: [],
     itemCount: countItems(fitnessStudioCategories),
   },
 ];
