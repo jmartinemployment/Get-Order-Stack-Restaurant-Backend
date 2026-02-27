@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { authService } from '../services/auth.service';
-import { DEFAULT_PERMISSION_SETS } from '../data/default-permission-sets';
+import { DEFAULT_PERMISSION_SETS, LEGACY_SET_RENAME } from '../data/default-permission-sets';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -22,6 +22,8 @@ const createTeamMemberSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional(),
   passcode: z.string().optional(),
+  password: z.string().min(6).optional(),
+  tempPasswordExpiresInHours: z.number().min(1).max(168).optional(), // 1hr to 7 days
   permissionSetId: z.string().uuid().optional(),
   assignedLocationIds: z.array(z.string()).optional(),
   hireDate: z.string().optional(),
@@ -33,6 +35,8 @@ const updateTeamMemberSchema = z.object({
   email: z.string().email().nullable().optional(),
   phone: z.string().nullable().optional(),
   passcode: z.string().nullable().optional(),
+  password: z.string().min(6).nullable().optional(),
+  tempPasswordExpiresInHours: z.number().min(1).max(168).optional(),
   permissionSetId: z.string().uuid().nullable().optional(),
   assignedLocationIds: z.array(z.string()).optional(),
   hireDate: z.string().nullable().optional(),
@@ -51,6 +55,22 @@ const updatePermissionSetSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 
+const updateOnboardingStepSchema = z.object({
+  isComplete: z.boolean(),
+  notes: z.string().optional(),
+});
+
+// --- Onboarding step definitions ---
+const ONBOARDING_STEPS = ['personal_info', 'tax_forms', 'direct_deposit', 'documents', 'training'] as const;
+
+const ONBOARDING_STEP_LABELS: Record<string, string> = {
+  personal_info: 'Personal Information',
+  tax_forms: 'Tax Forms (W-4 / W-9)',
+  direct_deposit: 'Direct Deposit',
+  documents: 'Documents & ID Verification',
+  training: 'Training & Acknowledgements',
+};
+
 // --- Team Member helpers ---
 
 const teamMemberInclude = {
@@ -59,9 +79,9 @@ const teamMemberInclude = {
   staffPin: { select: { id: true } },
 } as const;
 
-function formatTeamMember(member: {
+interface FormattableMember {
   id: string;
-  restaurantId: string;
+  restaurantId: string | null;
   displayName: string;
   email: string | null;
   phone: string | null;
@@ -71,6 +91,7 @@ function formatTeamMember(member: {
   avatarUrl: string | null;
   hireDate: Date | null;
   status: string;
+  onboardingStatus: string;
   createdAt: Date;
   permissionSet: { name: string } | null;
   staffPin?: { id: string } | null;
@@ -83,7 +104,9 @@ function formatTeamMember(member: {
     isPrimary: boolean;
     overtimeEligible: boolean;
   }[];
-}) {
+}
+
+function formatTeamMember(member: FormattableMember) {
   return {
     id: member.id,
     restaurantId: member.restaurantId,
@@ -98,6 +121,7 @@ function formatTeamMember(member: {
     avatarUrl: member.avatarUrl,
     hireDate: member.hireDate?.toISOString() ?? null,
     status: member.status,
+    onboardingStatus: member.onboardingStatus,
     createdAt: member.createdAt.toISOString(),
     staffPinId: member.staffPin?.id ?? null,
   };
@@ -129,21 +153,47 @@ router.post('/:restaurantId/team-members', async (req: Request, res: Response) =
       res.status(400).json({ error: parsed.error.flatten().fieldErrors });
       return;
     }
-    const { displayName, email, phone, passcode, permissionSetId, assignedLocationIds, hireDate, jobs } = parsed.data;
+    const { displayName, email, phone, passcode, password, tempPasswordExpiresInHours, permissionSetId, assignedLocationIds, hireDate, jobs } = parsed.data;
 
     const hashedPin = passcode ? await authService.hashPin(passcode) : await authService.hashPin('0000');
+
+    // Hash password if provided (for dashboard login)
+    const passwordHash = password ? await authService.hashPassword(password) : undefined;
+
+    // Calculate temp password expiry (default 4 hours if password provided)
+    let tempPasswordExpiresAt: Date | undefined;
+    let tempPasswordSetBy: string | undefined;
+    if (password) {
+      const hours = tempPasswordExpiresInHours ?? 4;
+      tempPasswordExpiresAt = new Date();
+      tempPasswordExpiresAt.setHours(tempPasswordExpiresAt.getHours() + hours);
+
+      // Extract manager's ID from auth token if available
+      const authHeader = req.headers.authorization;
+      if (authHeader) {
+        const token = authHeader.replace('Bearer ', '');
+        const payload = authService.verifyToken(token);
+        if (payload) {
+          tempPasswordSetBy = payload.teamMemberId;
+        }
+      }
+    }
 
     const member = await prisma.$transaction(async (tx) => {
       const tm = await tx.teamMember.create({
         data: {
           restaurantId,
           displayName,
-          email: email ?? null,
+          email: email?.toLowerCase() ?? null,
           phone: phone ?? null,
           passcode: passcode ?? null,
+          passwordHash: passwordHash ?? null,
           permissionSetId: permissionSetId ?? null,
           assignedLocationIds: assignedLocationIds ?? [],
           hireDate: hireDate ? new Date(hireDate) : null,
+          onboardingStatus: password ? 'not_started' : 'complete',
+          tempPasswordExpiresAt: tempPasswordExpiresAt ?? null,
+          tempPasswordSetBy: tempPasswordSetBy ?? null,
           jobs: { create: jobs },
         },
         include: teamMemberInclude,
@@ -184,13 +234,38 @@ router.patch('/:restaurantId/team-members/:id', async (req: Request, res: Respon
     const data: Record<string, unknown> = {};
     const d = parsed.data;
     if (d.displayName !== undefined) data.displayName = d.displayName;
-    if (d.email !== undefined) data.email = d.email;
+    if (d.email !== undefined) data.email = d.email?.toLowerCase() ?? null;
     if (d.phone !== undefined) data.phone = d.phone;
     if (d.passcode !== undefined) data.passcode = d.passcode;
     if (d.permissionSetId !== undefined) data.permissionSetId = d.permissionSetId;
     if (d.assignedLocationIds !== undefined) data.assignedLocationIds = d.assignedLocationIds;
     if (d.hireDate !== undefined) data.hireDate = d.hireDate ? new Date(d.hireDate) : null;
     if (d.status !== undefined) data.status = d.status;
+
+    // Handle password reset (manager resetting temp password)
+    if (d.password !== undefined) {
+      if (d.password === null) {
+        data.passwordHash = null;
+        data.tempPasswordExpiresAt = null;
+        data.tempPasswordSetBy = null;
+      } else {
+        data.passwordHash = await authService.hashPassword(d.password);
+        const hours = d.tempPasswordExpiresInHours ?? 4;
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + hours);
+        data.tempPasswordExpiresAt = expiresAt;
+        data.onboardingStatus = 'not_started';
+
+        const authHeader = req.headers.authorization;
+        if (authHeader) {
+          const token = authHeader.replace('Bearer ', '');
+          const payload = authService.verifyToken(token);
+          if (payload) {
+            data.tempPasswordSetBy = payload.teamMemberId;
+          }
+        }
+      }
+    }
 
     const member = await prisma.$transaction(async (tx) => {
       const tm = await tx.teamMember.update({
@@ -306,20 +381,191 @@ router.patch('/:restaurantId/team-members/:memberId/jobs/:jobId', async (req: Re
   }
 });
 
+// ============ Onboarding ============
+
+// GET onboarding checklist for a team member
+router.get('/:restaurantId/team-members/:memberId/onboarding', async (req: Request, res: Response) => {
+  try {
+    const { memberId } = req.params;
+
+    const rows = await prisma.onboardingChecklist.findMany({
+      where: { teamMemberId: memberId },
+      orderBy: { step: 'asc' },
+    });
+
+    const member = await prisma.teamMember.findUnique({
+      where: { id: memberId },
+      select: { onboardingStatus: true },
+    });
+
+    // Build complete step list (include steps that haven't been started)
+    const rowMap = new Map(rows.map(r => [r.step, r]));
+    const steps = ONBOARDING_STEPS.map(step => {
+      const row = rowMap.get(step);
+      return {
+        step,
+        label: ONBOARDING_STEP_LABELS[step],
+        isComplete: row?.isComplete ?? false,
+        completedAt: row?.completedAt?.toISOString() ?? null,
+        notes: row?.notes ?? null,
+      };
+    });
+
+    const allComplete = steps.every(s => s.isComplete);
+
+    res.json({
+      teamMemberId: memberId,
+      onboardingStatus: member?.onboardingStatus ?? 'not_started',
+      steps,
+      completedAt: allComplete ? rows.find(r => r.isComplete)?.completedAt?.toISOString() ?? null : null,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error getting onboarding checklist:', message);
+    res.status(500).json({ error: 'Failed to get onboarding checklist' });
+  }
+});
+
+// PATCH toggle a single onboarding step
+router.patch('/:restaurantId/team-members/:memberId/onboarding/:step', async (req: Request, res: Response) => {
+  try {
+    const { memberId, step } = req.params;
+    const parsed = updateOnboardingStepSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      return;
+    }
+
+    if (!ONBOARDING_STEPS.includes(step as typeof ONBOARDING_STEPS[number])) {
+      res.status(400).json({ error: `Invalid step: ${step}` });
+      return;
+    }
+
+    await prisma.onboardingChecklist.upsert({
+      where: {
+        teamMemberId_step: { teamMemberId: memberId, step },
+      },
+      create: {
+        teamMemberId: memberId,
+        step,
+        isComplete: parsed.data.isComplete,
+        completedAt: parsed.data.isComplete ? new Date() : null,
+        notes: parsed.data.notes ?? null,
+      },
+      update: {
+        isComplete: parsed.data.isComplete,
+        completedAt: parsed.data.isComplete ? new Date() : null,
+        notes: parsed.data.notes ?? null,
+      },
+    });
+
+    // Update team member onboardingStatus based on step completions
+    const allSteps = await prisma.onboardingChecklist.findMany({
+      where: { teamMemberId: memberId },
+    });
+    const completedCount = allSteps.filter(s => s.isComplete).length;
+    let newStatus = 'not_started';
+    if (completedCount === ONBOARDING_STEPS.length) {
+      newStatus = 'complete';
+    } else if (completedCount > 0) {
+      newStatus = 'in_progress';
+    }
+    await prisma.teamMember.update({
+      where: { id: memberId },
+      data: { onboardingStatus: newStatus },
+    });
+
+    res.json({ success: true, onboardingStatus: newStatus });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error updating onboarding step:', message);
+    res.status(500).json({ error: 'Failed to update onboarding step' });
+  }
+});
+
+// POST complete onboarding (marks all steps done + updates status)
+router.post('/:restaurantId/team-members/:memberId/onboarding/complete', async (req: Request, res: Response) => {
+  try {
+    const { memberId } = req.params;
+    const now = new Date();
+
+    await prisma.$transaction(async (tx) => {
+      // Upsert all steps as complete
+      for (const step of ONBOARDING_STEPS) {
+        await tx.onboardingChecklist.upsert({
+          where: {
+            teamMemberId_step: { teamMemberId: memberId, step },
+          },
+          create: {
+            teamMemberId: memberId,
+            step,
+            isComplete: true,
+            completedAt: now,
+          },
+          update: {
+            isComplete: true,
+            completedAt: now,
+          },
+        });
+      }
+
+      // Mark team member onboarding as complete + clear temp password
+      await tx.teamMember.update({
+        where: { id: memberId },
+        data: {
+          onboardingStatus: 'complete',
+          tempPasswordExpiresAt: null,
+          tempPasswordSetBy: null,
+        },
+      });
+    });
+
+    res.json({ success: true, onboardingStatus: 'complete' });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error completing onboarding:', message);
+    res.status(500).json({ error: 'Failed to complete onboarding' });
+  }
+});
+
 // ============ Permission Sets ============
 
 // Seed default permission sets (idempotent)
+// Handles migration from old 3-set model (Full Access, Standard, Limited)
+// to new 6-set role-named model (Owner, Manager, Server, Cashier, Kitchen, Host)
 router.post('/:restaurantId/permission-sets/seed-defaults', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
 
     const result = await prisma.$transaction(async (tx) => {
-      // Check which defaults already exist (by name + isDefault)
       const existing = await tx.permissionSet.findMany({
         where: { restaurantId, isDefault: true },
         select: { name: true, id: true },
       });
-      const existingNames = new Set(existing.map(e => e.name));
+
+      // Rename legacy sets to new role-named equivalents
+      const renamed: string[] = [];
+      for (const set of existing) {
+        const newName = LEGACY_SET_RENAME[set.name];
+        if (newName) {
+          const targetDef = DEFAULT_PERMISSION_SETS.find(d => d.name === newName);
+          await tx.permissionSet.update({
+            where: { id: set.id },
+            data: {
+              name: newName,
+              permissions: targetDef?.permissions ?? undefined,
+            },
+          });
+          renamed.push(`${set.name} → ${newName}`);
+        }
+      }
+
+      // Re-fetch after renames
+      const updated = await tx.permissionSet.findMany({
+        where: { restaurantId, isDefault: true },
+        select: { name: true },
+      });
+      const existingNames = new Set(updated.map(e => e.name));
 
       // Create missing defaults
       const created: string[] = [];
@@ -337,7 +583,7 @@ router.post('/:restaurantId/permission-sets/seed-defaults', async (req: Request,
         }
       }
 
-      return { created };
+      return { created, renamed };
     });
 
     const allSets = await prisma.permissionSet.findMany({
@@ -347,6 +593,7 @@ router.post('/:restaurantId/permission-sets/seed-defaults', async (req: Request,
 
     res.json({
       seeded: result.created,
+      renamed: result.renamed,
       permissionSets: allSets,
     });
   } catch (error: unknown) {

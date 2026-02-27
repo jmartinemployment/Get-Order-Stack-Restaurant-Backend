@@ -32,6 +32,7 @@ export interface AuthResult {
     lastName: string | null;
     role: string;
     restaurantGroupId: string | null;
+    onboardingStatus: string;
   };
   restaurants?: Array<{
     id: string;
@@ -143,6 +144,11 @@ class AuthService {
         return { success: false, error: 'Invalid email or password' };
       }
 
+      // Check temp password expiry
+      if (member.tempPasswordExpiresAt && new Date() > member.tempPasswordExpiresAt) {
+        return { success: false, error: 'Temporary password expired. Ask your manager to reset it.' };
+      }
+
       // Create session
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
@@ -211,7 +217,8 @@ class AuthService {
           firstName: member.firstName,
           lastName: member.lastName,
           role: member.role,
-          restaurantGroupId: member.restaurantGroupId
+          restaurantGroupId: member.restaurantGroupId,
+          onboardingStatus: member.onboardingStatus,
         },
         restaurants
       };

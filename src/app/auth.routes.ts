@@ -247,7 +247,8 @@ router.get('/me', async (req: Request, res: Response) => {
         firstName: member.firstName,
         lastName: member.lastName,
         role: member.role,
-        restaurantGroupId: member.restaurantGroupId
+        restaurantGroupId: member.restaurantGroupId,
+        onboardingStatus: member.onboardingStatus,
       },
       restaurants
     });

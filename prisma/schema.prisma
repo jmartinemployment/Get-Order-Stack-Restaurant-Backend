@@ -1804,6 +1804,9 @@ model TeamMember {
   avatarUrl           String?          @map("avatar_url")
   hireDate            DateTime?        @map("hire_date")
   status              String           @default("active")
+  onboardingStatus    String           @default("not_started") @map("onboarding_status") // not_started, in_progress, complete
+  tempPasswordExpiresAt DateTime?      @map("temp_password_expires_at")
+  tempPasswordSetBy   String?          @map("temp_password_set_by") // manager's teamMemberId
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
 
@@ -1815,6 +1818,7 @@ model TeamMember {
   devices             Device[]
   restaurantAccess    UserRestaurantAccess[]
   sessions            UserSession[]
+  onboardingChecklists OnboardingChecklist[]
 
   @@index([restaurantId])
   @@index([restaurantGroupId])
@@ -1852,4 +1856,21 @@ model TeamMemberJob {
 
   @@index([teamMemberId])
   @@map("team_member_jobs")
+}
+
+model OnboardingChecklist {
+  id              String    @id @default(uuid())
+  teamMemberId    String    @map("team_member_id")
+  step            String    // personal_info, tax_forms, direct_deposit, documents, training
+  isComplete      Boolean   @default(false) @map("is_complete")
+  completedAt     DateTime? @map("completed_at")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  teamMember      TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([teamMemberId, step])
+  @@index([teamMemberId])
+  @@map("onboarding_checklists")
 }
