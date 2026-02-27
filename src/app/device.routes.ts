@@ -13,10 +13,11 @@ const HEARTBEAT_THRESHOLD_MS = 30_000;
 
 const createDeviceSchema = z.object({
   deviceName: z.string().min(1).max(100),
-  deviceType: z.enum(['pos_terminal', 'kds_station', 'kiosk', 'order_pad', 'printer_station']),
+  deviceType: z.enum(['terminal', 'kds', 'kiosk', 'printer', 'register']),
   posMode: z.enum(['full_service', 'quick_service', 'bar', 'retail', 'services', 'bookings', 'standard']).optional(),
   modeId: z.string().uuid().optional(),
   locationId: z.string().uuid().optional(),
+  teamMemberId: z.string().uuid().optional(),
 });
 
 const registerBrowserSchema = z.object({
@@ -89,7 +90,7 @@ router.post('/:restaurantId/devices', async (req: Request, res: Response) => {
       return;
     }
 
-    const { deviceName, deviceType, posMode, modeId, locationId } = parsed.data;
+    const { deviceName, deviceType, posMode, modeId, locationId, teamMemberId } = parsed.data;
     const deviceCode = await generateDeviceCode(prisma);
 
     const device = await prisma.device.create({
@@ -101,6 +102,7 @@ router.post('/:restaurantId/devices', async (req: Request, res: Response) => {
         posMode: posMode ?? null,
         modeId: modeId ?? null,
         locationId: locationId ?? null,
+        teamMemberId: teamMemberId ?? null,
         status: 'pending',
         expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
       },
@@ -131,7 +133,7 @@ router.post('/:restaurantId/devices/register-browser', async (req: Request, res:
       data: {
         restaurantId,
         deviceName: 'Browser',
-        deviceType: 'pos_terminal',
+        deviceType: 'terminal',
         posMode,
         status: 'active',
         pairedAt: new Date(),

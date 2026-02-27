@@ -1149,7 +1149,7 @@ model Device {
   teamMemberId   String?   @map("team_member_id")
   deviceCode     String?   @unique @map("device_code")
   deviceName     String    @map("device_name")
-  deviceType     String    @map("device_type") // 'pos_terminal', 'kds_station', 'kiosk', 'order_pad', 'printer_station'
+  deviceType     String    @map("device_type") // 'terminal', 'kds', 'kiosk', 'printer', 'register'
   posMode        String?   @map("pos_mode") // 'full_service', 'quick_service', 'bar', 'retail', 'services', 'bookings', 'standard'
   modeId         String?   @map("mode_id")
   status         String    @default("pending") // 'pending', 'active', 'revoked'
@@ -1174,7 +1174,7 @@ model DeviceMode {
   id             String   @id @default(uuid())
   restaurantId   String   @map("restaurant_id")
   name           String
-  deviceType     String   @map("device_type") // 'pos_terminal', 'kds_station', 'kiosk', 'order_pad', 'printer_station'
+  deviceType     String   @map("device_type") // 'terminal', 'kds', 'kiosk', 'printer', 'register'
   isDefault      Boolean  @default(false) @map("is_default")
   settings       Json     // DeviceModeSettings: {checkout, receipt, security, display}
   createdAt      DateTime @default(now()) @map("created_at")

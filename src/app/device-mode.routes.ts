@@ -65,14 +65,14 @@ const modeSettingsSchema = z.object({
 
 const createModeSchema = z.object({
   name: z.string().min(1).max(100),
-  deviceType: z.enum(['pos_terminal', 'kds_station', 'kiosk', 'order_pad', 'printer_station']),
+  deviceType: z.enum(['terminal', 'kds', 'kiosk', 'printer', 'register']),
   isDefault: z.boolean().default(false),
   settings: modeSettingsSchema,
 });
 
 const updateModeSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  deviceType: z.enum(['pos_terminal', 'kds_station', 'kiosk', 'order_pad', 'printer_station']).optional(),
+  deviceType: z.enum(['terminal', 'kds', 'kiosk', 'printer', 'register']).optional(),
   isDefault: z.boolean().optional(),
   settings: modeSettingsSchema.optional(),
 });

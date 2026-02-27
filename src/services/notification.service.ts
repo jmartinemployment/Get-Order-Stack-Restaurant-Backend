@@ -106,7 +106,16 @@ async function onOrderReady(orderId: string): Promise<NotificationResult[]> {
 
     const settings = rawSettings as unknown as NotificationSettings;
 
-    if (!settings.orderReadyNotifyCustomer) {
+    // Kiosk, delivery, online, and pickup orders ALWAYS notify the customer —
+    // the opt-out setting only applies to POS orders (register/terminal) where
+    // the server tells the customer verbally.
+    // Delivery and online channels may also trigger additional platform-specific
+    // notifications (e.g. DoorDash driver updates) handled elsewhere.
+    const forcedNotificationSources = ['kiosk', 'delivery', 'online', 'pickup'];
+    const orderSource = (order as Record<string, unknown>).orderSource as string | undefined;
+    const isForced = orderSource !== undefined && forcedNotificationSources.includes(orderSource);
+
+    if (!isForced && !settings.orderReadyNotifyCustomer) {
       console.log(`[Notification] Customer notification disabled for restaurant ${order.restaurantId}`);
       return results;
     }

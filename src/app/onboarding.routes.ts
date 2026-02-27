@@ -152,6 +152,8 @@ router.post('/:restaurantId/apply-menu-template', async (req: Request, res: Resp
     }
 
     await prisma.$transaction(async (tx) => {
+      const createdItemsByName = new Map<string, string>();
+
       for (const cat of template.categories) {
         const category = await tx.menuCategory.create({
           data: {
@@ -163,7 +165,7 @@ router.post('/:restaurantId/apply-menu-template', async (req: Request, res: Resp
         });
 
         for (const item of cat.items) {
-          await tx.menuItem.create({
+          const createdItem = await tx.menuItem.create({
             data: {
               restaurantId,
               categoryId: category.id,
@@ -175,6 +177,54 @@ router.post('/:restaurantId/apply-menu-template', async (req: Request, res: Resp
               available: true,
             },
           });
+          createdItemsByName.set(item.name, createdItem.id);
+        }
+      }
+
+      // Create modifier groups and link to items
+      for (const mg of template.modifierGroups) {
+        const modifierGroup = await tx.modifierGroup.create({
+          data: {
+            restaurantId,
+            name: mg.name,
+            required: mg.required,
+            multiSelect: mg.multiSelect,
+            minSelections: mg.minSelections,
+            maxSelections: mg.maxSelections,
+            displayOrder: mg.sortOrder,
+            active: true,
+          },
+        });
+
+        for (const mod of mg.modifiers) {
+          await tx.modifier.create({
+            data: {
+              modifierGroupId: modifierGroup.id,
+              name: mod.name,
+              priceAdjustment: mod.priceAdjustment,
+              isDefault: mod.isDefault,
+              displayOrder: mod.sortOrder,
+              available: true,
+            },
+          });
+        }
+
+        const targetItemNames = mg.applyTo === 'all'
+          ? [...createdItemsByName.keys()]
+          : mg.applyTo;
+
+        let linkOrder = 1;
+        for (const itemName of targetItemNames) {
+          const itemId = createdItemsByName.get(itemName);
+          if (itemId) {
+            await tx.menuItemModifierGroup.create({
+              data: {
+                menuItemId: itemId,
+                modifierGroupId: modifierGroup.id,
+                displayOrder: linkOrder++,
+              },
+            });
+          }
         }
       }
     });
@@ -354,7 +404,7 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
         data: {
           restaurantId: restaurant.id,
           deviceName: 'Browser',
-          deviceType: 'pos_terminal',
+          deviceType: 'terminal',
           posMode: defaultDeviceMode ?? 'full_service',
           status: 'active',
           pairedAt: new Date(),
@@ -366,6 +416,9 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
       if (menuTemplateId) {
         const template = MENU_TEMPLATES.find(t => t.id === menuTemplateId);
         if (template) {
+          // Track created items by name for modifier group assignment
+          const createdItemsByName = new Map<string, string>();
+
           for (const cat of template.categories) {
             const category = await tx.menuCategory.create({
               data: {
@@ -377,7 +430,7 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
             });
 
             for (const item of cat.items) {
-              await tx.menuItem.create({
+              const createdItem = await tx.menuItem.create({
                 data: {
                   restaurantId: restaurant.id,
                   categoryId: category.id,
@@ -389,6 +442,55 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
                   available: true,
                 },
               });
+              createdItemsByName.set(item.name, createdItem.id);
+            }
+          }
+
+          // Create modifier groups and link to items
+          for (const mg of template.modifierGroups) {
+            const modifierGroup = await tx.modifierGroup.create({
+              data: {
+                restaurantId: restaurant.id,
+                name: mg.name,
+                required: mg.required,
+                multiSelect: mg.multiSelect,
+                minSelections: mg.minSelections,
+                maxSelections: mg.maxSelections,
+                displayOrder: mg.sortOrder,
+                active: true,
+              },
+            });
+
+            for (const mod of mg.modifiers) {
+              await tx.modifier.create({
+                data: {
+                  modifierGroupId: modifierGroup.id,
+                  name: mod.name,
+                  priceAdjustment: mod.priceAdjustment,
+                  isDefault: mod.isDefault,
+                  displayOrder: mod.sortOrder,
+                  available: true,
+                },
+              });
+            }
+
+            // Link modifier group to applicable menu items
+            const targetItemNames = mg.applyTo === 'all'
+              ? [...createdItemsByName.keys()]
+              : mg.applyTo;
+
+            let linkOrder = 1;
+            for (const itemName of targetItemNames) {
+              const itemId = createdItemsByName.get(itemName);
+              if (itemId) {
+                await tx.menuItemModifierGroup.create({
+                  data: {
+                    menuItemId: itemId,
+                    modifierGroupId: modifierGroup.id,
+                    displayOrder: linkOrder++,
+                  },
+                });
+              }
             }
           }
         }
