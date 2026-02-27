@@ -86,9 +86,10 @@ function getEncryptionKeyForBackend(backend: ProviderKeyBackend): Buffer {
   }
 
   const freeSecret = process.env.DELIVERY_FREE_WRAPPING_KEY
-    || process.env.DELIVERY_CREDENTIALS_ENCRYPTION_KEY
-    || process.env.JWT_SECRET
-    || 'your-secret-key-change-in-production';
+    ?? process.env.DELIVERY_CREDENTIALS_ENCRYPTION_KEY;
+  if (!freeSecret) {
+    throw new Error('FATAL: Neither DELIVERY_FREE_WRAPPING_KEY nor DELIVERY_CREDENTIALS_ENCRYPTION_KEY is set. Cannot encrypt/decrypt delivery credentials.');
+  }
   return deriveSha256(freeSecret);
 }
 

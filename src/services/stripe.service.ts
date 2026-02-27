@@ -4,7 +4,11 @@ import { calculatePlatformFee } from '../config/platform-fees';
 
 const prisma = new PrismaClient();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.warn('[Stripe] STRIPE_SECRET_KEY is not set — Stripe payment operations will fail');
+}
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
   apiVersion: '2025-12-15.clover'
 });
 
@@ -212,8 +216,8 @@ export const stripeService = {
     try {
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
       if (!webhookSecret || webhookSecret === 'whsec_placeholder') {
-        console.warn('[Stripe] Webhook secret not configured, skipping signature verification');
-        return JSON.parse(payload.toString()) as Stripe.Event;
+        console.error('[Stripe] Webhook secret not configured — rejecting unverified event');
+        return null;
       }
       return stripe.webhooks.constructEvent(payload, signature, webhookSecret);
     } catch (error) {

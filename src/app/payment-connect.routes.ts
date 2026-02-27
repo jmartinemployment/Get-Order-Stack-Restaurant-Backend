@@ -5,6 +5,10 @@ import Stripe from 'stripe';
 const router = Router({ mergeParams: true });
 const prisma = new PrismaClient();
 
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.warn('[Stripe Connect] STRIPE_SECRET_KEY is not set — Stripe Connect operations will fail');
+}
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
   apiVersion: '2025-12-15.clover',
 });
@@ -200,7 +204,7 @@ router.post('/:restaurantId/connect/paypal/create-referral', async (req: Request
               integration_method: 'PAYPAL',
               integration_type: 'THIRD_PARTY',
               third_party_details: {
-                features: ['PAYMENT', 'REFUND'],
+                features: ['PAYMENT', 'REFUND', 'PARTNER_FEE'],
               },
             },
           },

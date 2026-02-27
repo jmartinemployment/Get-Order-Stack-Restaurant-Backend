@@ -208,10 +208,10 @@ function normalizeOptionalBoolean(value: unknown): boolean | undefined {
 }
 
 function getEncryptionKey(): Buffer {
-  const secret = process.env[ENCRYPTION_KEY_ENV]
-    || process.env.JWT_SECRET
-    || 'your-secret-key-change-in-production';
-
+  const secret = process.env[ENCRYPTION_KEY_ENV];
+  if (!secret) {
+    throw new Error(`FATAL: ${ENCRYPTION_KEY_ENV} environment variable is not set. Cannot encrypt/decrypt marketplace credentials.`);
+  }
   return crypto.createHash('sha256').update(secret).digest();
 }
 

@@ -10,6 +10,40 @@ const PAYPAL_API_BASE = process.env.PAYPAL_MODE === 'live'
 let accessToken: string | null = null;
 let tokenExpiresAt = 0;
 
+/**
+ * Build the PayPal-Auth-Assertion JWT header for API calls on behalf of a connected seller.
+ * Format: base64url({ "alg": "none" }) . base64url({ "iss": clientId, "payer_id": merchantId }) .
+ * Per: https://developer.paypal.com/api/rest/requests/#paypal-auth-assertion
+ */
+function buildPayPalAuthAssertion(merchantPayerId: string): string {
+  const clientId = process.env.PAYPAL_CLIENT_ID ?? '';
+  const header = Buffer.from(JSON.stringify({ alg: 'none' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ iss: clientId, payer_id: merchantPayerId })).toString('base64url');
+  return `${header}.${payload}.`;
+}
+
+/**
+ * Build headers for API calls on behalf of a connected merchant.
+ * Includes PayPal-Auth-Assertion and PayPal-Partner-Attribution-Id when available.
+ */
+function buildMerchantHeaders(token: string, merchantPayerId?: string | null): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+
+  if (merchantPayerId) {
+    headers['PayPal-Auth-Assertion'] = buildPayPalAuthAssertion(merchantPayerId);
+  }
+
+  const bnCode = process.env.PAYPAL_BN_CODE;
+  if (bnCode) {
+    headers['PayPal-Partner-Attribution-Id'] = bnCode;
+  }
+
+  return headers;
+}
+
 export interface CreatePayPalOrderParams {
   orderId: string;
   amount: number;
@@ -129,10 +163,7 @@ export const paypalService = {
 
       const response = await fetch(`${PAYPAL_API_BASE}/v2/checkout/orders`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: buildMerchantHeaders(token, order.restaurant.paypalMerchantId),
         body: JSON.stringify({
           intent: 'CAPTURE',
           purchase_units: [purchaseUnit],
@@ -170,12 +201,15 @@ export const paypalService = {
     try {
       const token = await paypalService.getAccessToken();
 
+      // Look up restaurant's paypalMerchantId for auth assertion
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { restaurant: { select: { paypalMerchantId: true } } },
+      });
+
       const response = await fetch(`${PAYPAL_API_BASE}/v2/checkout/orders/${paypalOrderId}/capture`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: buildMerchantHeaders(token, order?.restaurant?.paypalMerchantId),
       });
 
       if (!response.ok) {

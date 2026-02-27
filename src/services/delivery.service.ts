@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { broadcastOrderEvent, broadcastToSourceAndKDS } from './socket.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
@@ -8,6 +9,51 @@ import {
 } from './delivery-credentials.service';
 
 const prisma = new PrismaClient();
+
+/**
+ * Generate a DoorDash Drive JWT per their spec:
+ * Header: { "alg": "HS256", "typ": "JWT", "dd-ver": "DD-JWT-V1", "kid": keyId }
+ * Payload: { "aud": "doordash", "iss": developerId, "kid": keyId, "iat": now, "exp": now+300 }
+ * Signed with HMAC-SHA256 using the signing secret.
+ *
+ * The apiKey is formatted as "developerId:keyId" per DoorDash developer portal.
+ */
+function generateDoorDashJWT(credentials: DoorDashRuntimeCredentials): string {
+  const [developerId, keyId] = credentials.apiKey.includes(':')
+    ? credentials.apiKey.split(':')
+    : [credentials.apiKey, credentials.apiKey];
+
+  const now = Math.floor(Date.now() / 1000);
+
+  const header = {
+    alg: 'HS256',
+    typ: 'JWT',
+    'dd-ver': 'DD-JWT-V1',
+    kid: keyId,
+  };
+
+  const payload = {
+    aud: 'doordash',
+    iss: developerId,
+    kid: keyId,
+    iat: now,
+    exp: now + 300, // 5 minutes
+  };
+
+  const encode = (obj: Record<string, unknown>) =>
+    Buffer.from(JSON.stringify(obj)).toString('base64url');
+
+  const headerB64 = encode(header);
+  const payloadB64 = encode(payload);
+  const signingInput = `${headerB64}.${payloadB64}`;
+
+  const signature = crypto
+    .createHmac('sha256', credentials.signingSecret)
+    .update(signingInput)
+    .digest('base64url');
+
+  return `${signingInput}.${signature}`;
+}
 
 // DaaS dispatch status (matches frontend DeliveryDispatchStatus)
 type DispatchStatus =
@@ -60,7 +106,7 @@ async function doordashRequestQuote(
   const response = await fetch(`${baseUrl}/drive/v2/deliveries`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${credentials.apiKey}`,
+      'Authorization': `Bearer ${generateDoorDashJWT(credentials)}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -107,7 +153,7 @@ async function doordashAcceptQuote(
   const response = await fetch(`${baseUrl}/drive/v2/deliveries/${externalDeliveryId}`, {
     method: 'PATCH',
     headers: {
-      'Authorization': `Bearer ${credentials.apiKey}`,
+      'Authorization': `Bearer ${generateDoorDashJWT(credentials)}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ status: 'confirmed' }),
@@ -137,7 +183,7 @@ async function doordashGetStatus(
     : 'https://openapi.doordash.com';
 
   const response = await fetch(`${baseUrl}/drive/v2/deliveries/${externalDeliveryId}`, {
-    headers: { 'Authorization': `Bearer ${credentials.apiKey}` },
+    headers: { 'Authorization': `Bearer ${generateDoorDashJWT(credentials)}` },
   });
 
   if (!response.ok) {
@@ -188,7 +234,7 @@ async function doordashCancel(
   const response = await fetch(`${baseUrl}/drive/v2/deliveries/${externalDeliveryId}`, {
     method: 'PATCH',
     headers: {
-      'Authorization': `Bearer ${credentials.apiKey}`,
+      'Authorization': `Bearer ${generateDoorDashJWT(credentials)}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ status: 'cancelled' }),

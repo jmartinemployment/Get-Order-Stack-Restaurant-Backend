@@ -36,8 +36,10 @@ const corsOriginChecker = (origin: string | undefined, callback: (err: Error | n
     return;
   }
 
-  // Allow any Vercel preview deployments
-  if (origin.includes('vercel.app')) {
+  // Allow specific Vercel deployments (not all *.vercel.app)
+  if (origin.endsWith('.vercel.app')
+    && (origin.includes('get-order-stack-restaurant-mobile')
+      || origin.includes('orderstack'))) {
     callback(null, true);
     return;
   }
