@@ -56,10 +56,22 @@ export interface ValidationResult {
 }
 
 /**
- * Validates dining data based on order type
+ * Validates customer info if provided, pushing errors to the array
+ */
+function validateCustomerInfo(customerInfo: unknown, errors: string[]): void {
+  const customerResult = CustomerInfoSchema.safeParse(customerInfo);
+  if (!customerResult.success) {
+    customerResult.error.issues.forEach(err => {
+      errors.push(`Customer: ${err.path.join('.')}: ${err.message}`);
+    });
+  }
+}
+
+/**
+ * Validates dining data based on order type and source
  *
  * @param orderType - Type of order (dine-in, takeout, curbside, delivery, catering)
- * @param data - Object containing customerInfo, deliveryInfo, curbsideInfo, cateringInfo, tableId, tableNumber
+ * @param data - Object containing customerInfo, deliveryInfo, curbsideInfo, cateringInfo, tableId, tableNumber, orderSource
  * @returns ValidationResult with valid flag and error array
  */
 export function validateDiningData(
@@ -71,22 +83,19 @@ export function validateDiningData(
     cateringInfo?: any;
     tableId?: string;
     tableNumber?: string;
+    orderSource?: string;
   }
 ): ValidationResult {
   const errors: string[] = [];
+  const isAnonymousSource = data.orderSource === 'kiosk';
 
   switch (orderType) {
     case 'delivery':
-      // Delivery requires customer info AND delivery address
+      // Delivery always requires customer info AND delivery address
       if (!data.customerInfo) {
         errors.push('Customer information is required for delivery orders');
       } else {
-        const customerResult = CustomerInfoSchema.safeParse(data.customerInfo);
-        if (!customerResult.success) {
-          customerResult.error.issues.forEach(err => {
-            errors.push(`Customer: ${err.path.join('.')}: ${err.message}`);
-          });
-        }
+        validateCustomerInfo(data.customerInfo, errors);
       }
 
       if (!data.deliveryInfo) {
@@ -106,12 +115,7 @@ export function validateDiningData(
       if (!data.customerInfo) {
         errors.push('Customer information is required for curbside pickup orders');
       } else {
-        const customerResult = CustomerInfoSchema.safeParse(data.customerInfo);
-        if (!customerResult.success) {
-          customerResult.error.issues.forEach(err => {
-            errors.push(`Customer: ${err.path.join('.')}: ${err.message}`);
-          });
-        }
+        validateCustomerInfo(data.customerInfo, errors);
       }
 
       if (!data.curbsideInfo) {
@@ -127,16 +131,11 @@ export function validateDiningData(
       break;
 
     case 'catering':
-      // Catering requires customer info AND event details
+      // Catering always requires customer info AND event details
       if (!data.customerInfo) {
         errors.push('Customer information is required for catering orders');
       } else {
-        const customerResult = CustomerInfoSchema.safeParse(data.customerInfo);
-        if (!customerResult.success) {
-          customerResult.error.issues.forEach(err => {
-            errors.push(`Customer: ${err.path.join('.')}: ${err.message}`);
-          });
-        }
+        validateCustomerInfo(data.customerInfo, errors);
       }
 
       if (!data.cateringInfo) {
@@ -152,16 +151,16 @@ export function validateDiningData(
       break;
 
     case 'takeout':
-      // Takeout requires customer info
-      if (!data.customerInfo) {
-        errors.push('Customer information is required for takeout orders');
-      } else {
-        const customerResult = CustomerInfoSchema.safeParse(data.customerInfo);
-        if (!customerResult.success) {
-          customerResult.error.issues.forEach(err => {
-            errors.push(`Customer: ${err.path.join('.')}: ${err.message}`);
-          });
+      // Takeout requires customer info unless from an anonymous source (kiosk)
+      if (!isAnonymousSource) {
+        if (!data.customerInfo) {
+          errors.push('Customer information is required for takeout orders');
+        } else {
+          validateCustomerInfo(data.customerInfo, errors);
         }
+      } else if (data.customerInfo) {
+        // Kiosk may optionally provide customer info — validate if present
+        validateCustomerInfo(data.customerInfo, errors);
       }
       break;
 

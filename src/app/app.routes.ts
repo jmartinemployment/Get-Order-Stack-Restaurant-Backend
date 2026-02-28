@@ -1274,6 +1274,7 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
       cateringInfo,
       tableId: resolvedTableId,
       tableNumber,
+      orderSource,
     });
 
     if (!validation.valid) {
