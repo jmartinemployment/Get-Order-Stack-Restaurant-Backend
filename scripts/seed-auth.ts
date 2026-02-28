@@ -1,6 +1,6 @@
 /**
  * Seed script for authentication data
- * Creates restaurant group, links users to restaurants, creates staff PINs
+ * Creates restaurant group, links team members to restaurants, creates staff PINs
  *
  * Run: npx tsx scripts/seed-auth.ts
  */
@@ -54,46 +54,47 @@ export async function seedAuth() {
   }
   console.log(`   ✅ Group: ${group.name} — ${restaurants.length} restaurants linked`);
 
-  // 2. Upsert users
-  console.log('   👤 Setting up users...');
-  const userDefs = [
+  // 2. Upsert team members (dashboard login accounts)
+  console.log('   👤 Setting up team members...');
+  const memberDefs = [
     { email: 'admin@orderstack.com', password: 'admin123', firstName: 'Admin', lastName: 'User', role: 'super_admin', accessRole: 'owner' },
     { email: 'owner@taipa.com', password: 'owner123', firstName: 'Carlos', lastName: 'Mendoza', role: 'owner', accessRole: 'owner' },
     { email: 'manager@taipa.com', password: 'manager123', firstName: 'Maria', lastName: 'Garcia', role: 'manager', accessRole: 'manager' },
     { email: 'staff@taipa.com', password: 'staff123', firstName: 'Luis', lastName: 'Rodriguez', role: 'staff', accessRole: 'staff' },
   ];
 
-  const createdUsers: Array<{ id: string; email: string; accessRole: string }> = [];
+  const createdMembers: Array<{ id: string; email: string; accessRole: string }> = [];
 
-  for (const u of userDefs) {
-    const hash = await hashPassword(u.password);
-    const user = await prisma.user.upsert({
-      where: { email: u.email },
+  for (const m of memberDefs) {
+    const hash = await hashPassword(m.password);
+    const member = await prisma.teamMember.upsert({
+      where: { email: m.email },
       update: { restaurantGroupId: group.id, passwordHash: hash },
       create: {
-        email: u.email,
+        email: m.email,
         passwordHash: hash,
-        firstName: u.firstName,
-        lastName: u.lastName,
-        role: u.role,
+        firstName: m.firstName,
+        lastName: m.lastName,
+        displayName: `${m.firstName} ${m.lastName}`,
+        role: m.role,
         restaurantGroupId: group.id,
       },
     });
-    createdUsers.push({ id: user.id, email: user.email, accessRole: u.accessRole });
-    console.log(`   ✅ ${u.email} / ${u.password} (${u.role})`);
+    createdMembers.push({ id: member.id, email: member.email ?? m.email, accessRole: m.accessRole });
+    console.log(`   ✅ ${m.email} / ${m.password} (${m.role})`);
   }
 
-  // 3. Link all users to all restaurants
+  // 3. Link all team members to all restaurants
   for (const r of restaurants) {
-    for (const u of createdUsers) {
+    for (const m of createdMembers) {
       await prisma.userRestaurantAccess.upsert({
-        where: { userId_restaurantId: { userId: u.id, restaurantId: r.id } },
-        update: { role: u.accessRole },
-        create: { userId: u.id, restaurantId: r.id, role: u.accessRole },
+        where: { teamMemberId_restaurantId: { teamMemberId: m.id, restaurantId: r.id } },
+        update: { role: m.accessRole },
+        create: { teamMemberId: m.id, restaurantId: r.id, role: m.accessRole },
       });
     }
   }
-  console.log(`   ✅ ${createdUsers.length * restaurants.length} access records created`);
+  console.log(`   ✅ ${createdMembers.length * restaurants.length} access records created`);
 
   // 4. Create staff PINs per restaurant
   const staffPins = [
@@ -138,11 +139,11 @@ export async function seedAuth() {
   }
   console.log(`   ✅ ${stations.length * restaurants.length} stations created`);
 
-  const totalUsers = await prisma.user.count();
+  const totalMembers = await prisma.teamMember.count();
   const totalAccess = await prisma.userRestaurantAccess.count();
   const totalPins = await prisma.staffPin.count();
   const totalStations = await prisma.station.count();
-  console.log(`   📊 Totals: ${totalUsers} users, ${totalAccess} access, ${totalPins} PINs, ${totalStations} stations`);
+  console.log(`   📊 Totals: ${totalMembers} team members, ${totalAccess} access, ${totalPins} PINs, ${totalStations} stations`);
 }
 
 // Allow standalone execution
