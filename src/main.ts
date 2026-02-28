@@ -4,6 +4,7 @@ import { config } from './app/app.config';
 import { initializeSocketServer } from './services/socket.service';
 import { startPrintJobCleanup } from './jobs/print-job-cleanup';
 import { startMarketplaceStatusSyncJob } from './jobs/marketplace-status-sync';
+import { getSecret } from './utils/secrets';
 
 function validateRequiredEnvVars(): void {
   // --- Hard requirements (crash if missing) ---
@@ -24,7 +25,7 @@ function validateRequiredEnvVars(): void {
   ];
 
   for (const [key, warning] of recommended) {
-    if (!process.env[key]) {
+    if (!getSecret(key)) {
       console.warn(`[Startup] WARNING: ${key} is not set — ${warning}`);
     }
   }

@@ -1,15 +1,17 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import Stripe from 'stripe';
+import { getSecret } from '../utils/secrets';
 
 const router = Router({ mergeParams: true });
 const prisma = new PrismaClient();
 
-if (!process.env.STRIPE_SECRET_KEY) {
+const stripeKey = getSecret('STRIPE_SECRET_KEY');
+if (!stripeKey) {
   console.warn('[Stripe Connect] STRIPE_SECRET_KEY is not set — Stripe Connect operations will fail');
 }
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
+const stripe = new Stripe(stripeKey, {
   apiVersion: '2025-12-15.clover',
 });
 
@@ -20,8 +22,8 @@ const PAYPAL_API_BASE = process.env.PAYPAL_MODE === 'live'
 // --- Helper: get PayPal access token ---
 
 async function getPayPalAccessToken(): Promise<string> {
-  const clientId = process.env.PAYPAL_CLIENT_ID ?? '';
-  const clientSecret = process.env.PAYPAL_CLIENT_SECRET ?? '';
+  const clientId = getSecret('PAYPAL_CLIENT_ID');
+  const clientSecret = getSecret('PAYPAL_CLIENT_SECRET');
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
   const response = await fetch(`${PAYPAL_API_BASE}/v1/oauth2/token`, {

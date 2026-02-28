@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { calculatePlatformFee } from '../config/platform-fees';
+import { getSecret } from '../utils/secrets';
 
 const prisma = new PrismaClient();
 
@@ -16,7 +17,7 @@ let tokenExpiresAt = 0;
  * Per: https://developer.paypal.com/api/rest/requests/#paypal-auth-assertion
  */
 function buildPayPalAuthAssertion(merchantPayerId: string): string {
-  const clientId = process.env.PAYPAL_CLIENT_ID ?? '';
+  const clientId = getSecret('PAYPAL_CLIENT_ID');
   const header = Buffer.from(JSON.stringify({ alg: 'none' })).toString('base64url');
   const payload = Buffer.from(JSON.stringify({ iss: clientId, payer_id: merchantPayerId })).toString('base64url');
   return `${header}.${payload}.`;
@@ -76,8 +77,8 @@ export const paypalService = {
       return accessToken;
     }
 
-    const clientId = process.env.PAYPAL_CLIENT_ID ?? '';
-    const clientSecret = process.env.PAYPAL_CLIENT_SECRET ?? '';
+    const clientId = getSecret('PAYPAL_CLIENT_ID');
+    const clientSecret = getSecret('PAYPAL_CLIENT_SECRET');
     const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
     const response = await fetch(`${PAYPAL_API_BASE}/v1/oauth2/token`, {
