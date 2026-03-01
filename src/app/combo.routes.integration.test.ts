@@ -28,10 +28,10 @@ beforeEach(() => {
   prisma.combo.delete.mockResolvedValue(COMBO);
 });
 
-// ============ GET /:restaurantId/combos ============
+// ============ GET /:merchantId/combos ============
 
-describe('GET /api/restaurant/:restaurantId/combos', () => {
-  const url = `/api/restaurant/${RESTAURANT_ID}/combos`;
+describe('GET /api/merchant/:merchantId/combos', () => {
+  const url = `/api/merchant/${RESTAURANT_ID}/combos`;
 
   it('returns 401 without auth token', async () => {
     const res = await api.anonymous().get(url);
@@ -70,10 +70,10 @@ describe('GET /api/restaurant/:restaurantId/combos', () => {
   });
 });
 
-// ============ POST /:restaurantId/combos ============
+// ============ POST /:merchantId/combos ============
 
-describe('POST /api/restaurant/:restaurantId/combos', () => {
-  const url = `/api/restaurant/${RESTAURANT_ID}/combos`;
+describe('POST /api/merchant/:merchantId/combos', () => {
+  const url = `/api/merchant/${RESTAURANT_ID}/combos`;
 
   const validBody = {
     name: 'Lunch Special',
@@ -142,10 +142,10 @@ describe('POST /api/restaurant/:restaurantId/combos', () => {
   });
 });
 
-// ============ PATCH /:restaurantId/combos/:comboId ============
+// ============ PATCH /:merchantId/combos/:comboId ============
 
-describe('PATCH /api/restaurant/:restaurantId/combos/:comboId', () => {
-  const url = `/api/restaurant/${RESTAURANT_ID}/combos/${COMBO.id}`;
+describe('PATCH /api/merchant/:merchantId/combos/:comboId', () => {
+  const url = `/api/merchant/${RESTAURANT_ID}/combos/${COMBO.id}`;
 
   it('returns 401 without auth token', async () => {
     const res = await api.anonymous().patch(url).send({ name: 'Updated' });
@@ -187,10 +187,10 @@ describe('PATCH /api/restaurant/:restaurantId/combos/:comboId', () => {
   });
 });
 
-// ============ DELETE /:restaurantId/combos/:comboId ============
+// ============ DELETE /:merchantId/combos/:comboId ============
 
-describe('DELETE /api/restaurant/:restaurantId/combos/:comboId', () => {
-  const url = `/api/restaurant/${RESTAURANT_ID}/combos/${COMBO.id}`;
+describe('DELETE /api/merchant/:merchantId/combos/:comboId', () => {
+  const url = `/api/merchant/${RESTAURANT_ID}/combos/${COMBO.id}`;
 
   it('returns 401 without auth token', async () => {
     const res = await api.anonymous().delete(url);

@@ -29,9 +29,9 @@ const setCategoriesSchema = z.object({
 
 // --- Station CRUD ---
 
-// GET /api/restaurant/:restaurantId/stations
+// GET /api/restaurant/:merchantId/stations
 router.get('/', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+  const restaurantId = req.params.merchantId;
   try {
     const stations = await prisma.station.findMany({
       where: { restaurantId },
@@ -56,9 +56,9 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/restaurant/:restaurantId/stations
+// POST /api/restaurant/:merchantId/stations
 router.post('/', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+  const restaurantId = req.params.merchantId;
   const parsed = createStationSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -83,7 +83,7 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /api/restaurant/:restaurantId/stations/:stationId
+// PATCH /api/restaurant/:merchantId/stations/:stationId
 router.patch('/:stationId', async (req: Request, res: Response) => {
   const { restaurantId, stationId } = req.params;
   const parsed = updateStationSchema.safeParse(req.body);
@@ -119,7 +119,7 @@ router.patch('/:stationId', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/restaurant/:restaurantId/stations/:stationId
+// DELETE /api/restaurant/:merchantId/stations/:stationId
 router.delete('/:stationId', async (req: Request, res: Response) => {
   const { restaurantId, stationId } = req.params;
   try {
@@ -139,7 +139,7 @@ router.delete('/:stationId', async (req: Request, res: Response) => {
 
 // --- Station-Category Mapping ---
 
-// PUT /api/restaurant/:restaurantId/stations/:stationId/categories
+// PUT /api/restaurant/:merchantId/stations/:stationId/categories
 // Bulk set categories for a station (replaces existing mappings)
 router.put('/:stationId/categories', async (req: Request, res: Response) => {
   const { restaurantId, stationId } = req.params;
@@ -200,9 +200,9 @@ export default router;
 
 export const stationCategoryMappingRouter = Router({ mergeParams: true });
 
-// GET /api/restaurant/:restaurantId/station-category-mappings
+// GET /api/restaurant/:merchantId/station-category-mappings
 stationCategoryMappingRouter.get('/', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+  const restaurantId = req.params.merchantId;
   try {
     const mappings = await prisma.stationCategoryMapping.findMany({
       where: { restaurantId },

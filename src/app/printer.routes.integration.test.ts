@@ -40,10 +40,10 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/printers`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/printers`;
 const PRINTER_ID = '11111111-1111-4111-a111-111111111111';
 
-// ============ GET /api/restaurant/:restaurantId/printers ============
+// ============ GET /api/merchant/:merchantId/printers ============
 
 describe('GET /printers', () => {
   it('returns 401 without auth', async () => {
@@ -76,7 +76,7 @@ describe('GET /printers', () => {
   });
 });
 
-// ============ POST /api/restaurant/:restaurantId/printers ============
+// ============ POST /api/merchant/:merchantId/printers ============
 
 describe('POST /printers', () => {
   const validBody = {
@@ -130,7 +130,7 @@ describe('POST /printers', () => {
   });
 });
 
-// ============ PATCH /api/restaurant/:restaurantId/printers/:printerId ============
+// ============ PATCH /api/merchant/:merchantId/printers/:printerId ============
 
 describe('PATCH /printers/:printerId', () => {
   const url = `${BASE_URL}/${PRINTER_ID}`;
@@ -160,7 +160,7 @@ describe('PATCH /printers/:printerId', () => {
   });
 });
 
-// ============ DELETE /api/restaurant/:restaurantId/printers/:printerId ============
+// ============ DELETE /api/merchant/:merchantId/printers/:printerId ============
 
 describe('DELETE /printers/:printerId', () => {
   const url = `${BASE_URL}/${PRINTER_ID}`;
@@ -189,7 +189,7 @@ describe('DELETE /printers/:printerId', () => {
   });
 });
 
-// ============ POST /api/restaurant/:restaurantId/printers/:printerId/test ============
+// ============ POST /api/merchant/:merchantId/printers/:printerId/test ============
 
 describe('POST /printers/:printerId/test', () => {
   const url = `${BASE_URL}/${PRINTER_ID}/test`;

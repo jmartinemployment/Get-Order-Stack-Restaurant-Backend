@@ -30,9 +30,9 @@ const updateProfileSchema = z.object({
 // --- Printer Profile CRUD ---
 
 // List all printer profiles for a restaurant
-router.get('/:restaurantId/printer-profiles', async (req: Request, res: Response) => {
+router.get('/:merchantId/printer-profiles', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const profiles = await prisma.printerProfile.findMany({
       where: { restaurantId },
@@ -46,9 +46,9 @@ router.get('/:restaurantId/printer-profiles', async (req: Request, res: Response
 });
 
 // Create a new printer profile
-router.post('/:restaurantId/printer-profiles', async (req: Request, res: Response) => {
+router.post('/:merchantId/printer-profiles', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createProfileSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -79,7 +79,7 @@ router.post('/:restaurantId/printer-profiles', async (req: Request, res: Respons
 });
 
 // Update a printer profile
-router.patch('/:restaurantId/printer-profiles/:id', async (req: Request, res: Response) => {
+router.patch('/:merchantId/printer-profiles/:id', async (req: Request, res: Response) => {
   try {
     const { restaurantId, id } = req.params;
     const parsed = updateProfileSchema.safeParse(req.body);
@@ -120,7 +120,7 @@ router.patch('/:restaurantId/printer-profiles/:id', async (req: Request, res: Re
 });
 
 // Delete a printer profile
-router.delete('/:restaurantId/printer-profiles/:id', async (req: Request, res: Response) => {
+router.delete('/:merchantId/printer-profiles/:id', async (req: Request, res: Response) => {
   try {
     const { restaurantId, id } = req.params;
 

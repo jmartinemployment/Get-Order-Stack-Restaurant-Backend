@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { deliveryService } from '../services/delivery.service';
 import { deliveryCredentialsService } from '../services/delivery-credentials.service';
-import { requireAuth, requireRestaurantManager } from '../middleware/auth.middleware';
+import { requireAuth, requireMerchantManager } from '../middleware/auth.middleware';
 
 const router = Router({ mergeParams: true });
 
@@ -50,10 +50,10 @@ function toFieldErrors(error: z.ZodError): Record<string, string[]> {
   return error.flatten().fieldErrors as Record<string, string[]>;
 }
 
-// GET /:restaurantId/delivery/config-status
+// GET /:merchantId/delivery/config-status
 router.get('/config-status', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const status = await deliveryService.getConfigStatus(restaurantId);
     res.json(status);
   } catch (error: unknown) {
@@ -64,9 +64,9 @@ router.get('/config-status', async (req: Request, res: Response) => {
 
 // --- Credential management (admin roles only) ---
 
-router.get('/credentials', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.get('/credentials', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const summary = await deliveryCredentialsService.getSummary(restaurantId);
     res.json(summary);
   } catch (error: unknown) {
@@ -75,9 +75,9 @@ router.get('/credentials', requireAuth, requireRestaurantManager, async (req: Re
   }
 });
 
-router.get('/credentials/security-profile', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.get('/credentials/security-profile', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const profile = await deliveryCredentialsService.getSecurityProfile(restaurantId);
     res.json(profile);
   } catch (error: unknown) {
@@ -86,9 +86,9 @@ router.get('/credentials/security-profile', requireAuth, requireRestaurantManage
   }
 });
 
-router.put('/credentials/security-profile', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.put('/credentials/security-profile', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = CredentialSecurityProfileSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Invalid request', details: toFieldErrors(parsed.error) });
@@ -112,9 +112,9 @@ router.put('/credentials/security-profile', requireAuth, requireRestaurantManage
   }
 });
 
-router.put('/credentials/doordash', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.put('/credentials/doordash', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = DoorDashCredentialSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Invalid request', details: toFieldErrors(parsed.error) });
@@ -138,9 +138,9 @@ router.put('/credentials/doordash', requireAuth, requireRestaurantManager, async
   }
 });
 
-router.delete('/credentials/doordash', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.delete('/credentials/doordash', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const summary = await deliveryCredentialsService.clearDoorDash(
       restaurantId,
       req.user?.teamMemberId ?? null,
@@ -152,9 +152,9 @@ router.delete('/credentials/doordash', requireAuth, requireRestaurantManager, as
   }
 });
 
-router.put('/credentials/uber', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.put('/credentials/uber', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = UberCredentialSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Invalid request', details: toFieldErrors(parsed.error) });
@@ -178,9 +178,9 @@ router.put('/credentials/uber', requireAuth, requireRestaurantManager, async (re
   }
 });
 
-router.delete('/credentials/uber', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.delete('/credentials/uber', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const summary = await deliveryCredentialsService.clearUber(
       restaurantId,
       req.user?.teamMemberId ?? null,
@@ -192,7 +192,7 @@ router.delete('/credentials/uber', requireAuth, requireRestaurantManager, async 
   }
 });
 
-// POST /:restaurantId/delivery/quote
+// POST /:merchantId/delivery/quote
 router.post('/quote', async (req: Request, res: Response) => {
   try {
     const parsed = QuoteRequestSchema.safeParse(req.body);
@@ -218,7 +218,7 @@ router.post('/quote', async (req: Request, res: Response) => {
   }
 });
 
-// POST /:restaurantId/delivery/dispatch
+// POST /:merchantId/delivery/dispatch
 router.post('/dispatch', async (req: Request, res: Response) => {
   try {
     const parsed = AcceptRequestSchema.safeParse(req.body);
@@ -244,7 +244,7 @@ router.post('/dispatch', async (req: Request, res: Response) => {
   }
 });
 
-// GET /:restaurantId/delivery/:orderId/status
+// GET /:merchantId/delivery/:orderId/status
 router.get('/:orderId/status', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
@@ -262,7 +262,7 @@ router.get('/:orderId/status', async (req: Request, res: Response) => {
   }
 });
 
-// POST /:restaurantId/delivery/:orderId/cancel
+// POST /:merchantId/delivery/:orderId/cancel
 router.post('/:orderId/cancel', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
@@ -283,13 +283,13 @@ router.post('/:orderId/cancel', async (req: Request, res: Response) => {
 // ============ Delivery Assignments ============
 
 /**
- * GET /:restaurantId/delivery/assignments
+ * GET /:merchantId/delivery/assignments
  * Returns active delivery assignments for the restaurant.
  * Derived from orders with delivery status set.
  */
 router.get('/assignments', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const assignments = await deliveryService.getActiveAssignments(restaurantId);
     res.json(assignments);
   } catch (error: unknown) {
@@ -302,12 +302,12 @@ router.get('/assignments', async (req: Request, res: Response) => {
 // ============ Delivery Drivers ============
 
 /**
- * GET /:restaurantId/delivery/drivers
+ * GET /:merchantId/delivery/drivers
  * Returns delivery drivers associated with the restaurant.
  */
 router.get('/drivers', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const drivers = await deliveryService.getDrivers(restaurantId);
     res.json(drivers);
   } catch (error: unknown) {
@@ -321,7 +321,7 @@ router.get('/drivers', async (req: Request, res: Response) => {
 
 router.get('/analytics', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { startDate, endDate } = req.query;
 
     const where: Record<string, unknown> = {

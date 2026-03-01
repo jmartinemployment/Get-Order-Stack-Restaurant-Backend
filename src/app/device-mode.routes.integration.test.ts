@@ -21,7 +21,7 @@ beforeEach(() => {
   resetPrismaMock();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/device-modes`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/device-modes`;
 const MODE_ID = '11111111-1111-4111-a111-111111111111';
 
 const VALID_MODE = {

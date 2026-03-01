@@ -18,9 +18,9 @@ const createPeripheralSchema = z.object({
 // --- Peripheral CRUD ---
 
 // List all peripherals for a restaurant
-router.get('/:restaurantId/peripherals', async (req: Request, res: Response) => {
+router.get('/:merchantId/peripherals', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { parentDeviceId } = req.query;
 
     const peripherals = await prisma.peripheralDevice.findMany({
@@ -38,9 +38,9 @@ router.get('/:restaurantId/peripherals', async (req: Request, res: Response) => 
 });
 
 // Register a new peripheral
-router.post('/:restaurantId/peripherals', async (req: Request, res: Response) => {
+router.post('/:merchantId/peripherals', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createPeripheralSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -73,7 +73,7 @@ router.post('/:restaurantId/peripherals', async (req: Request, res: Response) =>
 });
 
 // Remove a peripheral
-router.delete('/:restaurantId/peripherals/:id', async (req: Request, res: Response) => {
+router.delete('/:merchantId/peripherals/:id', async (req: Request, res: Response) => {
   try {
     const { restaurantId, id } = req.params;
 

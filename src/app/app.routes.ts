@@ -66,9 +66,9 @@ const ROLE_RANK: Record<string, number> = {
   super_admin: 4,
 };
 
-router.post('/:restaurantId/auth/validate-pin', async (req: Request, res: Response) => {
+router.post('/:merchantId/auth/validate-pin', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { pin, requiredRole = 'manager' } = req.body;
 
     if (!pin) {
@@ -153,9 +153,9 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/:restaurantId', async (req: Request, res: Response) => {
+router.get('/:merchantId', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId }
     });
@@ -187,9 +187,9 @@ router.get('/slug/:slug', async (req: Request, res: Response) => {
   }
 });
 
-router.patch('/:restaurantId', async (req: Request, res: Response) => {
+router.patch('/:merchantId', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const data = { ...(req.body as Record<string, unknown>) };
 
     if ('aiSettings' in data && data.aiSettings !== undefined) {
@@ -220,9 +220,9 @@ router.patch('/:restaurantId', async (req: Request, res: Response) => {
 
 // ============ Full Menu (with modifiers) ============
 
-router.get('/:restaurantId/menu', async (req: Request, res: Response) => {
+router.get('/:merchantId/menu', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { includeUnavailable, lang } = req.query;
 
     const categories = await prisma.menuCategory.findMany({
@@ -298,9 +298,9 @@ router.get('/:restaurantId/menu', async (req: Request, res: Response) => {
 
 // ============ Categories ============
 
-router.get('/:restaurantId/menu/categories', async (req: Request, res: Response) => {
+router.get('/:merchantId/menu/categories', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const categories = await prisma.menuCategory.findMany({
       where: { restaurantId },
       orderBy: { displayOrder: 'asc' }
@@ -312,9 +312,9 @@ router.get('/:restaurantId/menu/categories', async (req: Request, res: Response)
   }
 });
 
-router.post('/:restaurantId/menu/categories', async (req: Request, res: Response) => {
+router.post('/:merchantId/menu/categories', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { name, nameEn, description, descriptionEn, image, active = true } = req.body;
 
     // Get restaurant for cuisine type
@@ -347,7 +347,7 @@ router.post('/:restaurantId/menu/categories', async (req: Request, res: Response
   }
 });
 
-router.patch('/:restaurantId/menu/categories/:categoryId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/menu/categories/:categoryId', async (req: Request, res: Response) => {
   try {
     const { restaurantId, categoryId } = req.params;
     const { name, nameEn, description, descriptionEn, image, active, displayOrder } = req.body;
@@ -391,7 +391,7 @@ router.patch('/:restaurantId/menu/categories/:categoryId', async (req: Request, 
   }
 });
 
-router.delete('/:restaurantId/menu/categories/:categoryId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/menu/categories/:categoryId', async (req: Request, res: Response) => {
   try {
     const { categoryId } = req.params;
     await prisma.menuItem.deleteMany({ where: { categoryId } });
@@ -405,9 +405,9 @@ router.delete('/:restaurantId/menu/categories/:categoryId', async (req: Request,
 
 // ============ Menu Items ============
 
-router.get('/:restaurantId/menu/items', async (req: Request, res: Response) => {
+router.get('/:merchantId/menu/items', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const items = await prisma.menuItem.findMany({
       where: { restaurantId },
       orderBy: [{ categoryId: 'asc' }, { displayOrder: 'asc' }],
@@ -428,7 +428,7 @@ router.get('/:restaurantId/menu/items', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/:restaurantId/menu/items/:itemId', async (req: Request, res: Response) => {
+router.get('/:merchantId/menu/items/:itemId', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const item = await prisma.menuItem.findUnique({
@@ -455,9 +455,9 @@ router.get('/:restaurantId/menu/items/:itemId', async (req: Request, res: Respon
   }
 });
 
-router.post('/:restaurantId/menu/items', async (req: Request, res: Response) => {
+router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { 
       categoryId, name, nameEn, description, descriptionEn, 
       price, cost, image, available = true, dietary = [],
@@ -525,7 +525,7 @@ router.post('/:restaurantId/menu/items', async (req: Request, res: Response) => 
   }
 });
 
-router.patch('/:restaurantId/menu/items/:itemId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Response) => {
   try {
     const { restaurantId, itemId } = req.params;
     const {
@@ -621,7 +621,7 @@ router.patch('/:restaurantId/menu/items/:itemId', async (req: Request, res: Resp
   }
 });
 
-router.patch('/:restaurantId/menu/items/:itemId/86', async (req: Request, res: Response) => {
+router.patch('/:merchantId/menu/items/:itemId/86', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const { eightySixed, reason } = req.body;
@@ -640,7 +640,7 @@ router.patch('/:restaurantId/menu/items/:itemId/86', async (req: Request, res: R
   }
 });
 
-router.delete('/:restaurantId/menu/items/:itemId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/menu/items/:itemId', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     await prisma.menuItemModifierGroup.deleteMany({ where: { menuItemId: itemId } });
@@ -654,9 +654,9 @@ router.delete('/:restaurantId/menu/items/:itemId', async (req: Request, res: Res
 
 // ============ Modifier Groups ============
 
-router.get('/:restaurantId/modifiers', async (req: Request, res: Response) => {
+router.get('/:merchantId/modifiers', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const groups = await prisma.modifierGroup.findMany({
       where: { restaurantId },
       orderBy: { displayOrder: 'asc' },
@@ -671,9 +671,9 @@ router.get('/:restaurantId/modifiers', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/:restaurantId/modifiers', async (req: Request, res: Response) => {
+router.post('/:merchantId/modifiers', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { 
       name, nameEn, description, descriptionEn,
       required = false, multiSelect = false, 
@@ -710,7 +710,7 @@ router.post('/:restaurantId/modifiers', async (req: Request, res: Response) => {
   }
 });
 
-router.patch('/:restaurantId/modifiers/:groupId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/modifiers/:groupId', async (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const { 
@@ -742,7 +742,7 @@ router.patch('/:restaurantId/modifiers/:groupId', async (req: Request, res: Resp
   }
 });
 
-router.delete('/:restaurantId/modifiers/:groupId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/modifiers/:groupId', async (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     await prisma.modifier.deleteMany({ where: { modifierGroupId: groupId } });
@@ -757,7 +757,7 @@ router.delete('/:restaurantId/modifiers/:groupId', async (req: Request, res: Res
 
 // ============ Individual Modifiers ============
 
-router.post('/:restaurantId/modifiers/:groupId/options', async (req: Request, res: Response) => {
+router.post('/:merchantId/modifiers/:groupId/options', async (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const { name, nameEn, priceAdjustment = 0, isDefault = false } = req.body;
@@ -781,7 +781,7 @@ router.post('/:restaurantId/modifiers/:groupId/options', async (req: Request, re
   }
 });
 
-router.patch('/:restaurantId/modifiers/:groupId/options/:modifierId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/modifiers/:groupId/options/:modifierId', async (req: Request, res: Response) => {
   try {
     const { modifierId } = req.params;
     const { name, nameEn, priceAdjustment, isDefault, available, displayOrder } = req.body;
@@ -804,7 +804,7 @@ router.patch('/:restaurantId/modifiers/:groupId/options/:modifierId', async (req
   }
 });
 
-router.delete('/:restaurantId/modifiers/:groupId/options/:modifierId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/modifiers/:groupId/options/:modifierId', async (req: Request, res: Response) => {
   try {
     const { modifierId } = req.params;
     await prisma.modifier.delete({ where: { id: modifierId } });
@@ -817,9 +817,9 @@ router.delete('/:restaurantId/modifiers/:groupId/options/:modifierId', async (re
 
 // ============ Tables ============
 
-router.get('/:restaurantId/tables', async (req: Request, res: Response) => {
+router.get('/:merchantId/tables', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const tables = await prisma.restaurantTable.findMany({
       where: { restaurantId, active: true },
       orderBy: { tableNumber: 'asc' }
@@ -831,9 +831,9 @@ router.get('/:restaurantId/tables', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/:restaurantId/tables', async (req: Request, res: Response) => {
+router.post('/:merchantId/tables', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { tableNumber, tableName, capacity = 4, section, posX, posY } = req.body;
 
     const table = await prisma.restaurantTable.create({
@@ -848,7 +848,7 @@ router.post('/:restaurantId/tables', async (req: Request, res: Response) => {
   }
 });
 
-router.patch('/:restaurantId/tables/:tableId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/tables/:tableId', async (req: Request, res: Response) => {
   try {
     const { tableId } = req.params;
     const { tableNumber, tableName, capacity, section, status, posX, posY, active } = req.body;
@@ -873,7 +873,7 @@ router.patch('/:restaurantId/tables/:tableId', async (req: Request, res: Respons
   }
 });
 
-router.delete('/:restaurantId/tables/:tableId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/tables/:tableId', async (req: Request, res: Response) => {
   try {
     const { tableId } = req.params;
     await prisma.restaurantTable.delete({ where: { id: tableId } });
@@ -886,9 +886,9 @@ router.delete('/:restaurantId/tables/:tableId', async (req: Request, res: Respon
 
 // ============ Reservations ============
 
-router.get('/:restaurantId/bookings', async (req: Request, res: Response) => {
+router.get('/:merchantId/bookings', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { status, date } = req.query;
 
     const where: Record<string, unknown> = { restaurantId };
@@ -914,9 +914,9 @@ router.get('/:restaurantId/bookings', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/:restaurantId/bookings', async (req: Request, res: Response) => {
+router.post('/:merchantId/bookings', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const {
       customerName, customerPhone, customerEmail,
       partySize, reservationTime, tableNumber, specialRequests
@@ -947,7 +947,7 @@ router.post('/:restaurantId/bookings', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/:restaurantId/bookings/:reservationId', async (req: Request, res: Response) => {
+router.get('/:merchantId/bookings/:reservationId', async (req: Request, res: Response) => {
   try {
     const { reservationId } = req.params;
     const reservation = await prisma.reservation.findUnique({
@@ -965,7 +965,7 @@ router.get('/:restaurantId/bookings/:reservationId', async (req: Request, res: R
   }
 });
 
-router.patch('/:restaurantId/bookings/:reservationId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/bookings/:reservationId', async (req: Request, res: Response) => {
   try {
     const { reservationId } = req.params;
     const { status, tableNumber, partySize, reservationTime, specialRequests, customerName, customerPhone, customerEmail } = req.body;
@@ -991,7 +991,7 @@ router.patch('/:restaurantId/bookings/:reservationId', async (req: Request, res:
   }
 });
 
-router.delete('/:restaurantId/bookings/:reservationId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/bookings/:reservationId', async (req: Request, res: Response) => {
   try {
     const { reservationId } = req.params;
     await prisma.reservation.delete({ where: { id: reservationId } });
@@ -1004,7 +1004,7 @@ router.delete('/:restaurantId/bookings/:reservationId', async (req: Request, res
 
 // ============ AI Endpoints ============
 
-router.post('/:restaurantId/menu/items/:itemId/estimate-cost', async (req: Request, res: Response) => {
+router.post('/:merchantId/menu/items/:itemId/estimate-cost', async (req: Request, res: Response) => {
   try {
     const { restaurantId, itemId } = req.params;
 
@@ -1045,7 +1045,7 @@ router.post('/:restaurantId/menu/items/:itemId/estimate-cost', async (req: Reque
   }
 });
 
-router.post('/:restaurantId/menu/items/:itemId/generate-description', async (req: Request, res: Response) => {
+router.post('/:merchantId/menu/items/:itemId/generate-description', async (req: Request, res: Response) => {
   try {
     const { restaurantId, itemId } = req.params;
 
@@ -1080,9 +1080,9 @@ router.post('/:restaurantId/menu/items/:itemId/generate-description', async (req
   }
 });
 
-router.post('/:restaurantId/menu/estimate-all-costs', async (req: Request, res: Response) => {
+router.post('/:merchantId/menu/estimate-all-costs', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const [items, restaurant] = await Promise.all([
       prisma.menuItem.findMany({ where: { restaurantId, aiEstimatedCost: null } }),
@@ -1118,9 +1118,9 @@ router.post('/:restaurantId/menu/estimate-all-costs', async (req: Request, res: 
   }
 });
 
-router.post('/:restaurantId/menu/generate-all-descriptions', async (req: Request, res: Response) => {
+router.post('/:merchantId/menu/generate-all-descriptions', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const [items, restaurant] = await Promise.all([
       prisma.menuItem.findMany({ where: { restaurantId, descriptionEn: null } }),
@@ -1152,9 +1152,9 @@ router.post('/:restaurantId/menu/generate-all-descriptions', async (req: Request
 
 // ============ Orders (with modifiers) ============
 
-router.get('/:restaurantId/orders', async (req: Request, res: Response) => {
+router.get('/:merchantId/orders', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const {
       status,
       orderType,
@@ -1191,7 +1191,7 @@ router.get('/:restaurantId/orders', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/:restaurantId/orders/:orderId', async (req: Request, res: Response) => {
+router.get('/:merchantId/orders/:orderId', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
 
@@ -1214,9 +1214,9 @@ router.get('/:restaurantId/orders/:orderId', async (req: Request, res: Response)
   }
 });
 
-router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
+router.post('/:merchantId/orders', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const {
       customerInfo, customerName, customerPhone, customerEmail,
       orderType, orderSource = 'online', tableId, tableNumber, serverId,
@@ -1567,7 +1567,7 @@ router.post('/:restaurantId/orders', async (req: Request, res: Response) => {
   }
 });
 
-router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: Response) => {
+router.patch('/:merchantId/orders/:orderId/status', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
     const { status, changedBy, note, cancellationReason, cancelledBy } = req.body;
@@ -1634,7 +1634,7 @@ router.patch('/:restaurantId/orders/:orderId/status', async (req: Request, res: 
 });
 
 // Fire a course (HOLD -> SENT) for KDS course pacing.
-router.patch('/:restaurantId/orders/:orderId/fire-course', async (req: Request, res: Response) => {
+router.patch('/:merchantId/orders/:orderId/fire-course', async (req: Request, res: Response) => {
   try {
     const { restaurantId, orderId } = req.params;
     const { courseGuid } = req.body as { courseGuid?: string };
@@ -1695,7 +1695,7 @@ router.patch('/:restaurantId/orders/:orderId/fire-course', async (req: Request, 
 });
 
 // Fire an individual held item now (prep-time staggering override).
-router.patch('/:restaurantId/orders/:orderId/fire-item', async (req: Request, res: Response) => {
+router.patch('/:merchantId/orders/:orderId/fire-item', async (req: Request, res: Response) => {
   try {
     const { restaurantId, orderId } = req.params;
     const { selectionGuid } = req.body as { selectionGuid?: string };
@@ -1758,9 +1758,9 @@ router.patch('/:restaurantId/orders/:orderId/fire-item', async (req: Request, re
 });
 
 // Course pacing metrics for adaptive auto-fire timing.
-router.get('/:restaurantId/course-pacing/metrics', async (req: Request, res: Response) => {
+router.get('/:merchantId/course-pacing/metrics', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const lookbackDays = Number.parseInt(String(req.query.lookbackDays ?? '30'), 10);
     const metrics = await coursePacingService.getRestaurantMetrics(restaurantId, lookbackDays);
     res.json(metrics);
@@ -1770,9 +1770,9 @@ router.get('/:restaurantId/course-pacing/metrics', async (req: Request, res: Res
   }
 });
 
-router.get('/:restaurantId/throttling/status', async (req: Request, res: Response) => {
+router.get('/:merchantId/throttling/status', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const evaluation = await orderThrottlingService.evaluateAndRelease(restaurantId);
     if (evaluation.releasedOrderIds.length > 0) {
       await broadcastUpdatedOrders(evaluation.releasedOrderIds);
@@ -1785,7 +1785,7 @@ router.get('/:restaurantId/throttling/status', async (req: Request, res: Respons
   }
 });
 
-router.post('/:restaurantId/orders/:orderId/throttle/hold', async (req: Request, res: Response) => {
+router.post('/:merchantId/orders/:orderId/throttle/hold', async (req: Request, res: Response) => {
   try {
     const { restaurantId, orderId } = req.params;
     const held = await orderThrottlingService.holdOrderManually(restaurantId, orderId);
@@ -1809,7 +1809,7 @@ router.post('/:restaurantId/orders/:orderId/throttle/hold', async (req: Request,
   }
 });
 
-router.post('/:restaurantId/orders/:orderId/throttle/release', async (req: Request, res: Response) => {
+router.post('/:merchantId/orders/:orderId/throttle/release', async (req: Request, res: Response) => {
   try {
     const { restaurantId, orderId } = req.params;
     const released = await orderThrottlingService.releaseOrderManually(restaurantId, orderId);
@@ -1834,7 +1834,7 @@ router.post('/:restaurantId/orders/:orderId/throttle/release', async (req: Reque
 });
 
 // Get order status history
-router.get('/:restaurantId/orders/:orderId/history', async (req: Request, res: Response) => {
+router.get('/:merchantId/orders/:orderId/history', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
     const history = await getOrderStatusHistory(orderId);
@@ -1846,7 +1846,7 @@ router.get('/:restaurantId/orders/:orderId/history', async (req: Request, res: R
 });
 
 // Reprint order receipt
-router.post('/:restaurantId/orders/:orderId/reprint', async (req: Request, res: Response) => {
+router.post('/:merchantId/orders/:orderId/reprint', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
     const jobId = await cloudPrntService.queuePrintJob(orderId);
@@ -1859,7 +1859,7 @@ router.post('/:restaurantId/orders/:orderId/reprint', async (req: Request, res: 
 
 
 // Update individual order item status (for KDS)
-router.patch('/:restaurantId/orders/:orderId/items/:itemId/status', async (req: Request, res: Response) => {
+router.patch('/:merchantId/orders/:orderId/items/:itemId/status', async (req: Request, res: Response) => {
   try {
     const { restaurantId, orderId, itemId } = req.params;
     const { status } = req.body;
@@ -1928,7 +1928,7 @@ router.patch('/:restaurantId/orders/:orderId/items/:itemId/status', async (req: 
 });
 
 // Batch mark items as ready (per-station partial completion)
-router.patch('/:restaurantId/orders/:orderId/items/ready', async (req: Request, res: Response) => {
+router.patch('/:merchantId/orders/:orderId/items/ready', async (req: Request, res: Response) => {
   try {
     const { restaurantId, orderId } = req.params;
     const { itemIds, stationId, stationName } = req.body;
@@ -2009,7 +2009,7 @@ router.patch('/:restaurantId/orders/:orderId/items/ready', async (req: Request, 
   }
 });
 
-router.delete('/:restaurantId/orders/:orderId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/orders/:orderId', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
     
@@ -2031,7 +2031,7 @@ router.delete('/:restaurantId/orders/:orderId', async (req: Request, res: Respon
 // ============ Payments ============
 
 // Create payment intent for an order
-router.post('/:restaurantId/orders/:orderId/payment-intent', async (req: Request, res: Response) => {
+router.post('/:merchantId/orders/:orderId/payment-intent', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
 
@@ -2065,7 +2065,7 @@ router.post('/:restaurantId/orders/:orderId/payment-intent', async (req: Request
 });
 
 // Create PayPal order for an order
-router.post('/:restaurantId/orders/:orderId/paypal-create', async (req: Request, res: Response) => {
+router.post('/:merchantId/orders/:orderId/paypal-create', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
 
@@ -2096,7 +2096,7 @@ router.post('/:restaurantId/orders/:orderId/paypal-create', async (req: Request,
 });
 
 // Capture PayPal order
-router.post('/:restaurantId/orders/:orderId/paypal-capture', async (req: Request, res: Response) => {
+router.post('/:merchantId/orders/:orderId/paypal-capture', async (req: Request, res: Response) => {
   try {
     const { restaurantId, orderId } = req.params;
 
@@ -2145,7 +2145,7 @@ router.post('/:restaurantId/orders/:orderId/paypal-capture', async (req: Request
 });
 
 // Get payment status for an order
-router.get('/:restaurantId/orders/:orderId/payment-status', async (req: Request, res: Response) => {
+router.get('/:merchantId/orders/:orderId/payment-status', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
 
@@ -2205,7 +2205,7 @@ router.get('/:restaurantId/orders/:orderId/payment-status', async (req: Request,
 });
 
 // Cancel payment intent
-router.post('/:restaurantId/orders/:orderId/cancel-payment', async (req: Request, res: Response) => {
+router.post('/:merchantId/orders/:orderId/cancel-payment', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
 
@@ -2247,7 +2247,7 @@ router.post('/:restaurantId/orders/:orderId/cancel-payment', async (req: Request
 });
 
 // Refund payment
-router.post('/:restaurantId/orders/:orderId/refund', async (req: Request, res: Response) => {
+router.post('/:merchantId/orders/:orderId/refund', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
     const { amount } = req.body;

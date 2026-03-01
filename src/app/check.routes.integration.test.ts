@@ -25,7 +25,7 @@ beforeEach(() => {
   prisma.restaurant.findUnique.mockResolvedValue(RESTAURANT);
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/orders/${ORDER.id}`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/orders/${ORDER.id}`;
 
 // Order with includes for fetchAndBroadcast
 const ORDER_WITH_INCLUDES = {

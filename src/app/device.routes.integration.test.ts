@@ -21,7 +21,7 @@ vi.mock('../utils/device-code', () => ({
 
 const prisma = getPrismaMock();
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/devices`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/devices`;
 const DEVICE_ID = '11111111-1111-4111-a111-111111111111';
 
 const DEVICE = {
@@ -65,9 +65,9 @@ beforeEach(() => {
   resetPrismaMock();
 });
 
-// ============ GET /:restaurantId/devices ============
+// ============ GET /:merchantId/devices ============
 
-describe('GET /api/restaurant/:restaurantId/devices', () => {
+describe('GET /api/merchant/:merchantId/devices', () => {
   it('returns 401 without auth token', async () => {
     const res = await api.anonymous().get(BASE_URL);
     expect(res.status).toBe(401);
@@ -128,9 +128,9 @@ describe('GET /api/restaurant/:restaurantId/devices', () => {
   });
 });
 
-// ============ POST /:restaurantId/devices ============
+// ============ POST /:merchantId/devices ============
 
-describe('POST /api/restaurant/:restaurantId/devices', () => {
+describe('POST /api/merchant/:merchantId/devices', () => {
   const validBody = {
     deviceName: 'Front Counter POS',
     deviceType: 'terminal',
@@ -212,9 +212,9 @@ describe('POST /api/restaurant/:restaurantId/devices', () => {
 
 });
 
-// ============ POST /:restaurantId/devices/register-browser ============
+// ============ POST /:merchantId/devices/register-browser ============
 
-describe('POST /api/restaurant/:restaurantId/devices/register-browser', () => {
+describe('POST /api/merchant/:merchantId/devices/register-browser', () => {
   const REGISTER_URL = `${BASE_URL}/register-browser`;
 
   const validBody = {
@@ -274,9 +274,9 @@ describe('POST /api/restaurant/:restaurantId/devices/register-browser', () => {
 
 });
 
-// ============ GET /:restaurantId/devices/:id ============
+// ============ GET /:merchantId/devices/:id ============
 
-describe('GET /api/restaurant/:restaurantId/devices/:id', () => {
+describe('GET /api/merchant/:merchantId/devices/:id', () => {
   const url = `${BASE_URL}/${DEVICE_ID}`;
 
   it('returns 401 without auth token', async () => {
@@ -306,9 +306,9 @@ describe('GET /api/restaurant/:restaurantId/devices/:id', () => {
   });
 });
 
-// ============ PATCH /:restaurantId/devices/:id ============
+// ============ PATCH /:merchantId/devices/:id ============
 
-describe('PATCH /api/restaurant/:restaurantId/devices/:id', () => {
+describe('PATCH /api/merchant/:merchantId/devices/:id', () => {
   const url = `${BASE_URL}/${DEVICE_ID}`;
 
   it('returns 401 without auth token', async () => {
@@ -364,9 +364,9 @@ describe('PATCH /api/restaurant/:restaurantId/devices/:id', () => {
   });
 });
 
-// ============ DELETE /:restaurantId/devices/:id ============
+// ============ DELETE /:merchantId/devices/:id ============
 
-describe('DELETE /api/restaurant/:restaurantId/devices/:id', () => {
+describe('DELETE /api/merchant/:merchantId/devices/:id', () => {
   const url = `${BASE_URL}/${DEVICE_ID}`;
 
   it('returns 401 without auth token', async () => {
@@ -393,9 +393,9 @@ describe('DELETE /api/restaurant/:restaurantId/devices/:id', () => {
   });
 });
 
-// ============ POST /:restaurantId/devices/:id/heartbeat ============
+// ============ POST /:merchantId/devices/:id/heartbeat ============
 
-describe('POST /api/restaurant/:restaurantId/devices/:id/heartbeat', () => {
+describe('POST /api/merchant/:merchantId/devices/:id/heartbeat', () => {
   const url = `${BASE_URL}/${DEVICE_ID}/heartbeat`;
 
   it('returns 401 without auth token', async () => {

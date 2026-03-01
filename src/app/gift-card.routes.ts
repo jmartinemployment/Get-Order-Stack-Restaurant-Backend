@@ -35,9 +35,9 @@ function generateGiftCardCode(): string {
 
 // --- Routes ---
 
-// GET /:restaurantId/gift-cards
-router.get('/:restaurantId/gift-cards', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// GET /:merchantId/gift-cards
+router.get('/:merchantId/gift-cards', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   try {
     const cards = await prisma.giftCard.findMany({
       where: { restaurantId },
@@ -50,9 +50,9 @@ router.get('/:restaurantId/gift-cards', async (req: Request, res: Response) => {
   }
 });
 
-// POST /:restaurantId/gift-cards
-router.post('/:restaurantId/gift-cards', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// POST /:merchantId/gift-cards
+router.post('/:merchantId/gift-cards', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const parsed = createGiftCardSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -88,8 +88,8 @@ router.post('/:restaurantId/gift-cards', async (req: Request, res: Response) => 
   }
 });
 
-// GET /:restaurantId/gift-cards/balance/:code
-router.get('/:restaurantId/gift-cards/balance/:code', async (req: Request, res: Response) => {
+// GET /:merchantId/gift-cards/balance/:code
+router.get('/:merchantId/gift-cards/balance/:code', async (req: Request, res: Response) => {
   const { code } = req.params;
   try {
     const card = await prisma.giftCard.findUnique({ where: { code } });
@@ -108,8 +108,8 @@ router.get('/:restaurantId/gift-cards/balance/:code', async (req: Request, res: 
   }
 });
 
-// POST /:restaurantId/gift-cards/redeem
-router.post('/:restaurantId/gift-cards/redeem', async (req: Request, res: Response) => {
+// POST /:merchantId/gift-cards/redeem
+router.post('/:merchantId/gift-cards/redeem', async (req: Request, res: Response) => {
   const parsed = redeemSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -159,8 +159,8 @@ router.post('/:restaurantId/gift-cards/redeem', async (req: Request, res: Respon
   }
 });
 
-// PATCH /:restaurantId/gift-cards/:cardId
-router.patch('/:restaurantId/gift-cards/:cardId', async (req: Request, res: Response) => {
+// PATCH /:merchantId/gift-cards/:cardId
+router.patch('/:merchantId/gift-cards/:cardId', async (req: Request, res: Response) => {
   const { restaurantId, cardId } = req.params;
   const parsed = updateStatusSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -184,8 +184,8 @@ router.patch('/:restaurantId/gift-cards/:cardId', async (req: Request, res: Resp
   }
 });
 
-// GET /:restaurantId/gift-cards/:cardId/redemptions
-router.get('/:restaurantId/gift-cards/:cardId/redemptions', async (req: Request, res: Response) => {
+// GET /:merchantId/gift-cards/:cardId/redemptions
+router.get('/:merchantId/gift-cards/:cardId/redemptions', async (req: Request, res: Response) => {
   const { cardId } = req.params;
   try {
     const redemptions = await prisma.giftCardRedemption.findMany({

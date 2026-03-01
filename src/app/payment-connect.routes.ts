@@ -49,12 +49,12 @@ async function getPayPalAccessToken(): Promise<string> {
 // ============================================================
 
 /**
- * POST /:restaurantId/connect/stripe/create-account
+ * POST /:merchantId/connect/stripe/create-account
  * Creates a Stripe Express connected account for the merchant.
  */
-router.post('/:restaurantId/connect/stripe/create-account', async (req: Request, res: Response) => {
+router.post('/:merchantId/connect/stripe/create-account', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
@@ -99,12 +99,12 @@ router.post('/:restaurantId/connect/stripe/create-account', async (req: Request,
 });
 
 /**
- * POST /:restaurantId/connect/stripe/account-link
+ * POST /:merchantId/connect/stripe/account-link
  * Creates a one-time Stripe Account Link for hosted onboarding.
  */
-router.post('/:restaurantId/connect/stripe/account-link', async (req: Request, res: Response) => {
+router.post('/:merchantId/connect/stripe/account-link', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { returnUrl, refreshUrl } = req.body as { returnUrl?: string; refreshUrl?: string };
 
     const restaurant = await prisma.restaurant.findUnique({
@@ -131,12 +131,12 @@ router.post('/:restaurantId/connect/stripe/account-link', async (req: Request, r
 });
 
 /**
- * GET /:restaurantId/connect/stripe/status
+ * GET /:merchantId/connect/stripe/status
  * Returns the Stripe connected account's onboarding status.
  */
-router.get('/:restaurantId/connect/stripe/status', async (req: Request, res: Response) => {
+router.get('/:merchantId/connect/stripe/status', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
@@ -167,12 +167,12 @@ router.get('/:restaurantId/connect/stripe/status', async (req: Request, res: Res
 // ============================================================
 
 /**
- * POST /:restaurantId/connect/paypal/create-referral
+ * POST /:merchantId/connect/paypal/create-referral
  * Creates a PayPal Partner Referral link for merchant onboarding.
  */
-router.post('/:restaurantId/connect/paypal/create-referral', async (req: Request, res: Response) => {
+router.post('/:merchantId/connect/paypal/create-referral', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
@@ -249,12 +249,12 @@ router.post('/:restaurantId/connect/paypal/create-referral', async (req: Request
 });
 
 /**
- * GET /:restaurantId/connect/paypal/status
+ * GET /:merchantId/connect/paypal/status
  * Returns the PayPal merchant integration status.
  */
-router.get('/:restaurantId/connect/paypal/status', async (req: Request, res: Response) => {
+router.get('/:merchantId/connect/paypal/status', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
@@ -302,12 +302,12 @@ router.get('/:restaurantId/connect/paypal/status', async (req: Request, res: Res
 });
 
 /**
- * POST /:restaurantId/connect/paypal/complete
+ * POST /:merchantId/connect/paypal/complete
  * Called after merchant returns from PayPal with their merchantIdInPayPal.
  */
-router.post('/:restaurantId/connect/paypal/complete', async (req: Request, res: Response) => {
+router.post('/:merchantId/connect/paypal/complete', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { merchantId } = req.body as { merchantId?: string };
 
     if (!merchantId) {

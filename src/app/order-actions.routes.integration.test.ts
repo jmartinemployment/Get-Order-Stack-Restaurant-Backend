@@ -37,7 +37,7 @@ beforeEach(() => {
   resetPrismaMock();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/orders`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/orders`;
 
 // Enriched order response (order with includes)
 const ORDER_WITH_INCLUDES = {

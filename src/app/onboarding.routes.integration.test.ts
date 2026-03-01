@@ -55,13 +55,13 @@ beforeEach(() => {
 
 // ============ GET /merchant-profile ============
 
-describe('GET /api/restaurant/:restaurantId/merchant-profile', () => {
+describe('GET /api/merchant/:merchantId/merchant-profile', () => {
   it('returns merchant profile', async () => {
     prisma.restaurant.findUnique.mockResolvedValue({
       merchantProfile: { businessName: 'Test Restaurant', verticals: ['food_and_drink'] },
     });
 
-    const res = await api.owner.get(`/api/restaurant/${RESTAURANT_ID}/merchant-profile`);
+    const res = await api.owner.get(`/api/merchant/${RESTAURANT_ID}/merchant-profile`);
     expect(res.status).toBe(200);
     expect(res.body.businessName).toBe('Test Restaurant');
   });
@@ -69,7 +69,7 @@ describe('GET /api/restaurant/:restaurantId/merchant-profile', () => {
   it('returns null when no profile', async () => {
     prisma.restaurant.findUnique.mockResolvedValue({ merchantProfile: null });
 
-    const res = await api.owner.get(`/api/restaurant/${RESTAURANT_ID}/merchant-profile`);
+    const res = await api.owner.get(`/api/merchant/${RESTAURANT_ID}/merchant-profile`);
     expect(res.status).toBe(200);
     expect(res.body).toBeNull();
   });
@@ -77,14 +77,14 @@ describe('GET /api/restaurant/:restaurantId/merchant-profile', () => {
   it('returns 404 when restaurant not found', async () => {
     prisma.restaurant.findUnique.mockResolvedValue(null);
 
-    const res = await api.owner.get(`/api/restaurant/${RESTAURANT_ID}/merchant-profile`);
+    const res = await api.owner.get(`/api/merchant/${RESTAURANT_ID}/merchant-profile`);
     expect(res.status).toBe(404);
   });
 });
 
 // ============ PATCH /merchant-profile ============
 
-describe('PATCH /api/restaurant/:restaurantId/merchant-profile', () => {
+describe('PATCH /api/merchant/:merchantId/merchant-profile', () => {
   it('merges profile updates', async () => {
     prisma.restaurant.findUnique.mockResolvedValue({
       merchantProfile: { businessName: 'Old Name', complexity: 'full' },
@@ -94,7 +94,7 @@ describe('PATCH /api/restaurant/:restaurantId/merchant-profile', () => {
     });
 
     const res = await api.owner
-      .patch(`/api/restaurant/${RESTAURANT_ID}/merchant-profile`)
+      .patch(`/api/merchant/${RESTAURANT_ID}/merchant-profile`)
       .send({ businessName: 'New Name' });
     expect(res.status).toBe(200);
   });
@@ -103,7 +103,7 @@ describe('PATCH /api/restaurant/:restaurantId/merchant-profile', () => {
     prisma.restaurant.findUnique.mockResolvedValue(null);
 
     const res = await api.owner
-      .patch(`/api/restaurant/${RESTAURANT_ID}/merchant-profile`)
+      .patch(`/api/merchant/${RESTAURANT_ID}/merchant-profile`)
       .send({ businessName: 'Test' });
     expect(res.status).toBe(404);
   });
@@ -133,7 +133,7 @@ describe('GET /api/platform/menu-templates', () => {
 
 // ============ POST /apply-menu-template ============
 
-describe('POST /api/restaurant/:restaurantId/apply-menu-template', () => {
+describe('POST /api/merchant/:merchantId/apply-menu-template', () => {
   it('applies a menu template', async () => {
     prisma.restaurant.findUnique.mockResolvedValue({ id: RESTAURANT_ID });
     // $transaction passes through to callback
@@ -141,7 +141,7 @@ describe('POST /api/restaurant/:restaurantId/apply-menu-template', () => {
     prisma.menuItem.create.mockResolvedValue({ id: 'item-1' });
 
     const res = await api.owner
-      .post(`/api/restaurant/${RESTAURANT_ID}/apply-menu-template`)
+      .post(`/api/merchant/${RESTAURANT_ID}/apply-menu-template`)
       .send({ templateId: 'fast-casual' });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -150,7 +150,7 @@ describe('POST /api/restaurant/:restaurantId/apply-menu-template', () => {
 
   it('returns 404 for unknown template', async () => {
     const res = await api.owner
-      .post(`/api/restaurant/${RESTAURANT_ID}/apply-menu-template`)
+      .post(`/api/merchant/${RESTAURANT_ID}/apply-menu-template`)
       .send({ templateId: 'nonexistent' });
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('Template not found');
@@ -160,7 +160,7 @@ describe('POST /api/restaurant/:restaurantId/apply-menu-template', () => {
     prisma.restaurant.findUnique.mockResolvedValue(null);
 
     const res = await api.owner
-      .post(`/api/restaurant/${RESTAURANT_ID}/apply-menu-template`)
+      .post(`/api/merchant/${RESTAURANT_ID}/apply-menu-template`)
       .send({ templateId: 'fast-casual' });
     expect(res.status).toBe(404);
   });
@@ -193,7 +193,7 @@ describe('GET /api/platform/tax-rate', () => {
 
 // ============ POST /business-hours ============
 
-describe('POST /api/restaurant/:restaurantId/business-hours', () => {
+describe('POST /api/merchant/:merchantId/business-hours', () => {
   it('saves business hours', async () => {
     prisma.restaurant.update.mockResolvedValue({});
 
@@ -203,7 +203,7 @@ describe('POST /api/restaurant/:restaurantId/business-hours', () => {
     ];
 
     const res = await api.owner
-      .post(`/api/restaurant/${RESTAURANT_ID}/business-hours`)
+      .post(`/api/merchant/${RESTAURANT_ID}/business-hours`)
       .send(hours);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);

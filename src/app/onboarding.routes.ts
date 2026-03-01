@@ -67,10 +67,10 @@ const STATE_TAX_RATES: Record<string, number> = {
 
 // ============ Merchant Profile ============
 
-// GET /api/restaurant/:restaurantId/merchant-profile
-router.get('/:restaurantId/merchant-profile', async (req: Request, res: Response) => {
+// GET /api/restaurant/:merchantId/merchant-profile
+router.get('/:merchantId/merchant-profile', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
       select: { merchantProfile: true },
@@ -88,10 +88,10 @@ router.get('/:restaurantId/merchant-profile', async (req: Request, res: Response
   }
 });
 
-// PATCH /api/restaurant/:restaurantId/merchant-profile
-router.patch('/:restaurantId/merchant-profile', async (req: Request, res: Response) => {
+// PATCH /api/restaurant/:merchantId/merchant-profile
+router.patch('/:merchantId/merchant-profile', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const updates = req.body;
 
     const existing = await prisma.restaurant.findUnique({
@@ -132,10 +132,10 @@ router.get('/menu-templates', (_req: Request, res: Response) => {
   }
 });
 
-// POST /api/restaurant/:restaurantId/apply-menu-template
-router.post('/:restaurantId/apply-menu-template', async (req: Request, res: Response) => {
+// POST /api/restaurant/:merchantId/apply-menu-template
+router.post('/:merchantId/apply-menu-template', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { templateId } = req.body;
 
     const template: MenuTemplate | undefined = MENU_TEMPLATES.find(t => t.id === templateId);
@@ -254,10 +254,10 @@ router.get('/tax-rate', (req: Request, res: Response) => {
 
 // ============ Business Hours ============
 
-// POST /api/restaurant/:restaurantId/business-hours
-router.post('/:restaurantId/business-hours', async (req: Request, res: Response) => {
+// POST /api/restaurant/:merchantId/business-hours
+router.post('/:merchantId/business-hours', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const hours = req.body;
 
     await prisma.restaurant.update({
@@ -272,7 +272,7 @@ router.post('/:restaurantId/business-hours', async (req: Request, res: Response)
   }
 });
 
-// GET /api/restaurant/:restaurantId/business-hours/check
+// GET /api/restaurant/:merchantId/business-hours/check
 // Returns whether the restaurant is currently open based on stored business hours
 interface BusinessHoursDay {
   day: string;
@@ -283,9 +283,9 @@ interface BusinessHoursDay {
 
 const DAYS_OF_WEEK = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
-router.get('/:restaurantId/business-hours/check', async (req: Request, res: Response) => {
+router.get('/:merchantId/business-hours/check', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },

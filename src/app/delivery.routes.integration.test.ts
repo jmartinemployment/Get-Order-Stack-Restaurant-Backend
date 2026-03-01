@@ -49,7 +49,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/delivery`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/delivery`;
 const ORDER_ID = '11111111-1111-4111-a111-111111111111';
 
 // ============ GET /config-status ============

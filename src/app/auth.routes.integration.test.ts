@@ -190,7 +190,7 @@ describe('GET /api/auth/me', () => {
 
 // ============ PIN Authentication ============
 
-describe('POST /api/auth/:restaurantId/pin/verify', () => {
+describe('POST /api/auth/:merchantId/pin/verify', () => {
   const url = `/api/auth/${RESTAURANT_ID}/pin/verify`;
 
   it('verifies a valid PIN', async () => {
@@ -214,12 +214,12 @@ describe('POST /api/auth/:restaurantId/pin/verify', () => {
 // ============ Staff PIN Management ============
 
 describe('Staff PIN CRUD', () => {
-  it('GET /:restaurantId/pins returns 401 without auth', async () => {
+  it('GET /:merchantId/pins returns 401 without auth', async () => {
     const res = await api.anonymous().get(`/api/auth/${RESTAURANT_ID}/pins`);
     expect(res.status).toBe(401);
   });
 
-  it('GET /:restaurantId/pins returns list', async () => {
+  it('GET /:merchantId/pins returns list', async () => {
     prisma.staffPin.findMany.mockResolvedValue([
       { id: 'pin-1', name: 'John', role: 'staff', createdAt: new Date() },
     ]);
@@ -228,23 +228,23 @@ describe('Staff PIN CRUD', () => {
     expect(Array.isArray(res.body)).toBe(true);
   });
 
-  it('POST /:restaurantId/pins creates PIN', async () => {
+  it('POST /:merchantId/pins creates PIN', async () => {
     const res = await api.owner.post(`/api/auth/${RESTAURANT_ID}/pins`).send({ name: 'Jane', pin: '5678' });
     expect(res.status).toBe(201);
   });
 
-  it('POST /:restaurantId/pins returns 400 for missing fields', async () => {
+  it('POST /:merchantId/pins returns 400 for missing fields', async () => {
     const res = await api.owner.post(`/api/auth/${RESTAURANT_ID}/pins`).send({ name: 'Jane' });
     expect(res.status).toBe(400);
   });
 
-  it('PATCH /:restaurantId/pins/:pinId updates PIN', async () => {
+  it('PATCH /:merchantId/pins/:pinId updates PIN', async () => {
     prisma.staffPin.findUnique.mockResolvedValue({ id: 'pin-1', name: 'Updated', role: 'staff', isActive: true });
     const res = await api.owner.patch(`/api/auth/${RESTAURANT_ID}/pins/pin-1`).send({ name: 'Updated' });
     expect(res.status).toBe(200);
   });
 
-  it('DELETE /:restaurantId/pins/:pinId deactivates PIN', async () => {
+  it('DELETE /:merchantId/pins/:pinId deactivates PIN', async () => {
     const res = await api.owner.delete(`/api/auth/${RESTAURANT_ID}/pins/pin-1`);
     expect(res.status).toBe(204);
   });
@@ -344,13 +344,13 @@ describe('POST /api/auth/users (create user)', () => {
 // ============ Restaurant Access ============
 
 describe('Restaurant Access', () => {
-  it('POST /users/:userId/restaurants/:restaurantId grants access', async () => {
+  it('POST /users/:userId/restaurants/:merchantId grants access', async () => {
     prisma.userRestaurantAccess.upsert.mockResolvedValue({ teamMemberId: USERS.staff.id, restaurantId: RESTAURANT_ID, role: 'staff' });
     const res = await api.owner.post(`/api/auth/users/${USERS.staff.id}/restaurants/${RESTAURANT_ID}`).send({ role: 'staff' });
     expect(res.status).toBe(200);
   });
 
-  it('DELETE /users/:userId/restaurants/:restaurantId revokes access', async () => {
+  it('DELETE /users/:userId/restaurants/:merchantId revokes access', async () => {
     const res = await api.owner.delete(`/api/auth/users/${USERS.staff.id}/restaurants/${RESTAURANT_ID}`);
     expect(res.status).toBe(204);
   });

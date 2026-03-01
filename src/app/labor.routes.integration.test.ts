@@ -39,7 +39,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}`;
 const STAFF_PIN_ID = '11111111-1111-4111-a111-111111111111';
 const SHIFT_ID = '22222222-2222-4222-a222-222222222222';
 const TIME_ENTRY_ID = '33333333-3333-4333-a333-333333333333';
@@ -50,7 +50,7 @@ const NOTIFICATION_ID = '77777777-7777-4777-a777-777777777777';
 
 // ============ Staff Pins ============
 
-describe('GET /:restaurantId/staff/pins', () => {
+describe('GET /:merchantId/staff/pins', () => {
   const url = `${BASE_URL}/staff/pins`;
 
   it('returns 401 without auth', async () => {
@@ -87,7 +87,7 @@ describe('GET /:restaurantId/staff/pins', () => {
 
 // ============ Shifts ============
 
-describe('GET /:restaurantId/staff/shifts', () => {
+describe('GET /:merchantId/staff/shifts', () => {
   const url = `${BASE_URL}/staff/shifts`;
 
   it('returns 400 without date params', async () => {
@@ -130,7 +130,7 @@ describe('GET /:restaurantId/staff/shifts', () => {
   });
 });
 
-describe('POST /:restaurantId/staff/shifts', () => {
+describe('POST /:merchantId/staff/shifts', () => {
   const url = `${BASE_URL}/staff/shifts`;
 
   const validShift = {
@@ -196,7 +196,7 @@ describe('POST /:restaurantId/staff/shifts', () => {
   });
 });
 
-describe('POST /:restaurantId/staff/shifts/publish', () => {
+describe('POST /:merchantId/staff/shifts/publish', () => {
   const url = `${BASE_URL}/staff/shifts/publish`;
 
   it('publishes a week with valid data', async () => {
@@ -212,7 +212,7 @@ describe('POST /:restaurantId/staff/shifts/publish', () => {
   });
 });
 
-describe('PATCH /:restaurantId/staff/shifts/:id', () => {
+describe('PATCH /:merchantId/staff/shifts/:id', () => {
   const url = `${BASE_URL}/staff/shifts/${SHIFT_ID}`;
 
   it('updates a shift with valid data', async () => {
@@ -235,7 +235,7 @@ describe('PATCH /:restaurantId/staff/shifts/:id', () => {
   });
 });
 
-describe('DELETE /:restaurantId/staff/shifts/:id', () => {
+describe('DELETE /:merchantId/staff/shifts/:id', () => {
   const url = `${BASE_URL}/staff/shifts/${SHIFT_ID}`;
 
   it('deletes a shift', async () => {
@@ -255,7 +255,7 @@ describe('DELETE /:restaurantId/staff/shifts/:id', () => {
 
 // ============ Time Clock ============
 
-describe('POST /:restaurantId/staff/clock-in', () => {
+describe('POST /:merchantId/staff/clock-in', () => {
   const url = `${BASE_URL}/staff/clock-in`;
 
   it('clocks in with valid data', async () => {
@@ -280,7 +280,7 @@ describe('POST /:restaurantId/staff/clock-in', () => {
   });
 });
 
-describe('POST /:restaurantId/staff/clock-out/:id', () => {
+describe('POST /:merchantId/staff/clock-out/:id', () => {
   const url = `${BASE_URL}/staff/clock-out/${TIME_ENTRY_ID}`;
 
   it('clocks out with valid data', async () => {
@@ -300,7 +300,7 @@ describe('POST /:restaurantId/staff/clock-out/:id', () => {
   });
 });
 
-describe('GET /:restaurantId/staff/active-clocks', () => {
+describe('GET /:merchantId/staff/active-clocks', () => {
   const url = `${BASE_URL}/staff/active-clocks`;
 
   it('returns active clocks', async () => {
@@ -320,7 +320,7 @@ describe('GET /:restaurantId/staff/active-clocks', () => {
 
 // ============ Labor Report ============
 
-describe('GET /:restaurantId/staff/labor-report', () => {
+describe('GET /:merchantId/staff/labor-report', () => {
   const url = `${BASE_URL}/staff/labor-report`;
 
   it('returns 400 without date params', async () => {
@@ -338,7 +338,7 @@ describe('GET /:restaurantId/staff/labor-report', () => {
 
 // ============ Labor Recommendations ============
 
-describe('GET /:restaurantId/staff/labor-recommendations', () => {
+describe('GET /:merchantId/staff/labor-recommendations', () => {
   const url = `${BASE_URL}/staff/labor-recommendations`;
 
   it('returns recommendations', async () => {
@@ -350,7 +350,7 @@ describe('GET /:restaurantId/staff/labor-recommendations', () => {
 
 // ============ Labor Targets ============
 
-describe('GET /:restaurantId/staff/labor-targets', () => {
+describe('GET /:merchantId/staff/labor-targets', () => {
   const url = `${BASE_URL}/staff/labor-targets`;
 
   it('returns targets', async () => {
@@ -360,7 +360,7 @@ describe('GET /:restaurantId/staff/labor-targets', () => {
   });
 });
 
-describe('PUT /:restaurantId/staff/labor-targets', () => {
+describe('PUT /:merchantId/staff/labor-targets', () => {
   const url = `${BASE_URL}/staff/labor-targets`;
 
   it('sets a target with valid data', async () => {
@@ -384,7 +384,7 @@ describe('PUT /:restaurantId/staff/labor-targets', () => {
 
 // ============ Schedule Templates ============
 
-describe('GET /:restaurantId/staff/schedule-templates', () => {
+describe('GET /:merchantId/staff/schedule-templates', () => {
   const url = `${BASE_URL}/staff/schedule-templates`;
 
   it('returns templates', async () => {
@@ -402,7 +402,7 @@ describe('GET /:restaurantId/staff/schedule-templates', () => {
   });
 });
 
-describe('POST /:restaurantId/staff/schedule-templates', () => {
+describe('POST /:merchantId/staff/schedule-templates', () => {
   const url = `${BASE_URL}/staff/schedule-templates`;
 
   it('returns 400 for missing name', async () => {
@@ -446,7 +446,7 @@ describe('POST /:restaurantId/staff/schedule-templates', () => {
   });
 });
 
-describe('POST /:restaurantId/staff/schedule-templates/:templateId/apply', () => {
+describe('POST /:merchantId/staff/schedule-templates/:templateId/apply', () => {
   const url = `${BASE_URL}/staff/schedule-templates/${TEMPLATE_ID}/apply`;
 
   it('returns 400 for missing weekStartDate', async () => {
@@ -494,7 +494,7 @@ describe('POST /:restaurantId/staff/schedule-templates/:templateId/apply', () =>
   });
 });
 
-describe('DELETE /:restaurantId/staff/schedule-templates/:templateId', () => {
+describe('DELETE /:merchantId/staff/schedule-templates/:templateId', () => {
   const url = `${BASE_URL}/staff/schedule-templates/${TEMPLATE_ID}`;
 
   it('returns 404 when template not found', async () => {
@@ -515,7 +515,7 @@ describe('DELETE /:restaurantId/staff/schedule-templates/:templateId', () => {
 
 // ============ Copy Week ============
 
-describe('POST /:restaurantId/staff/copy-week', () => {
+describe('POST /:merchantId/staff/copy-week', () => {
   const url = `${BASE_URL}/staff/copy-week`;
 
   it('returns 400 for missing targetWeekStart', async () => {
@@ -559,7 +559,7 @@ describe('POST /:restaurantId/staff/copy-week', () => {
 
 // ============ Live Labor Snapshot ============
 
-describe('GET /:restaurantId/staff/labor-live', () => {
+describe('GET /:merchantId/staff/labor-live', () => {
   const url = `${BASE_URL}/staff/labor-live`;
 
   it('returns live labor snapshot', async () => {
@@ -584,7 +584,7 @@ describe('GET /:restaurantId/staff/labor-live', () => {
 
 // ============ Notifications ============
 
-describe('GET /:restaurantId/staff/notifications', () => {
+describe('GET /:merchantId/staff/notifications', () => {
   const url = `${BASE_URL}/staff/notifications`;
 
   it('returns 400 without pinId', async () => {
@@ -601,7 +601,7 @@ describe('GET /:restaurantId/staff/notifications', () => {
   });
 });
 
-describe('PATCH /:restaurantId/staff/notifications/:notificationId/read', () => {
+describe('PATCH /:merchantId/staff/notifications/:notificationId/read', () => {
   const url = `${BASE_URL}/staff/notifications/${NOTIFICATION_ID}/read`;
 
   it('marks notification as read', async () => {
@@ -618,7 +618,7 @@ describe('PATCH /:restaurantId/staff/notifications/:notificationId/read', () => 
   });
 });
 
-describe('POST /:restaurantId/staff/notifications/schedule-published', () => {
+describe('POST /:merchantId/staff/notifications/schedule-published', () => {
   const url = `${BASE_URL}/staff/notifications/schedule-published`;
 
   it('returns 400 without weekStart', async () => {
@@ -648,7 +648,7 @@ describe('POST /:restaurantId/staff/notifications/schedule-published', () => {
   });
 });
 
-describe('POST /:restaurantId/staff/notifications/announcement', () => {
+describe('POST /:merchantId/staff/notifications/announcement', () => {
   const url = `${BASE_URL}/staff/notifications/announcement`;
 
   it('returns 400 for missing message', async () => {
@@ -685,7 +685,7 @@ describe('POST /:restaurantId/staff/notifications/announcement', () => {
 
 // ============ Workweek Config ============
 
-describe('GET /:restaurantId/staff/workweek-config', () => {
+describe('GET /:merchantId/staff/workweek-config', () => {
   const url = `${BASE_URL}/staff/workweek-config`;
 
   it('returns defaults when no config exists', async () => {
@@ -710,7 +710,7 @@ describe('GET /:restaurantId/staff/workweek-config', () => {
   });
 });
 
-describe('PUT /:restaurantId/staff/workweek-config', () => {
+describe('PUT /:merchantId/staff/workweek-config', () => {
   const url = `${BASE_URL}/staff/workweek-config`;
 
   const validConfig = {
@@ -754,7 +754,7 @@ describe('PUT /:restaurantId/staff/workweek-config', () => {
 
 // ============ Timecard Edit Requests ============
 
-describe('POST /:restaurantId/staff/timecard-edits', () => {
+describe('POST /:merchantId/staff/timecard-edits', () => {
   const url = `${BASE_URL}/staff/timecard-edits`;
 
   const validEdit = {
@@ -806,7 +806,7 @@ describe('POST /:restaurantId/staff/timecard-edits', () => {
   });
 });
 
-describe('PATCH /:restaurantId/staff/timecard-edits/:editId/approve', () => {
+describe('PATCH /:merchantId/staff/timecard-edits/:editId/approve', () => {
   const url = `${BASE_URL}/staff/timecard-edits/${EDIT_ID}/approve`;
 
   it('returns 400 for missing respondedBy', async () => {
@@ -854,7 +854,7 @@ describe('PATCH /:restaurantId/staff/timecard-edits/:editId/approve', () => {
   });
 });
 
-describe('PATCH /:restaurantId/staff/timecard-edits/:editId/deny', () => {
+describe('PATCH /:merchantId/staff/timecard-edits/:editId/deny', () => {
   const url = `${BASE_URL}/staff/timecard-edits/${EDIT_ID}/deny`;
 
   it('returns 404 when edit request not found', async () => {
@@ -892,7 +892,7 @@ describe('PATCH /:restaurantId/staff/timecard-edits/:editId/deny', () => {
 
 // ============ Validate Clock-In ============
 
-describe('POST /:restaurantId/staff/validate-clock-in', () => {
+describe('POST /:merchantId/staff/validate-clock-in', () => {
   const url = `${BASE_URL}/staff/validate-clock-in`;
 
   it('returns 400 for invalid staffPinId', async () => {
@@ -924,7 +924,7 @@ describe('POST /:restaurantId/staff/validate-clock-in', () => {
 
 // ============ Clock-In with Override ============
 
-describe('POST /:restaurantId/staff/clock-in-with-override', () => {
+describe('POST /:merchantId/staff/clock-in-with-override', () => {
   const url = `${BASE_URL}/staff/clock-in-with-override`;
 
   it('returns 400 for invalid data', async () => {
@@ -969,7 +969,7 @@ describe('POST /:restaurantId/staff/clock-in-with-override', () => {
 
 // ============ Auto Clock-Out ============
 
-describe('POST /:restaurantId/staff/auto-clock-out', () => {
+describe('POST /:merchantId/staff/auto-clock-out', () => {
   const url = `${BASE_URL}/staff/auto-clock-out`;
 
   it('returns disabled message when auto clock-out is off', async () => {
@@ -1001,7 +1001,7 @@ describe('POST /:restaurantId/staff/auto-clock-out', () => {
 
 // ============ Swap Requests ============
 
-describe('POST /:restaurantId/staff/swap-requests', () => {
+describe('POST /:merchantId/staff/swap-requests', () => {
   const url = `${BASE_URL}/staff/swap-requests`;
 
   it('returns 400 for missing fields', async () => {
@@ -1036,7 +1036,7 @@ describe('POST /:restaurantId/staff/swap-requests', () => {
   });
 });
 
-describe('PATCH /:restaurantId/staff/swap-requests/:requestId', () => {
+describe('PATCH /:merchantId/staff/swap-requests/:requestId', () => {
   const url = `${BASE_URL}/staff/swap-requests/${SWAP_REQUEST_ID}`;
 
   it('returns 400 for missing status', async () => {
@@ -1081,7 +1081,7 @@ describe('PATCH /:restaurantId/staff/swap-requests/:requestId', () => {
 
 // ============ Staff Earnings ============
 
-describe('GET /:restaurantId/staff/:staffPinId/earnings', () => {
+describe('GET /:merchantId/staff/:staffPinId/earnings', () => {
   const url = `${BASE_URL}/staff/${STAFF_PIN_ID}/earnings`;
 
   it('returns 400 without date params', async () => {
@@ -1107,7 +1107,7 @@ describe('GET /:restaurantId/staff/:staffPinId/earnings', () => {
 
 // ============ Staff Availability ============
 
-describe('GET /:restaurantId/staff/:staffPinId/availability', () => {
+describe('GET /:merchantId/staff/:staffPinId/availability', () => {
   const url = `${BASE_URL}/staff/${STAFF_PIN_ID}/availability`;
 
   it('returns availability preferences', async () => {
@@ -1118,7 +1118,7 @@ describe('GET /:restaurantId/staff/:staffPinId/availability', () => {
   });
 });
 
-describe('PUT /:restaurantId/staff/:staffPinId/availability', () => {
+describe('PUT /:merchantId/staff/:staffPinId/availability', () => {
   const url = `${BASE_URL}/staff/${STAFF_PIN_ID}/availability`;
 
   it('returns 400 for missing preferences array', async () => {

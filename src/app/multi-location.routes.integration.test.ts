@@ -21,7 +21,7 @@ beforeEach(() => {
   resetPrismaMock();
 });
 
-const BASE_URL = `/api/restaurant-groups/${RESTAURANT_GROUP_ID}`;
+const BASE_URL = `/api/merchant-groups/${RESTAURANT_GROUP_ID}`;
 
 const LOCATION_GROUP = {
   id: 'lg-00000000-0000-0000-0000-000000000001',

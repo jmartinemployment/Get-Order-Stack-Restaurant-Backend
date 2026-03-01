@@ -13,10 +13,10 @@ const prisma = new PrismaClient();
 
 // ============ Loyalty Config ============
 
-// GET /:restaurantId/loyalty/config
-router.get('/:restaurantId/loyalty/config', async (req: Request, res: Response) => {
+// GET /:merchantId/loyalty/config
+router.get('/:merchantId/loyalty/config', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const config = await loyaltyService.getConfig(restaurantId);
     res.json(config);
   } catch (error: unknown) {
@@ -25,10 +25,10 @@ router.get('/:restaurantId/loyalty/config', async (req: Request, res: Response) 
   }
 });
 
-// PATCH /:restaurantId/loyalty/config
-router.patch('/:restaurantId/loyalty/config', async (req: Request, res: Response) => {
+// PATCH /:merchantId/loyalty/config
+router.patch('/:merchantId/loyalty/config', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = LoyaltyConfigUpdateSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -49,10 +49,10 @@ router.patch('/:restaurantId/loyalty/config', async (req: Request, res: Response
 
 // ============ Loyalty Rewards ============
 
-// GET /:restaurantId/loyalty/rewards
-router.get('/:restaurantId/loyalty/rewards', async (req: Request, res: Response) => {
+// GET /:merchantId/loyalty/rewards
+router.get('/:merchantId/loyalty/rewards', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const rewards = await prisma.loyaltyReward.findMany({
       where: { restaurantId, isActive: true },
       orderBy: { pointsCost: 'asc' },
@@ -64,10 +64,10 @@ router.get('/:restaurantId/loyalty/rewards', async (req: Request, res: Response)
   }
 });
 
-// POST /:restaurantId/loyalty/rewards
-router.post('/:restaurantId/loyalty/rewards', async (req: Request, res: Response) => {
+// POST /:merchantId/loyalty/rewards
+router.post('/:merchantId/loyalty/rewards', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = LoyaltyRewardCreateSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -91,8 +91,8 @@ router.post('/:restaurantId/loyalty/rewards', async (req: Request, res: Response
   }
 });
 
-// PATCH /:restaurantId/loyalty/rewards/:rewardId
-router.patch('/:restaurantId/loyalty/rewards/:rewardId', async (req: Request, res: Response) => {
+// PATCH /:merchantId/loyalty/rewards/:rewardId
+router.patch('/:merchantId/loyalty/rewards/:rewardId', async (req: Request, res: Response) => {
   try {
     const { rewardId } = req.params;
     const parsed = LoyaltyRewardUpdateSchema.safeParse(req.body);
@@ -116,8 +116,8 @@ router.patch('/:restaurantId/loyalty/rewards/:rewardId', async (req: Request, re
   }
 });
 
-// DELETE /:restaurantId/loyalty/rewards/:rewardId (soft-delete)
-router.delete('/:restaurantId/loyalty/rewards/:rewardId', async (req: Request, res: Response) => {
+// DELETE /:merchantId/loyalty/rewards/:rewardId (soft-delete)
+router.delete('/:merchantId/loyalty/rewards/:rewardId', async (req: Request, res: Response) => {
   try {
     const { rewardId } = req.params;
     await prisma.loyaltyReward.update({
@@ -133,8 +133,8 @@ router.delete('/:restaurantId/loyalty/rewards/:rewardId', async (req: Request, r
 
 // ============ Customer Loyalty ============
 
-// GET /:restaurantId/customers/:customerId/loyalty
-router.get('/:restaurantId/customers/:customerId/loyalty', async (req: Request, res: Response) => {
+// GET /:merchantId/customers/:customerId/loyalty
+router.get('/:merchantId/customers/:customerId/loyalty', async (req: Request, res: Response) => {
   try {
     const { restaurantId, customerId } = req.params;
     const profile = await loyaltyService.getCustomerLoyalty(customerId, restaurantId);
@@ -146,8 +146,8 @@ router.get('/:restaurantId/customers/:customerId/loyalty', async (req: Request, 
   }
 });
 
-// GET /:restaurantId/customers/:customerId/loyalty/history
-router.get('/:restaurantId/customers/:customerId/loyalty/history', async (req: Request, res: Response) => {
+// GET /:merchantId/customers/:customerId/loyalty/history
+router.get('/:merchantId/customers/:customerId/loyalty/history', async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
     const { limit } = req.query;
@@ -162,8 +162,8 @@ router.get('/:restaurantId/customers/:customerId/loyalty/history', async (req: R
   }
 });
 
-// POST /:restaurantId/customers/:customerId/loyalty/adjust
-router.post('/:restaurantId/customers/:customerId/loyalty/adjust', async (req: Request, res: Response) => {
+// POST /:merchantId/customers/:customerId/loyalty/adjust
+router.post('/:merchantId/customers/:customerId/loyalty/adjust', async (req: Request, res: Response) => {
   try {
     const { restaurantId, customerId } = req.params;
     const parsed = PointsAdjustmentSchema.safeParse(req.body);
@@ -191,10 +191,10 @@ router.post('/:restaurantId/customers/:customerId/loyalty/adjust', async (req: R
 
 // ============ Customer Lookup ============
 
-// GET /:restaurantId/customers/lookup?phone=
-router.get('/:restaurantId/customers/lookup', async (req: Request, res: Response) => {
+// GET /:merchantId/customers/lookup?phone=
+router.get('/:merchantId/customers/lookup', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { phone } = req.query;
 
     if (!phone) {
@@ -223,9 +223,9 @@ router.get('/:restaurantId/customers/lookup', async (req: Request, res: Response
 
 // ============ Referral Config ============
 
-router.get('/:restaurantId/referrals/config', async (req: Request, res: Response) => {
+router.get('/:merchantId/referrals/config', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const config = await prisma.referralConfig.findUnique({
       where: { restaurantId },
     });
@@ -251,9 +251,9 @@ router.get('/:restaurantId/referrals/config', async (req: Request, res: Response
   }
 });
 
-router.put('/:restaurantId/referrals/config', async (req: Request, res: Response) => {
+router.put('/:merchantId/referrals/config', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { enabled, referrerReward, refereeReward, maxReferrals } = req.body;
     const config = await prisma.referralConfig.upsert({
       where: { restaurantId },

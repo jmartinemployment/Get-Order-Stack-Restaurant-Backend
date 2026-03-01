@@ -43,9 +43,9 @@ const updateDeviceSchema = z.object({
 // === Routes ===
 
 // List all devices for a restaurant
-router.get('/:restaurantId/devices', async (req: Request, res: Response) => {
+router.get('/:merchantId/devices', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { status, type } = req.query;
 
     // Clean up expired pending devices
@@ -80,9 +80,9 @@ router.get('/:restaurantId/devices', async (req: Request, res: Response) => {
 });
 
 // Create a new device with pairing code
-router.post('/:restaurantId/devices', async (req: Request, res: Response) => {
+router.post('/:merchantId/devices', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createDeviceSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -117,9 +117,9 @@ router.post('/:restaurantId/devices', async (req: Request, res: Response) => {
 });
 
 // Register current browser as a device (no pairing code needed)
-router.post('/:restaurantId/devices/register-browser', async (req: Request, res: Response) => {
+router.post('/:merchantId/devices/register-browser', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = registerBrowserSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -169,7 +169,7 @@ router.post('/:restaurantId/devices/register-browser', async (req: Request, res:
 });
 
 // Get a single device by UUID
-router.get('/:restaurantId/devices/:id', async (req: Request, res: Response) => {
+router.get('/:merchantId/devices/:id', async (req: Request, res: Response) => {
   try {
     const { restaurantId, id } = req.params;
 
@@ -190,7 +190,7 @@ router.get('/:restaurantId/devices/:id', async (req: Request, res: Response) => 
 });
 
 // Update device
-router.patch('/:restaurantId/devices/:id', async (req: Request, res: Response) => {
+router.patch('/:merchantId/devices/:id', async (req: Request, res: Response) => {
   try {
     const { restaurantId, id } = req.params;
     const parsed = updateDeviceSchema.safeParse(req.body);
@@ -223,7 +223,7 @@ router.patch('/:restaurantId/devices/:id', async (req: Request, res: Response) =
 });
 
 // Delete device
-router.delete('/:restaurantId/devices/:id', async (req: Request, res: Response) => {
+router.delete('/:merchantId/devices/:id', async (req: Request, res: Response) => {
   try {
     const { restaurantId, id } = req.params;
 
@@ -246,7 +246,7 @@ router.delete('/:restaurantId/devices/:id', async (req: Request, res: Response) 
 });
 
 // Device heartbeat
-router.post('/:restaurantId/devices/:id/heartbeat', async (req: Request, res: Response) => {
+router.post('/:merchantId/devices/:id/heartbeat', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 

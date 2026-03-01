@@ -20,10 +20,10 @@ const prisma = new PrismaClient();
 
 // ============ Staff Pins ============
 
-// GET /:restaurantId/staff/pins
-router.get('/:restaurantId/staff/pins', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/pins
+router.get('/:merchantId/staff/pins', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const pins = await prisma.staffPin.findMany({
       where: { restaurantId, isActive: true },
       select: { id: true, name: true, role: true, teamMemberId: true },
@@ -38,10 +38,10 @@ router.get('/:restaurantId/staff/pins', async (req: Request, res: Response) => {
 
 // ============ Shifts ============
 
-// GET /:restaurantId/staff/shifts
-router.get('/:restaurantId/staff/shifts', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/shifts
+router.get('/:merchantId/staff/shifts', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { startDate, endDate, staffPinId } = req.query;
 
     if (!startDate || !endDate) {
@@ -69,10 +69,10 @@ router.get('/:restaurantId/staff/shifts', async (req: Request, res: Response) =>
   }
 });
 
-// POST /:restaurantId/staff/shifts/publish — MUST be before /:id route
-router.post('/:restaurantId/staff/shifts/publish', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/shifts/publish — MUST be before /:id route
+router.post('/:merchantId/staff/shifts/publish', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = PublishWeekSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -91,10 +91,10 @@ router.post('/:restaurantId/staff/shifts/publish', async (req: Request, res: Res
   }
 });
 
-// POST /:restaurantId/staff/shifts
-router.post('/:restaurantId/staff/shifts', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/shifts
+router.post('/:merchantId/staff/shifts', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = ShiftCreateSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -118,8 +118,8 @@ router.post('/:restaurantId/staff/shifts', async (req: Request, res: Response) =
   }
 });
 
-// PATCH /:restaurantId/staff/shifts/:id
-router.patch('/:restaurantId/staff/shifts/:id', async (req: Request, res: Response) => {
+// PATCH /:merchantId/staff/shifts/:id
+router.patch('/:merchantId/staff/shifts/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const parsed = ShiftUpdateSchema.safeParse(req.body);
@@ -145,8 +145,8 @@ router.patch('/:restaurantId/staff/shifts/:id', async (req: Request, res: Respon
   }
 });
 
-// DELETE /:restaurantId/staff/shifts/:id
-router.delete('/:restaurantId/staff/shifts/:id', async (req: Request, res: Response) => {
+// DELETE /:merchantId/staff/shifts/:id
+router.delete('/:merchantId/staff/shifts/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await laborService.deleteShift(id);
@@ -159,10 +159,10 @@ router.delete('/:restaurantId/staff/shifts/:id', async (req: Request, res: Respo
 
 // ============ Time Clock ============
 
-// POST /:restaurantId/staff/clock-in
-router.post('/:restaurantId/staff/clock-in', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/clock-in
+router.post('/:merchantId/staff/clock-in', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = ClockInSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -190,8 +190,8 @@ router.post('/:restaurantId/staff/clock-in', async (req: Request, res: Response)
   }
 });
 
-// POST /:restaurantId/staff/clock-out/:id
-router.post('/:restaurantId/staff/clock-out/:id', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/clock-out/:id
+router.post('/:merchantId/staff/clock-out/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const parsed = ClockOutSchema.safeParse(req.body);
@@ -212,10 +212,10 @@ router.post('/:restaurantId/staff/clock-out/:id', async (req: Request, res: Resp
   }
 });
 
-// GET /:restaurantId/staff/active-clocks
-router.get('/:restaurantId/staff/active-clocks', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/active-clocks
+router.get('/:merchantId/staff/active-clocks', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const clocks = await laborService.getActiveClocks(restaurantId);
     res.json(clocks);
   } catch (error: unknown) {
@@ -226,10 +226,10 @@ router.get('/:restaurantId/staff/active-clocks', async (req: Request, res: Respo
 
 // ============ Labor Report ============
 
-// GET /:restaurantId/staff/labor-report
-router.get('/:restaurantId/staff/labor-report', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/labor-report
+router.get('/:merchantId/staff/labor-report', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { startDate, endDate } = req.query;
 
     if (!startDate || !endDate) {
@@ -251,10 +251,10 @@ router.get('/:restaurantId/staff/labor-report', async (req: Request, res: Respon
 
 // ============ AI Recommendations ============
 
-// GET /:restaurantId/staff/labor-recommendations
-router.get('/:restaurantId/staff/labor-recommendations', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/labor-recommendations
+router.get('/:merchantId/staff/labor-recommendations', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const recommendations = await laborService.getLaborRecommendations(restaurantId);
     res.json(recommendations);
   } catch (error: unknown) {
@@ -265,10 +265,10 @@ router.get('/:restaurantId/staff/labor-recommendations', async (req: Request, re
 
 // ============ Labor Targets ============
 
-// GET /:restaurantId/staff/labor-targets
-router.get('/:restaurantId/staff/labor-targets', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/labor-targets
+router.get('/:merchantId/staff/labor-targets', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const targets = await laborService.getTargets(restaurantId);
     res.json(targets);
   } catch (error: unknown) {
@@ -277,10 +277,10 @@ router.get('/:restaurantId/staff/labor-targets', async (req: Request, res: Respo
   }
 });
 
-// PUT /:restaurantId/staff/labor-targets
-router.put('/:restaurantId/staff/labor-targets', async (req: Request, res: Response) => {
+// PUT /:merchantId/staff/labor-targets
+router.put('/:merchantId/staff/labor-targets', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = LaborTargetSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -302,10 +302,10 @@ router.put('/:restaurantId/staff/labor-targets', async (req: Request, res: Respo
 // ============ Schedule Templates ============
 // IMPORTANT: These routes MUST be before /:staffPinId/ routes to avoid param collision
 
-// GET /:restaurantId/staff/schedule-templates
-router.get('/:restaurantId/staff/schedule-templates', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/schedule-templates
+router.get('/:merchantId/staff/schedule-templates', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const templates = await prisma.scheduleTemplate.findMany({
       where: { restaurantId },
       include: { shifts: true },
@@ -334,10 +334,10 @@ router.get('/:restaurantId/staff/schedule-templates', async (req: Request, res: 
   }
 });
 
-// POST /:restaurantId/staff/schedule-templates — save current week as template
-router.post('/:restaurantId/staff/schedule-templates', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/schedule-templates — save current week as template
+router.post('/:merchantId/staff/schedule-templates', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { name, weekStartDate } = req.body as { name: string; weekStartDate: string };
 
     if (!name?.trim()) {
@@ -409,8 +409,8 @@ router.post('/:restaurantId/staff/schedule-templates', async (req: Request, res:
   }
 });
 
-// POST /:restaurantId/staff/schedule-templates/:templateId/apply
-router.post('/:restaurantId/staff/schedule-templates/:templateId/apply', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/schedule-templates/:templateId/apply
+router.post('/:merchantId/staff/schedule-templates/:templateId/apply', async (req: Request, res: Response) => {
   try {
     const { restaurantId, templateId } = req.params;
     const { weekStartDate } = req.body as { weekStartDate: string };
@@ -472,8 +472,8 @@ router.post('/:restaurantId/staff/schedule-templates/:templateId/apply', async (
   }
 });
 
-// DELETE /:restaurantId/staff/schedule-templates/:templateId
-router.delete('/:restaurantId/staff/schedule-templates/:templateId', async (req: Request, res: Response) => {
+// DELETE /:merchantId/staff/schedule-templates/:templateId
+router.delete('/:merchantId/staff/schedule-templates/:templateId', async (req: Request, res: Response) => {
   try {
     const { restaurantId, templateId } = req.params;
 
@@ -496,10 +496,10 @@ router.delete('/:restaurantId/staff/schedule-templates/:templateId', async (req:
 
 // ============ Copy Previous Week ============
 
-// POST /:restaurantId/staff/copy-week
-router.post('/:restaurantId/staff/copy-week', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/copy-week
+router.post('/:merchantId/staff/copy-week', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { targetWeekStart } = req.body as { targetWeekStart: string };
 
     if (!targetWeekStart) {
@@ -570,10 +570,10 @@ router.post('/:restaurantId/staff/copy-week', async (req: Request, res: Response
 
 // ============ Live Labor Snapshot ============
 
-// GET /:restaurantId/staff/labor-live
-router.get('/:restaurantId/staff/labor-live', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/labor-live
+router.get('/:merchantId/staff/labor-live', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const activeClocks = await prisma.timeEntry.findMany({
       where: {
@@ -625,10 +625,10 @@ router.get('/:restaurantId/staff/labor-live', async (req: Request, res: Response
 // ============ Staff Notifications ============
 // IMPORTANT: These routes MUST be before /:staffPinId/ routes to avoid param collision
 
-// GET /:restaurantId/staff/notifications?pinId=...
-router.get('/:restaurantId/staff/notifications', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/notifications?pinId=...
+router.get('/:merchantId/staff/notifications', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { pinId } = req.query;
 
     if (!pinId) {
@@ -649,8 +649,8 @@ router.get('/:restaurantId/staff/notifications', async (req: Request, res: Respo
   }
 });
 
-// PATCH /:restaurantId/staff/notifications/:notificationId/read
-router.patch('/:restaurantId/staff/notifications/:notificationId/read', async (req: Request, res: Response) => {
+// PATCH /:merchantId/staff/notifications/:notificationId/read
+router.patch('/:merchantId/staff/notifications/:notificationId/read', async (req: Request, res: Response) => {
   try {
     const { notificationId } = req.params;
 
@@ -666,10 +666,10 @@ router.patch('/:restaurantId/staff/notifications/:notificationId/read', async (r
   }
 });
 
-// POST /:restaurantId/staff/notifications/schedule-published
-router.post('/:restaurantId/staff/notifications/schedule-published', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/notifications/schedule-published
+router.post('/:merchantId/staff/notifications/schedule-published', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { weekStart } = req.body;
 
     if (!weekStart) {
@@ -714,10 +714,10 @@ router.post('/:restaurantId/staff/notifications/schedule-published', async (req:
   }
 });
 
-// POST /:restaurantId/staff/notifications/announcement
-router.post('/:restaurantId/staff/notifications/announcement', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/notifications/announcement
+router.post('/:merchantId/staff/notifications/announcement', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { message, recipientPinIds } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -762,8 +762,8 @@ router.post('/:restaurantId/staff/notifications/announcement', async (req: Reque
 
 // ============ Staff Portal — Earnings ============
 
-// GET /:restaurantId/staff/:staffPinId/earnings
-router.get('/:restaurantId/staff/:staffPinId/earnings', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/:staffPinId/earnings
+router.get('/:merchantId/staff/:staffPinId/earnings', async (req: Request, res: Response) => {
   try {
     const { restaurantId, staffPinId } = req.params;
     const { startDate, endDate } = req.query;
@@ -850,8 +850,8 @@ router.get('/:restaurantId/staff/:staffPinId/earnings', async (req: Request, res
 
 // ============ Staff Portal — Availability ============
 
-// GET /:restaurantId/staff/:staffPinId/availability
-router.get('/:restaurantId/staff/:staffPinId/availability', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/:staffPinId/availability
+router.get('/:merchantId/staff/:staffPinId/availability', async (req: Request, res: Response) => {
   try {
     const { restaurantId, staffPinId } = req.params;
 
@@ -867,8 +867,8 @@ router.get('/:restaurantId/staff/:staffPinId/availability', async (req: Request,
   }
 });
 
-// PUT /:restaurantId/staff/:staffPinId/availability
-router.put('/:restaurantId/staff/:staffPinId/availability', async (req: Request, res: Response) => {
+// PUT /:merchantId/staff/:staffPinId/availability
+router.put('/:merchantId/staff/:staffPinId/availability', async (req: Request, res: Response) => {
   try {
     const { restaurantId, staffPinId } = req.params;
     const { preferences } = req.body as {
@@ -924,8 +924,8 @@ router.put('/:restaurantId/staff/:staffPinId/availability', async (req: Request,
 
 // ============ Staff Portal — Swap Requests ============
 
-// GET /:restaurantId/staff/:staffPinId/swap-requests
-router.get('/:restaurantId/staff/:staffPinId/swap-requests', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/:staffPinId/swap-requests
+router.get('/:merchantId/staff/:staffPinId/swap-requests', async (req: Request, res: Response) => {
   try {
     const { restaurantId, staffPinId } = req.params;
 
@@ -970,10 +970,10 @@ router.get('/:restaurantId/staff/:staffPinId/swap-requests', async (req: Request
   }
 });
 
-// POST /:restaurantId/staff/swap-requests
-router.post('/:restaurantId/staff/swap-requests', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/swap-requests
+router.post('/:merchantId/staff/swap-requests', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { shiftId, requestorPinId, reason } = req.body as {
       shiftId: string;
       requestorPinId: string;
@@ -1023,8 +1023,8 @@ router.post('/:restaurantId/staff/swap-requests', async (req: Request, res: Resp
   }
 });
 
-// PATCH /:restaurantId/staff/swap-requests/:requestId
-router.patch('/:restaurantId/staff/swap-requests/:requestId', async (req: Request, res: Response) => {
+// PATCH /:merchantId/staff/swap-requests/:requestId
+router.patch('/:merchantId/staff/swap-requests/:requestId', async (req: Request, res: Response) => {
   try {
     const { requestId } = req.params;
     const { status, respondedBy } = req.body as {
@@ -1086,10 +1086,10 @@ router.patch('/:restaurantId/staff/swap-requests/:requestId', async (req: Reques
 
 // ============ Workweek Config (Step 15) ============
 
-// GET /:restaurantId/staff/workweek-config
-router.get('/:restaurantId/staff/workweek-config', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/workweek-config
+router.get('/:merchantId/staff/workweek-config', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const config = await prisma.workweekConfig.findUnique({
       where: { restaurantId },
     });
@@ -1117,10 +1117,10 @@ router.get('/:restaurantId/staff/workweek-config', async (req: Request, res: Res
   }
 });
 
-// PUT /:restaurantId/staff/workweek-config
-router.put('/:restaurantId/staff/workweek-config', async (req: Request, res: Response) => {
+// PUT /:merchantId/staff/workweek-config
+router.put('/:merchantId/staff/workweek-config', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = WorkweekConfigSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -1162,8 +1162,8 @@ router.put('/:restaurantId/staff/workweek-config', async (req: Request, res: Res
 
 // ============ Timecard Edit Requests (Step 11) ============
 
-// GET /:restaurantId/staff/:staffPinId/timecard-edits — staff's own edit requests
-router.get('/:restaurantId/staff/:staffPinId/timecard-edits', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/:staffPinId/timecard-edits — staff's own edit requests
+router.get('/:merchantId/staff/:staffPinId/timecard-edits', async (req: Request, res: Response) => {
   try {
     const { restaurantId, staffPinId } = req.params;
 
@@ -1201,10 +1201,10 @@ router.get('/:restaurantId/staff/:staffPinId/timecard-edits', async (req: Reques
   }
 });
 
-// GET /:restaurantId/staff/timecard-edits — manager view: all edit requests (filterable by status)
-router.get('/:restaurantId/staff/timecard-edits', async (req: Request, res: Response) => {
+// GET /:merchantId/staff/timecard-edits — manager view: all edit requests (filterable by status)
+router.get('/:merchantId/staff/timecard-edits', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { status } = req.query;
 
     const where: Record<string, unknown> = { restaurantId };
@@ -1247,10 +1247,10 @@ router.get('/:restaurantId/staff/timecard-edits', async (req: Request, res: Resp
   }
 });
 
-// POST /:restaurantId/staff/timecard-edits — staff requests an edit
-router.post('/:restaurantId/staff/timecard-edits', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/timecard-edits — staff requests an edit
+router.post('/:merchantId/staff/timecard-edits', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = TimecardEditRequestSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -1305,8 +1305,8 @@ router.post('/:restaurantId/staff/timecard-edits', async (req: Request, res: Res
   }
 });
 
-// PATCH /:restaurantId/staff/timecard-edits/:editId/approve
-router.patch('/:restaurantId/staff/timecard-edits/:editId/approve', async (req: Request, res: Response) => {
+// PATCH /:merchantId/staff/timecard-edits/:editId/approve
+router.patch('/:merchantId/staff/timecard-edits/:editId/approve', async (req: Request, res: Response) => {
   try {
     const { restaurantId, editId } = req.params;
     const parsed = TimecardEditResponseSchema.safeParse(req.body);
@@ -1375,8 +1375,8 @@ router.patch('/:restaurantId/staff/timecard-edits/:editId/approve', async (req: 
   }
 });
 
-// PATCH /:restaurantId/staff/timecard-edits/:editId/deny
-router.patch('/:restaurantId/staff/timecard-edits/:editId/deny', async (req: Request, res: Response) => {
+// PATCH /:merchantId/staff/timecard-edits/:editId/deny
+router.patch('/:merchantId/staff/timecard-edits/:editId/deny', async (req: Request, res: Response) => {
   try {
     const { restaurantId, editId } = req.params;
     const parsed = TimecardEditResponseSchema.safeParse(req.body);
@@ -1430,10 +1430,10 @@ router.patch('/:restaurantId/staff/timecard-edits/:editId/deny', async (req: Req
 
 // ============ Schedule Enforcement (Step 12) ============
 
-// POST /:restaurantId/staff/validate-clock-in — pre-check before allowing clock-in
-router.post('/:restaurantId/staff/validate-clock-in', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/validate-clock-in — pre-check before allowing clock-in
+router.post('/:merchantId/staff/validate-clock-in', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = ValidateClockInSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -1518,10 +1518,10 @@ router.post('/:restaurantId/staff/validate-clock-in', async (req: Request, res: 
   }
 });
 
-// POST /:restaurantId/staff/clock-in-with-override — manager override for schedule enforcement
-router.post('/:restaurantId/staff/clock-in-with-override', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/clock-in-with-override — manager override for schedule enforcement
+router.post('/:merchantId/staff/clock-in-with-override', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = ClockInOverrideSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -1571,10 +1571,10 @@ router.post('/:restaurantId/staff/clock-in-with-override', async (req: Request, 
 
 // ============ Auto Clock-Out (Step 13) ============
 
-// POST /:restaurantId/staff/auto-clock-out — close orphaned time entries
-router.post('/:restaurantId/staff/auto-clock-out', async (req: Request, res: Response) => {
+// POST /:merchantId/staff/auto-clock-out — close orphaned time entries
+router.post('/:merchantId/staff/auto-clock-out', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     // Load restaurant timeclock settings
     const restaurant = await prisma.restaurant.findUnique({
@@ -1673,10 +1673,10 @@ router.post('/:restaurantId/staff/auto-clock-out', async (req: Request, res: Res
 
 // ============ Break Types ============
 
-// GET /:restaurantId/break-types
-router.get('/:restaurantId/break-types', async (req: Request, res: Response) => {
+// GET /:merchantId/break-types
+router.get('/:merchantId/break-types', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const breakTypes = await prisma.breakType.findMany({
       where: { restaurantId },
       orderBy: { name: 'asc' },
@@ -1688,10 +1688,10 @@ router.get('/:restaurantId/break-types', async (req: Request, res: Response) => 
   }
 });
 
-// POST /:restaurantId/break-types
-router.post('/:restaurantId/break-types', async (req: Request, res: Response) => {
+// POST /:merchantId/break-types
+router.post('/:merchantId/break-types', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { name, expectedMinutes, isPaid, isActive } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -1715,8 +1715,8 @@ router.post('/:restaurantId/break-types', async (req: Request, res: Response) =>
   }
 });
 
-// PATCH /:restaurantId/break-types/:id
-router.patch('/:restaurantId/break-types/:id', async (req: Request, res: Response) => {
+// PATCH /:merchantId/break-types/:id
+router.patch('/:merchantId/break-types/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const data: Record<string, unknown> = {};
@@ -1742,10 +1742,10 @@ router.patch('/:restaurantId/break-types/:id', async (req: Request, res: Respons
 
 // ============ Payroll Periods ============
 
-// GET /:restaurantId/labor/payroll
-router.get('/:restaurantId/labor/payroll', async (req: Request, res: Response) => {
+// GET /:merchantId/labor/payroll
+router.get('/:merchantId/labor/payroll', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const periods = await prisma.payrollPeriod.findMany({
       where: { restaurantId },
       orderBy: { startDate: 'desc' },
@@ -1757,10 +1757,10 @@ router.get('/:restaurantId/labor/payroll', async (req: Request, res: Response) =
   }
 });
 
-// POST /:restaurantId/labor/payroll
-router.post('/:restaurantId/labor/payroll', async (req: Request, res: Response) => {
+// POST /:merchantId/labor/payroll
+router.post('/:merchantId/labor/payroll', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { startDate, endDate } = req.body;
 
     if (!startDate || !endDate) {
@@ -1782,8 +1782,8 @@ router.post('/:restaurantId/labor/payroll', async (req: Request, res: Response) 
   }
 });
 
-// PATCH /:restaurantId/labor/payroll/:id
-router.patch('/:restaurantId/labor/payroll/:id', async (req: Request, res: Response) => {
+// PATCH /:merchantId/labor/payroll/:id
+router.patch('/:merchantId/labor/payroll/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const data: Record<string, unknown> = {};
@@ -1807,10 +1807,10 @@ router.patch('/:restaurantId/labor/payroll/:id', async (req: Request, res: Respo
 
 // ============ Commission Rules ============
 
-// GET /:restaurantId/labor/commissions/rules
-router.get('/:restaurantId/labor/commissions/rules', async (req: Request, res: Response) => {
+// GET /:merchantId/labor/commissions/rules
+router.get('/:merchantId/labor/commissions/rules', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const rules = await prisma.commissionRule.findMany({
       where: { restaurantId },
       orderBy: { name: 'asc' },
@@ -1822,10 +1822,10 @@ router.get('/:restaurantId/labor/commissions/rules', async (req: Request, res: R
   }
 });
 
-// POST /:restaurantId/labor/commissions/rules
-router.post('/:restaurantId/labor/commissions/rules', async (req: Request, res: Response) => {
+// POST /:merchantId/labor/commissions/rules
+router.post('/:merchantId/labor/commissions/rules', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { name, type, value, appliesTo, jobTitles, isActive } = req.body;
 
     if (!name || !type || value === undefined) {
@@ -1851,8 +1851,8 @@ router.post('/:restaurantId/labor/commissions/rules', async (req: Request, res: 
   }
 });
 
-// PATCH /:restaurantId/labor/commissions/rules/:ruleId
-router.patch('/:restaurantId/labor/commissions/rules/:ruleId', async (req: Request, res: Response) => {
+// PATCH /:merchantId/labor/commissions/rules/:ruleId
+router.patch('/:merchantId/labor/commissions/rules/:ruleId', async (req: Request, res: Response) => {
   try {
     const { ruleId } = req.params;
     const data: Record<string, unknown> = {};
@@ -1878,8 +1878,8 @@ router.patch('/:restaurantId/labor/commissions/rules/:ruleId', async (req: Reque
   }
 });
 
-// DELETE /:restaurantId/labor/commissions/rules/:ruleId
-router.delete('/:restaurantId/labor/commissions/rules/:ruleId', async (req: Request, res: Response) => {
+// DELETE /:merchantId/labor/commissions/rules/:ruleId
+router.delete('/:merchantId/labor/commissions/rules/:ruleId', async (req: Request, res: Response) => {
   try {
     const { ruleId } = req.params;
     await prisma.commissionRule.delete({ where: { id: ruleId } });
@@ -1896,10 +1896,10 @@ router.delete('/:restaurantId/labor/commissions/rules/:ruleId', async (req: Requ
 
 // ============ Compliance Alerts ============
 
-// GET /:restaurantId/labor/compliance/alerts
-router.get('/:restaurantId/labor/compliance/alerts', async (req: Request, res: Response) => {
+// GET /:merchantId/labor/compliance/alerts
+router.get('/:merchantId/labor/compliance/alerts', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { resolved } = req.query;
 
     const where: Record<string, unknown> = { restaurantId };
@@ -1918,10 +1918,10 @@ router.get('/:restaurantId/labor/compliance/alerts', async (req: Request, res: R
   }
 });
 
-// GET /:restaurantId/labor/compliance/summary
-router.get('/:restaurantId/labor/compliance/summary', async (req: Request, res: Response) => {
+// GET /:merchantId/labor/compliance/summary
+router.get('/:merchantId/labor/compliance/summary', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const alerts = await prisma.complianceAlert.findMany({
       where: { restaurantId, isResolved: false },

@@ -21,7 +21,7 @@ beforeEach(() => {
   resetPrismaMock();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/kiosk-profiles`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/kiosk-profiles`;
 const PROFILE_ID = '11111111-1111-4111-a111-111111111111';
 
 const VALID_PROFILE = {

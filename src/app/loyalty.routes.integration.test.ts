@@ -33,7 +33,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}`;
 const CUSTOMER_ID = '00000000-0000-0000-0000-000000000010';
 
 const REWARD = {

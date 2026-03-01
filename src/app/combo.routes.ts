@@ -31,9 +31,9 @@ const updateComboSchema = z.object({
 
 // --- Routes ---
 
-// GET /:restaurantId/combos
-router.get('/:restaurantId/combos', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// GET /:merchantId/combos
+router.get('/:merchantId/combos', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   try {
     const combos = await prisma.combo.findMany({
       where: { restaurantId },
@@ -46,9 +46,9 @@ router.get('/:restaurantId/combos', async (req: Request, res: Response) => {
   }
 });
 
-// POST /:restaurantId/combos
-router.post('/:restaurantId/combos', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// POST /:merchantId/combos
+router.post('/:merchantId/combos', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const parsed = createComboSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -72,8 +72,8 @@ router.post('/:restaurantId/combos', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /:restaurantId/combos/:comboId
-router.patch('/:restaurantId/combos/:comboId', async (req: Request, res: Response) => {
+// PATCH /:merchantId/combos/:comboId
+router.patch('/:merchantId/combos/:comboId', async (req: Request, res: Response) => {
   const { restaurantId, comboId } = req.params;
   const parsed = updateComboSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -97,8 +97,8 @@ router.patch('/:restaurantId/combos/:comboId', async (req: Request, res: Respons
   }
 });
 
-// DELETE /:restaurantId/combos/:comboId
-router.delete('/:restaurantId/combos/:comboId', async (req: Request, res: Response) => {
+// DELETE /:merchantId/combos/:comboId
+router.delete('/:merchantId/combos/:comboId', async (req: Request, res: Response) => {
   const { restaurantId, comboId } = req.params;
   try {
     await prisma.combo.delete({

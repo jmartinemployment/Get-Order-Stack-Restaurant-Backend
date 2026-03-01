@@ -100,9 +100,9 @@ const returnPolicySchema = z.object({
 
 // ============ Retail Items ============
 
-router.get('/:restaurantId/retail/items', async (req: Request, res: Response) => {
+router.get('/:merchantId/retail/items', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const items = await prisma.retailItem.findMany({
       where: { restaurantId },
       include: { category: true, stock: true },
@@ -115,9 +115,9 @@ router.get('/:restaurantId/retail/items', async (req: Request, res: Response) =>
   }
 });
 
-router.post('/:restaurantId/retail/items', async (req: Request, res: Response) => {
+router.post('/:merchantId/retail/items', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createRetailItemSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -134,7 +134,7 @@ router.post('/:restaurantId/retail/items', async (req: Request, res: Response) =
   }
 });
 
-router.patch('/:restaurantId/retail/items/:itemId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/retail/items/:itemId', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const parsed = updateRetailItemSchema.safeParse(req.body);
@@ -158,7 +158,7 @@ router.patch('/:restaurantId/retail/items/:itemId', async (req: Request, res: Re
   }
 });
 
-router.delete('/:restaurantId/retail/items/:itemId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/retail/items/:itemId', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     await prisma.retailItem.delete({ where: { id: itemId } });
@@ -175,9 +175,9 @@ router.delete('/:restaurantId/retail/items/:itemId', async (req: Request, res: R
 
 // ============ Retail Categories ============
 
-router.get('/:restaurantId/retail/categories', async (req: Request, res: Response) => {
+router.get('/:merchantId/retail/categories', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const categories = await prisma.retailCategory.findMany({
       where: { restaurantId },
       include: { children: true },
@@ -190,9 +190,9 @@ router.get('/:restaurantId/retail/categories', async (req: Request, res: Respons
   }
 });
 
-router.post('/:restaurantId/retail/categories', async (req: Request, res: Response) => {
+router.post('/:merchantId/retail/categories', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createRetailCategorySchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -208,7 +208,7 @@ router.post('/:restaurantId/retail/categories', async (req: Request, res: Respon
   }
 });
 
-router.patch('/:restaurantId/retail/categories/:catId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/retail/categories/:catId', async (req: Request, res: Response) => {
   try {
     const { catId } = req.params;
     const parsed = updateRetailCategorySchema.safeParse(req.body);
@@ -231,7 +231,7 @@ router.patch('/:restaurantId/retail/categories/:catId', async (req: Request, res
   }
 });
 
-router.delete('/:restaurantId/retail/categories/:catId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/retail/categories/:catId', async (req: Request, res: Response) => {
   try {
     const { catId } = req.params;
     await prisma.retailCategory.delete({ where: { id: catId } });
@@ -248,9 +248,9 @@ router.delete('/:restaurantId/retail/categories/:catId', async (req: Request, re
 
 // ============ Retail Option Sets ============
 
-router.get('/:restaurantId/retail/option-sets', async (req: Request, res: Response) => {
+router.get('/:merchantId/retail/option-sets', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const sets = await prisma.retailOptionSet.findMany({
       where: { restaurantId },
       include: { options: { orderBy: { sortOrder: 'asc' } } },
@@ -263,9 +263,9 @@ router.get('/:restaurantId/retail/option-sets', async (req: Request, res: Respon
   }
 });
 
-router.post('/:restaurantId/retail/option-sets', async (req: Request, res: Response) => {
+router.post('/:merchantId/retail/option-sets', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createRetailOptionSetSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -287,7 +287,7 @@ router.post('/:restaurantId/retail/option-sets', async (req: Request, res: Respo
   }
 });
 
-router.patch('/:restaurantId/retail/option-sets/:setId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/retail/option-sets/:setId', async (req: Request, res: Response) => {
   try {
     const { setId } = req.params;
     const parsed = updateRetailOptionSetSchema.safeParse(req.body);
@@ -323,7 +323,7 @@ router.patch('/:restaurantId/retail/option-sets/:setId', async (req: Request, re
   }
 });
 
-router.delete('/:restaurantId/retail/option-sets/:setId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/retail/option-sets/:setId', async (req: Request, res: Response) => {
   try {
     const { setId } = req.params;
     await prisma.retailOptionSet.delete({ where: { id: setId } });
@@ -340,9 +340,9 @@ router.delete('/:restaurantId/retail/option-sets/:setId', async (req: Request, r
 
 // ============ Retail Inventory / Stock ============
 
-router.get('/:restaurantId/retail/inventory/stock', async (req: Request, res: Response) => {
+router.get('/:merchantId/retail/inventory/stock', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const stock = await prisma.retailStock.findMany({
       where: { restaurantId },
       include: { retailItem: { select: { id: true, name: true, sku: true, barcode: true, price: true } } },
@@ -354,9 +354,9 @@ router.get('/:restaurantId/retail/inventory/stock', async (req: Request, res: Re
   }
 });
 
-router.get('/:restaurantId/retail/inventory/alerts', async (req: Request, res: Response) => {
+router.get('/:merchantId/retail/inventory/alerts', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const stock = await prisma.retailStock.findMany({
       where: { restaurantId },
       include: { retailItem: { select: { id: true, name: true, sku: true } } },
@@ -380,9 +380,9 @@ router.get('/:restaurantId/retail/inventory/alerts', async (req: Request, res: R
 
 // ============ Layaways ============
 
-router.get('/:restaurantId/retail/layaways', async (req: Request, res: Response) => {
+router.get('/:merchantId/retail/layaways', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const layaways = await prisma.layaway.findMany({
       where: { restaurantId },
       orderBy: { createdAt: 'desc' },
@@ -394,9 +394,9 @@ router.get('/:restaurantId/retail/layaways', async (req: Request, res: Response)
   }
 });
 
-router.post('/:restaurantId/retail/layaways', async (req: Request, res: Response) => {
+router.post('/:merchantId/retail/layaways', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createLayawaySchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -414,9 +414,9 @@ router.post('/:restaurantId/retail/layaways', async (req: Request, res: Response
 
 // ============ Quick Keys ============
 
-router.get('/:restaurantId/retail/quick-keys', async (req: Request, res: Response) => {
+router.get('/:merchantId/retail/quick-keys', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const keys = await prisma.retailQuickKey.findMany({
       where: { restaurantId },
       orderBy: { position: 'asc' },
@@ -428,9 +428,9 @@ router.get('/:restaurantId/retail/quick-keys', async (req: Request, res: Respons
   }
 });
 
-router.put('/:restaurantId/retail/quick-keys', async (req: Request, res: Response) => {
+router.put('/:merchantId/retail/quick-keys', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = quickKeysSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -455,9 +455,9 @@ router.put('/:restaurantId/retail/quick-keys', async (req: Request, res: Respons
 
 // ============ Receipt Template (JSON on merchantProfile) ============
 
-router.get('/:restaurantId/retail/receipt-template', async (req: Request, res: Response) => {
+router.get('/:merchantId/retail/receipt-template', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
       select: { merchantProfile: true },
@@ -470,9 +470,9 @@ router.get('/:restaurantId/retail/receipt-template', async (req: Request, res: R
   }
 });
 
-router.put('/:restaurantId/retail/receipt-template', async (req: Request, res: Response) => {
+router.put('/:merchantId/retail/receipt-template', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = receiptTemplateSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -497,9 +497,9 @@ router.put('/:restaurantId/retail/receipt-template', async (req: Request, res: R
 
 // ============ Return Policy (JSON on merchantProfile) ============
 
-router.get('/:restaurantId/retail/return-policy', async (req: Request, res: Response) => {
+router.get('/:merchantId/retail/return-policy', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
       select: { merchantProfile: true },
@@ -512,9 +512,9 @@ router.get('/:restaurantId/retail/return-policy', async (req: Request, res: Resp
   }
 });
 
-router.put('/:restaurantId/retail/return-policy', async (req: Request, res: Response) => {
+router.put('/:merchantId/retail/return-policy', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = returnPolicySchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -539,9 +539,9 @@ router.put('/:restaurantId/retail/return-policy', async (req: Request, res: Resp
 
 // ============ Retail Sales Report ============
 
-router.get('/:restaurantId/retail/reports/sales', async (req: Request, res: Response) => {
+router.get('/:merchantId/retail/reports/sales', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { startDate, endDate } = req.query;
 
     const where: Record<string, unknown> = {
@@ -580,9 +580,9 @@ router.get('/:restaurantId/retail/reports/sales', async (req: Request, res: Resp
 
 // ============ Retail Ecommerce Orders ============
 
-router.get('/:restaurantId/retail/ecommerce/orders', async (req: Request, res: Response) => {
+router.get('/:merchantId/retail/ecommerce/orders', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const orders = await prisma.order.findMany({
       where: {
         restaurantId,

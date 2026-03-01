@@ -21,10 +21,10 @@ const patchFeaturesSchema = z.object({
   taxEstimation: z.boolean().optional(),
 }).strict();
 
-// GET /:restaurantId/ai-admin/config
-router.get('/:restaurantId/ai-admin/config', async (req, res) => {
+// GET /:merchantId/ai-admin/config
+router.get('/:merchantId/ai-admin/config', async (req, res) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const [keyStatus, features, usage] = await Promise.all([
       aiCredentialsService.getKeyStatus(restaurantId),
@@ -45,10 +45,10 @@ router.get('/:restaurantId/ai-admin/config', async (req, res) => {
   }
 });
 
-// PUT /:restaurantId/ai-admin/api-key
-router.put('/:restaurantId/ai-admin/api-key', async (req, res) => {
+// PUT /:merchantId/ai-admin/api-key
+router.put('/:merchantId/ai-admin/api-key', async (req, res) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = putApiKeySchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -64,10 +64,10 @@ router.put('/:restaurantId/ai-admin/api-key', async (req, res) => {
   }
 });
 
-// DELETE /:restaurantId/ai-admin/api-key
-router.delete('/:restaurantId/ai-admin/api-key', async (req, res) => {
+// DELETE /:merchantId/ai-admin/api-key
+router.delete('/:merchantId/ai-admin/api-key', async (req, res) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     await aiCredentialsService.deleteApiKey(restaurantId);
     res.json({ configured: false, keyLastFour: null, isValid: false });
   } catch (error: unknown) {
@@ -76,10 +76,10 @@ router.delete('/:restaurantId/ai-admin/api-key', async (req, res) => {
   }
 });
 
-// PATCH /:restaurantId/ai-admin/features
-router.patch('/:restaurantId/ai-admin/features', async (req, res) => {
+// PATCH /:merchantId/ai-admin/features
+router.patch('/:merchantId/ai-admin/features', async (req, res) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = patchFeaturesSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -119,10 +119,10 @@ router.patch('/:restaurantId/ai-admin/features', async (req, res) => {
   }
 });
 
-// GET /:restaurantId/ai-admin/usage
-router.get('/:restaurantId/ai-admin/usage', async (req, res) => {
+// GET /:merchantId/ai-admin/usage
+router.get('/:merchantId/ai-admin/usage', async (req, res) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { startDate, endDate } = req.query;
 
     let start: Date;

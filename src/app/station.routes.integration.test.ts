@@ -21,9 +21,9 @@ beforeEach(() => {
   resetPrismaMock();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/stations`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/stations`;
 
-// ============ GET /api/restaurant/:restaurantId/stations ============
+// ============ GET /api/merchant/:merchantId/stations ============
 
 describe('GET /stations', () => {
   it('returns 401 without auth', async () => {
@@ -63,7 +63,7 @@ describe('GET /stations', () => {
   });
 });
 
-// ============ POST /api/restaurant/:restaurantId/stations ============
+// ============ POST /api/merchant/:merchantId/stations ============
 
 describe('POST /stations', () => {
   const validBody = { name: 'Grill Station' };
@@ -106,7 +106,7 @@ describe('POST /stations', () => {
   });
 });
 
-// ============ PATCH /api/restaurant/:restaurantId/stations/:stationId ============
+// ============ PATCH /api/merchant/:merchantId/stations/:stationId ============
 
 describe('PATCH /stations/:stationId', () => {
   const url = `${BASE_URL}/${STATION.id}`;
@@ -143,7 +143,7 @@ describe('PATCH /stations/:stationId', () => {
   });
 });
 
-// ============ DELETE /api/restaurant/:restaurantId/stations/:stationId ============
+// ============ DELETE /api/merchant/:merchantId/stations/:stationId ============
 
 describe('DELETE /stations/:stationId', () => {
   const url = `${BASE_URL}/${STATION.id}`;
@@ -169,7 +169,7 @@ describe('DELETE /stations/:stationId', () => {
   });
 });
 
-// ============ PUT /api/restaurant/:restaurantId/stations/:stationId/categories ============
+// ============ PUT /api/merchant/:merchantId/stations/:stationId/categories ============
 
 describe('PUT /stations/:stationId/categories', () => {
   const url = `${BASE_URL}/${STATION.id}/categories`;
@@ -208,10 +208,10 @@ describe('PUT /stations/:stationId/categories', () => {
   });
 });
 
-// ============ GET /api/restaurant/:restaurantId/station-category-mappings ============
+// ============ GET /api/merchant/:merchantId/station-category-mappings ============
 
 describe('GET /station-category-mappings', () => {
-  const url = `/api/restaurant/${RESTAURANT_ID}/station-category-mappings`;
+  const url = `/api/merchant/${RESTAURANT_ID}/station-category-mappings`;
 
   it('returns flat mapping list', async () => {
     prisma.stationCategoryMapping.findMany.mockResolvedValue([

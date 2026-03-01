@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supplierCredentialsService } from '../services/supplier-credentials.service';
-import { requireAuth, requireRestaurantManager } from '../middleware/auth.middleware';
+import { requireAuth, requireMerchantManager } from '../middleware/auth.middleware';
 
 const router = Router({ mergeParams: true });
 
@@ -34,9 +34,9 @@ function toFieldErrors(error: z.ZodError): Record<string, string[]> {
 }
 
 // GET /supplier-credentials — credential summary (no secrets)
-router.get('/supplier-credentials', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.get('/supplier-credentials', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const summary = await supplierCredentialsService.getSummary(restaurantId);
     res.json(summary);
   } catch (error: unknown) {
@@ -46,9 +46,9 @@ router.get('/supplier-credentials', requireAuth, requireRestaurantManager, async
 });
 
 // PUT /supplier-credentials/sysco — upsert Sysco credentials
-router.put('/supplier-credentials/sysco', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.put('/supplier-credentials/sysco', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = SyscoCredentialSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', fields: toFieldErrors(parsed.error) });
@@ -63,9 +63,9 @@ router.put('/supplier-credentials/sysco', requireAuth, requireRestaurantManager,
 });
 
 // PUT /supplier-credentials/gfs — upsert GFS credentials
-router.put('/supplier-credentials/gfs', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.put('/supplier-credentials/gfs', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = GfsCredentialSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', fields: toFieldErrors(parsed.error) });
@@ -80,9 +80,9 @@ router.put('/supplier-credentials/gfs', requireAuth, requireRestaurantManager, a
 });
 
 // DELETE /supplier-credentials/sysco — clear Sysco credentials
-router.delete('/supplier-credentials/sysco', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.delete('/supplier-credentials/sysco', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const summary = await supplierCredentialsService.clearSysco(restaurantId);
     res.json(summary);
   } catch (error: unknown) {
@@ -92,9 +92,9 @@ router.delete('/supplier-credentials/sysco', requireAuth, requireRestaurantManag
 });
 
 // DELETE /supplier-credentials/gfs — clear GFS credentials
-router.delete('/supplier-credentials/gfs', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.delete('/supplier-credentials/gfs', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const summary = await supplierCredentialsService.clearGfs(restaurantId);
     res.json(summary);
   } catch (error: unknown) {
@@ -104,9 +104,9 @@ router.delete('/supplier-credentials/gfs', requireAuth, requireRestaurantManager
 });
 
 // POST /supplier-credentials/test — test connection to supplier API
-router.post('/supplier-credentials/test', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.post('/supplier-credentials/test', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = TestConnectionSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'Validation failed', fields: toFieldErrors(parsed.error) });

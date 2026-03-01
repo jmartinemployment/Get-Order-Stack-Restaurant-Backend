@@ -21,7 +21,7 @@ beforeEach(() => {
   resetPrismaMock();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/primary-categories`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/primary-categories`;
 const CATEGORY_ID = '11111111-1111-4111-a111-111111111111';
 const SUBCATEGORY_ID = '22222222-2222-4222-a222-222222222222';
 
@@ -182,7 +182,7 @@ describe('PATCH /menu/categories/:categoryId/assign', () => {
     prisma.menuCategory.update.mockResolvedValue({ id: SUBCATEGORY_ID, primaryCategoryId: CATEGORY_ID });
 
     const res = await api.owner
-      .patch(`/api/restaurant/${RESTAURANT_ID}/menu/categories/${SUBCATEGORY_ID}/assign`)
+      .patch(`/api/merchant/${RESTAURANT_ID}/menu/categories/${SUBCATEGORY_ID}/assign`)
       .send({ primaryCategoryId: CATEGORY_ID });
     expect(res.status).toBe(200);
     expect(res.body.primaryCategoryId).toBe(CATEGORY_ID);
@@ -192,7 +192,7 @@ describe('PATCH /menu/categories/:categoryId/assign', () => {
     prisma.menuCategory.update.mockResolvedValue({ id: SUBCATEGORY_ID, primaryCategoryId: null });
 
     const res = await api.owner
-      .patch(`/api/restaurant/${RESTAURANT_ID}/menu/categories/${SUBCATEGORY_ID}/assign`)
+      .patch(`/api/merchant/${RESTAURANT_ID}/menu/categories/${SUBCATEGORY_ID}/assign`)
       .send({ primaryCategoryId: null });
     expect(res.status).toBe(200);
     expect(res.body.primaryCategoryId).toBeNull();
@@ -249,7 +249,7 @@ describe('GET /menu/grouped', () => {
     ]);
     prisma.menuCategory.findMany.mockResolvedValue([]); // no orphans
 
-    const res = await api.owner.get(`/api/restaurant/${RESTAURANT_ID}/menu/grouped`);
+    const res = await api.owner.get(`/api/merchant/${RESTAURANT_ID}/menu/grouped`);
     expect(res.status).toBe(200);
     expect(res.body[0].slug).toBe('food');
     expect(res.body[0].subcategories).toHaveLength(1);
@@ -271,7 +271,7 @@ describe('GET /menu/grouped', () => {
       },
     ]);
 
-    const res = await api.owner.get(`/api/restaurant/${RESTAURANT_ID}/menu/grouped`);
+    const res = await api.owner.get(`/api/merchant/${RESTAURANT_ID}/menu/grouped`);
     expect(res.status).toBe(200);
     expect(res.body[0].name).toBe('Appetizers');
   });

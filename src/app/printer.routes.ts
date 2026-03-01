@@ -5,12 +5,12 @@ import { cloudPrntService } from '../services/cloudprnt.service';
 const router = Router({ mergeParams: true });
 
 /**
- * GET /restaurant/:restaurantId/printers
+ * GET /restaurant/:merchantId/printers
  * List all printers for a restaurant
  */
-router.get('/:restaurantId/printers', async (req: Request, res: Response) => {
+router.get('/:merchantId/printers', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const printers = await printerService.findAll(restaurantId);
     res.json(printers);
   } catch (error: unknown) {
@@ -21,12 +21,12 @@ router.get('/:restaurantId/printers', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /restaurant/:restaurantId/printers
+ * POST /restaurant/:merchantId/printers
  * Register a new printer
  */
-router.post('/:restaurantId/printers', async (req: Request, res: Response) => {
+router.post('/:merchantId/printers', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { name, model, macAddress, ipAddress, printWidth, isDefault } = req.body;
 
     if (!name || !model || !macAddress) {
@@ -52,10 +52,10 @@ router.post('/:restaurantId/printers', async (req: Request, res: Response) => {
 });
 
 /**
- * PATCH /restaurant/:restaurantId/printers/:printerId
+ * PATCH /restaurant/:merchantId/printers/:printerId
  * Update a printer
  */
-router.patch('/:restaurantId/printers/:printerId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/printers/:printerId', async (req: Request, res: Response) => {
   try {
     const { printerId } = req.params;
     const { name, ipAddress, printWidth, isDefault, isActive } = req.body;
@@ -77,10 +77,10 @@ router.patch('/:restaurantId/printers/:printerId', async (req: Request, res: Res
 });
 
 /**
- * DELETE /restaurant/:restaurantId/printers/:printerId
+ * DELETE /restaurant/:merchantId/printers/:printerId
  * Delete a printer
  */
-router.delete('/:restaurantId/printers/:printerId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/printers/:printerId', async (req: Request, res: Response) => {
   try {
     const { printerId } = req.params;
     await printerService.delete(printerId);
@@ -93,10 +93,10 @@ router.delete('/:restaurantId/printers/:printerId', async (req: Request, res: Re
 });
 
 /**
- * POST /restaurant/:restaurantId/printers/:printerId/test
+ * POST /restaurant/:merchantId/printers/:printerId/test
  * Test print a printer
  */
-router.post('/:restaurantId/printers/:printerId/test', async (req: Request, res: Response) => {
+router.post('/:merchantId/printers/:printerId/test', async (req: Request, res: Response) => {
   try {
     const { printerId } = req.params;
     const jobId = await cloudPrntService.queueTestPrint(printerId);

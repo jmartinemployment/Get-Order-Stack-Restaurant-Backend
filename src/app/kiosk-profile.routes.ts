@@ -33,9 +33,9 @@ const updateKioskProfileSchema = z.object({
 // --- Kiosk Profile CRUD ---
 
 // List all kiosk profiles for a restaurant
-router.get('/:restaurantId/kiosk-profiles', async (req: Request, res: Response) => {
+router.get('/:merchantId/kiosk-profiles', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const profiles = await prisma.kioskProfile.findMany({
       where: { restaurantId },
@@ -49,9 +49,9 @@ router.get('/:restaurantId/kiosk-profiles', async (req: Request, res: Response) 
 });
 
 // Create a new kiosk profile
-router.post('/:restaurantId/kiosk-profiles', async (req: Request, res: Response) => {
+router.post('/:merchantId/kiosk-profiles', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createKioskProfileSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -73,7 +73,7 @@ router.post('/:restaurantId/kiosk-profiles', async (req: Request, res: Response)
 });
 
 // Update a kiosk profile
-router.patch('/:restaurantId/kiosk-profiles/:id', async (req: Request, res: Response) => {
+router.patch('/:merchantId/kiosk-profiles/:id', async (req: Request, res: Response) => {
   try {
     const { restaurantId, id } = req.params;
     const parsed = updateKioskProfileSchema.safeParse(req.body);
@@ -107,7 +107,7 @@ router.patch('/:restaurantId/kiosk-profiles/:id', async (req: Request, res: Resp
 });
 
 // Delete a kiosk profile
-router.delete('/:restaurantId/kiosk-profiles/:id', async (req: Request, res: Response) => {
+router.delete('/:merchantId/kiosk-profiles/:id', async (req: Request, res: Response) => {
   try {
     const { restaurantId, id } = req.params;
 

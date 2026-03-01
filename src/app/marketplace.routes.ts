@@ -1,6 +1,6 @@
 import { Request, Response, Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, requireRestaurantManager } from '../middleware/auth.middleware';
+import { requireAuth, requireMerchantManager } from '../middleware/auth.middleware';
 import { marketplaceService } from '../services/marketplace.service';
 
 const router = Router();
@@ -32,9 +32,9 @@ const MarketplacePilotSummaryQuerySchema = z.object({
   windowHours: z.coerce.number().int().min(1).max(24 * 14).optional(),
 });
 
-router.get('/:restaurantId/marketplace/integrations', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.get('/:merchantId/marketplace/integrations', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const integrations = await marketplaceService.listIntegrations(restaurantId);
     res.json({ integrations });
   } catch (error: unknown) {
@@ -43,7 +43,7 @@ router.get('/:restaurantId/marketplace/integrations', requireAuth, requireRestau
   }
 });
 
-router.put('/:restaurantId/marketplace/integrations/:provider', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.put('/:merchantId/marketplace/integrations/:provider', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   const providerParse = MarketplaceProviderSchema.safeParse(req.params.provider);
   if (!providerParse.success) {
     res.status(400).json({ error: 'Invalid marketplace provider' });
@@ -63,7 +63,7 @@ router.put('/:restaurantId/marketplace/integrations/:provider', requireAuth, req
   }
 
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const summary = await marketplaceService.updateIntegration(
       restaurantId,
       providerParse.data,
@@ -77,7 +77,7 @@ router.put('/:restaurantId/marketplace/integrations/:provider', requireAuth, req
   }
 });
 
-router.delete('/:restaurantId/marketplace/integrations/:provider/secret', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.delete('/:merchantId/marketplace/integrations/:provider/secret', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   const providerParse = MarketplaceProviderSchema.safeParse(req.params.provider);
   if (!providerParse.success) {
     res.status(400).json({ error: 'Invalid marketplace provider' });
@@ -85,7 +85,7 @@ router.delete('/:restaurantId/marketplace/integrations/:provider/secret', requir
   }
 
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const summary = await marketplaceService.clearIntegrationSecret(restaurantId, providerParse.data);
     res.json(summary);
   } catch (error: unknown) {
@@ -95,9 +95,9 @@ router.delete('/:restaurantId/marketplace/integrations/:provider/secret', requir
   }
 });
 
-router.get('/:restaurantId/marketplace/menu-mappings', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.get('/:merchantId/marketplace/menu-mappings', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const providerRaw = typeof req.query.provider === 'string' ? req.query.provider : undefined;
     if (providerRaw) {
       const providerParse = MarketplaceProviderSchema.safeParse(providerRaw);
@@ -116,7 +116,7 @@ router.get('/:restaurantId/marketplace/menu-mappings', requireAuth, requireResta
   }
 });
 
-router.post('/:restaurantId/marketplace/menu-mappings', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.post('/:merchantId/marketplace/menu-mappings', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   const payloadParse = MarketplaceMenuMappingUpsertSchema.safeParse(req.body);
   if (!payloadParse.success) {
     res.status(400).json({
@@ -130,7 +130,7 @@ router.post('/:restaurantId/marketplace/menu-mappings', requireAuth, requireRest
   }
 
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const mapping = await marketplaceService.upsertMenuMapping(restaurantId, payloadParse.data);
     res.json(mapping);
   } catch (error: unknown) {
@@ -140,7 +140,7 @@ router.post('/:restaurantId/marketplace/menu-mappings', requireAuth, requireRest
   }
 });
 
-router.delete('/:restaurantId/marketplace/menu-mappings/:mappingId', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.delete('/:merchantId/marketplace/menu-mappings/:mappingId', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
     const { restaurantId, mappingId } = req.params;
     const deleted = await marketplaceService.deleteMenuMapping(restaurantId, mappingId);
@@ -156,9 +156,9 @@ router.delete('/:restaurantId/marketplace/menu-mappings/:mappingId', requireAuth
   }
 });
 
-router.get('/:restaurantId/marketplace/status-sync/jobs', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.get('/:merchantId/marketplace/status-sync/jobs', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const statusRaw = typeof req.query.status === 'string' ? req.query.status : undefined;
     const limitRaw = typeof req.query.limit === 'string' ? Number.parseInt(req.query.limit, 10) : undefined;
 
@@ -184,7 +184,7 @@ router.get('/:restaurantId/marketplace/status-sync/jobs', requireAuth, requireRe
   }
 });
 
-router.post('/:restaurantId/marketplace/status-sync/jobs/:jobId/retry', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.post('/:merchantId/marketplace/status-sync/jobs/:jobId/retry', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
     const { restaurantId, jobId } = req.params;
     const retried = await marketplaceService.retryStatusSyncJob(restaurantId, jobId);
@@ -200,9 +200,9 @@ router.post('/:restaurantId/marketplace/status-sync/jobs/:jobId/retry', requireA
   }
 });
 
-router.post('/:restaurantId/marketplace/status-sync/process', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.post('/:merchantId/marketplace/status-sync/process', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const limitRaw = Number.parseInt(String(req.body?.limit ?? '20'), 10);
     const result = await marketplaceService.processDueStatusSyncJobs({
       restaurantId,
@@ -216,7 +216,7 @@ router.post('/:restaurantId/marketplace/status-sync/process', requireAuth, requi
   }
 });
 
-router.get('/:restaurantId/marketplace/pilot/summary', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.get('/:merchantId/marketplace/pilot/summary', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   const queryParse = MarketplacePilotSummaryQuerySchema.safeParse(req.query);
   if (!queryParse.success) {
     res.status(400).json({
@@ -230,7 +230,7 @@ router.get('/:restaurantId/marketplace/pilot/summary', requireAuth, requireResta
   }
 
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const summary = await marketplaceService.getPilotRolloutSummary(restaurantId, queryParse.data);
     res.json(summary);
   } catch (error: unknown) {

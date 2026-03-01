@@ -60,7 +60,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}`;
 
 // ============ GET /analytics/today-stats ============
 

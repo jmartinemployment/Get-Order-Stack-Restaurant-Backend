@@ -7,12 +7,12 @@ const prisma = new PrismaClient();
 // ============ Primary Categories CRUD ============
 
 /**
- * GET /:restaurantId/primary-categories
+ * GET /:merchantId/primary-categories
  * Get all primary categories for a restaurant with their subcategory counts
  */
-router.get('/:restaurantId/primary-categories', async (req: Request, res: Response) => {
+router.get('/:merchantId/primary-categories', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { lang } = req.query;
 
     const categories = await prisma.primaryCategory.findMany({
@@ -57,12 +57,12 @@ router.get('/:restaurantId/primary-categories', async (req: Request, res: Respon
 });
 
 /**
- * POST /:restaurantId/primary-categories
+ * POST /:merchantId/primary-categories
  * Create a new primary category
  */
-router.post('/:restaurantId/primary-categories', async (req: Request, res: Response) => {
+router.post('/:merchantId/primary-categories', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { slug, name, nameEn, icon } = req.body;
 
     if (!slug || !name) {
@@ -98,10 +98,10 @@ router.post('/:restaurantId/primary-categories', async (req: Request, res: Respo
 });
 
 /**
- * PATCH /:restaurantId/primary-categories/:categoryId
+ * PATCH /:merchantId/primary-categories/:categoryId
  * Update a primary category (rename, change icon, reorder, deactivate)
  */
-router.patch('/:restaurantId/primary-categories/:categoryId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/primary-categories/:categoryId', async (req: Request, res: Response) => {
   try {
     const { categoryId } = req.params;
     const { slug, name, nameEn, icon, displayOrder, active } = req.body;
@@ -130,10 +130,10 @@ router.patch('/:restaurantId/primary-categories/:categoryId', async (req: Reques
 });
 
 /**
- * DELETE /:restaurantId/primary-categories/:categoryId
+ * DELETE /:merchantId/primary-categories/:categoryId
  * Delete a primary category (subcategories are unlinked, not deleted)
  */
-router.delete('/:restaurantId/primary-categories/:categoryId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/primary-categories/:categoryId', async (req: Request, res: Response) => {
   try {
     const { categoryId } = req.params;
 
@@ -155,10 +155,10 @@ router.delete('/:restaurantId/primary-categories/:categoryId', async (req: Reque
 });
 
 /**
- * POST /:restaurantId/primary-categories/reorder
+ * POST /:merchantId/primary-categories/reorder
  * Reorder primary categories
  */
-router.post('/:restaurantId/primary-categories/reorder', async (req: Request, res: Response) => {
+router.post('/:merchantId/primary-categories/reorder', async (req: Request, res: Response) => {
   try {
     const { order } = req.body; // [{ id: 'xxx', displayOrder: 0 }, ...]
 
@@ -184,10 +184,10 @@ router.post('/:restaurantId/primary-categories/reorder', async (req: Request, re
 // ============ Subcategory Assignment ============
 
 /**
- * PATCH /:restaurantId/menu/categories/:categoryId/assign
+ * PATCH /:merchantId/menu/categories/:categoryId/assign
  * Assign a subcategory to a primary category (or unassign with null)
  */
-router.patch('/:restaurantId/menu/categories/:categoryId/assign', async (req: Request, res: Response) => {
+router.patch('/:merchantId/menu/categories/:categoryId/assign', async (req: Request, res: Response) => {
   try {
     const { categoryId } = req.params;
     const { primaryCategoryId } = req.body; // null to unassign
@@ -205,10 +205,10 @@ router.patch('/:restaurantId/menu/categories/:categoryId/assign', async (req: Re
 });
 
 /**
- * POST /:restaurantId/primary-categories/:primaryCategoryId/assign-bulk
+ * POST /:merchantId/primary-categories/:primaryCategoryId/assign-bulk
  * Bulk assign multiple subcategories to a primary category
  */
-router.post('/:restaurantId/primary-categories/:primaryCategoryId/assign-bulk', async (req: Request, res: Response) => {
+router.post('/:merchantId/primary-categories/:primaryCategoryId/assign-bulk', async (req: Request, res: Response) => {
   try {
     const { primaryCategoryId } = req.params;
     const { categoryIds } = req.body; // array of subcategory IDs
@@ -233,7 +233,7 @@ router.post('/:restaurantId/primary-categories/:primaryCategoryId/assign-bulk', 
 // ============ Hierarchical Menu Endpoint ============
 
 /**
- * GET /:restaurantId/menu/grouped
+ * GET /:merchantId/menu/grouped
  * Get full menu grouped by primary category -> subcategory -> items
  * 
  * Response structure:
@@ -253,9 +253,9 @@ router.post('/:restaurantId/primary-categories/:primaryCategoryId/assign-bulk', 
  *   }
  * ]
  */
-router.get('/:restaurantId/menu/grouped', async (req: Request, res: Response) => {
+router.get('/:merchantId/menu/grouped', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { lang, includeUnavailable } = req.query;
 
     // Fetch primary categories with nested subcategories and items

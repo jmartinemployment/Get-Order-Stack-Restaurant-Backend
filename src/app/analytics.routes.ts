@@ -17,12 +17,12 @@ const prisma = new PrismaClient();
 // ============ Today's Sales Stats (Home Dashboard) ============
 
 /**
- * GET /:restaurantId/analytics/today-stats
+ * GET /:merchantId/analytics/today-stats
  * Returns net sales and order count for today vs yesterday
  */
-router.get('/:restaurantId/analytics/today-stats', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/today-stats', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -74,12 +74,12 @@ router.get('/:restaurantId/analytics/today-stats', async (req: Request, res: Res
 // ============ Menu Engineering ============
 
 /**
- * GET /:restaurantId/analytics/menu-engineering
+ * GET /:merchantId/analytics/menu-engineering
  * Generate a complete menu engineering report
  */
-router.get('/:restaurantId/analytics/menu-engineering', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/menu-engineering', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { days = '30' } = req.query;
 
     const report = await menuEngineeringService.generateReport(
@@ -100,12 +100,12 @@ router.get('/:restaurantId/analytics/menu-engineering', async (req: Request, res
 });
 
 /**
- * GET /:restaurantId/analytics/upsell-suggestions
+ * GET /:merchantId/analytics/upsell-suggestions
  * Get real-time upsell suggestions for POS
  */
-router.get('/:restaurantId/analytics/upsell-suggestions', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/upsell-suggestions', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { cartItems } = req.query;
 
     const cartItemIds = cartItems 
@@ -127,12 +127,12 @@ router.get('/:restaurantId/analytics/upsell-suggestions', async (req: Request, r
 // ============ Menu Engineering — Advanced Analytics ============
 
 /**
- * GET /:restaurantId/analytics/menu/price-elasticity
+ * GET /:merchantId/analytics/menu/price-elasticity
  * Price vs demand data derived from OrderItem + MenuItem
  */
-router.get('/:restaurantId/analytics/menu/price-elasticity', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/menu/price-elasticity', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const menuItems = await prisma.menuItem.findMany({
       where: { restaurantId },
@@ -176,12 +176,12 @@ router.get('/:restaurantId/analytics/menu/price-elasticity', async (req: Request
 });
 
 /**
- * GET /:restaurantId/analytics/menu/cannibalization
+ * GET /:merchantId/analytics/menu/cannibalization
  * Items frequently ordered together or competing in the same category
  */
-router.get('/:restaurantId/analytics/menu/cannibalization', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/menu/cannibalization', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const orders = await prisma.order.findMany({
       where: {
@@ -244,12 +244,12 @@ router.get('/:restaurantId/analytics/menu/cannibalization', async (req: Request,
 });
 
 /**
- * GET /:restaurantId/analytics/prep-time-accuracy
+ * GET /:merchantId/analytics/prep-time-accuracy
  * Estimated vs actual prep time per menu item
  */
-router.get('/:restaurantId/analytics/prep-time-accuracy', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/prep-time-accuracy', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const menuItems = await prisma.menuItem.findMany({
       where: { restaurantId },
@@ -316,12 +316,12 @@ router.get('/:restaurantId/analytics/prep-time-accuracy', async (req: Request, r
 // ============ Sales Insights ============
 
 /**
- * GET /:restaurantId/analytics/sales/daily
+ * GET /:merchantId/analytics/sales/daily
  * Get daily sales insights with AI analysis
  */
-router.get('/:restaurantId/analytics/sales/daily', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/sales/daily', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { date } = req.query;
 
     const targetDate = date ? new Date(date as string) : new Date();
@@ -340,12 +340,12 @@ router.get('/:restaurantId/analytics/sales/daily', async (req: Request, res: Res
 });
 
 /**
- * GET /:restaurantId/analytics/sales/weekly
+ * GET /:merchantId/analytics/sales/weekly
  * Get weekly sales insights with AI analysis
  */
-router.get('/:restaurantId/analytics/sales/weekly', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/sales/weekly', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { weeksAgo = '0' } = req.query;
 
     const report = await salesInsightsService.getWeeklyInsights(
@@ -366,12 +366,12 @@ router.get('/:restaurantId/analytics/sales/weekly', async (req: Request, res: Re
 });
 
 /**
- * GET /:restaurantId/analytics/sales/summary
+ * GET /:merchantId/analytics/sales/summary
  * Get sales summary for a custom date range
  */
-router.get('/:restaurantId/analytics/sales/summary', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/sales/summary', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { startDate, endDate } = req.query;
 
     if (!startDate || !endDate) {
@@ -395,12 +395,12 @@ router.get('/:restaurantId/analytics/sales/summary', async (req: Request, res: R
 // ============ Inventory Management ============
 
 /**
- * GET /:restaurantId/inventory
+ * GET /:merchantId/inventory
  * Get all inventory items
  */
-router.get('/:restaurantId/inventory', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const items = await inventoryService.getInventory(restaurantId);
     res.json(items);
   } catch (error) {
@@ -410,12 +410,12 @@ router.get('/:restaurantId/inventory', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /:restaurantId/inventory
+ * POST /:merchantId/inventory
  * Create a new inventory item
  */
-router.post('/:restaurantId/inventory', async (req: Request, res: Response) => {
+router.post('/:merchantId/inventory', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const {
       name, nameEn, unit, currentStock, minStock, maxStock,
       costPerUnit, supplier, category
@@ -442,10 +442,10 @@ router.post('/:restaurantId/inventory', async (req: Request, res: Response) => {
 });
 
 /**
- * PATCH /:restaurantId/inventory/:itemId/stock
+ * PATCH /:merchantId/inventory/:itemId/stock
  * Update stock level (manual count)
  */
-router.patch('/:restaurantId/inventory/:itemId/stock', async (req: Request, res: Response) => {
+router.patch('/:merchantId/inventory/:itemId/stock', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const { stock, reason } = req.body;
@@ -464,10 +464,10 @@ router.patch('/:restaurantId/inventory/:itemId/stock', async (req: Request, res:
 });
 
 /**
- * POST /:restaurantId/inventory/:itemId/usage
+ * POST /:merchantId/inventory/:itemId/usage
  * Record stock usage (deduct from inventory)
  */
-router.post('/:restaurantId/inventory/:itemId/usage', async (req: Request, res: Response) => {
+router.post('/:merchantId/inventory/:itemId/usage', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const { quantity, reason } = req.body;
@@ -486,10 +486,10 @@ router.post('/:restaurantId/inventory/:itemId/usage', async (req: Request, res: 
 });
 
 /**
- * POST /:restaurantId/inventory/:itemId/restock
+ * POST /:merchantId/inventory/:itemId/restock
  * Record restocking (add to inventory)
  */
-router.post('/:restaurantId/inventory/:itemId/restock', async (req: Request, res: Response) => {
+router.post('/:merchantId/inventory/:itemId/restock', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const { quantity, invoiceNumber } = req.body;
@@ -508,12 +508,12 @@ router.post('/:restaurantId/inventory/:itemId/restock', async (req: Request, res
 });
 
 /**
- * GET /:restaurantId/inventory/alerts
+ * GET /:merchantId/inventory/alerts
  * Get all inventory alerts (low stock, out of stock, etc.)
  */
-router.get('/:restaurantId/inventory/alerts', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/alerts', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const alerts = await inventoryService.getAlerts(restaurantId);
     res.json(alerts);
   } catch (error) {
@@ -523,12 +523,12 @@ router.get('/:restaurantId/inventory/alerts', async (req: Request, res: Response
 });
 
 /**
- * GET /:restaurantId/inventory/predictions
+ * GET /:merchantId/inventory/predictions
  * Get stock predictions (when will we run out?)
  */
-router.get('/:restaurantId/inventory/predictions', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/predictions', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const predictions = await inventoryService.getStockPredictions(restaurantId);
     res.json(predictions);
   } catch (error) {
@@ -538,12 +538,12 @@ router.get('/:restaurantId/inventory/predictions', async (req: Request, res: Res
 });
 
 /**
- * GET /:restaurantId/inventory/report
+ * GET /:merchantId/inventory/report
  * Generate comprehensive inventory report
  */
-router.get('/:restaurantId/inventory/report', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/report', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const report = await inventoryService.generateReport(restaurantId);
     res.json(report);
   } catch (error) {
@@ -553,12 +553,12 @@ router.get('/:restaurantId/inventory/report', async (req: Request, res: Response
 });
 
 /**
- * GET /:restaurantId/inventory/expiring
+ * GET /:merchantId/inventory/expiring
  * Returns inventory items near or below minimum stock.
  */
-router.get('/:restaurantId/inventory/expiring', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/expiring', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const items = await prisma.inventoryItem.findMany({
       where: {
@@ -591,9 +591,9 @@ router.get('/:restaurantId/inventory/expiring', async (req: Request, res: Respon
 
 // ============ Inventory Unit Conversions (must be before /:itemId catch-all) ============
 
-router.get('/:restaurantId/inventory/unit-conversions', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/unit-conversions', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const conversions = await prisma.unitConversion.findMany({
       where: { restaurantId },
       orderBy: { fromUnit: 'asc' },
@@ -605,9 +605,9 @@ router.get('/:restaurantId/inventory/unit-conversions', async (req: Request, res
   }
 });
 
-router.post('/:restaurantId/inventory/unit-conversions', async (req: Request, res: Response) => {
+router.post('/:merchantId/inventory/unit-conversions', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { fromUnit, toUnit, factor } = req.body;
 
     if (!fromUnit || !toUnit || !factor) {
@@ -625,7 +625,7 @@ router.post('/:restaurantId/inventory/unit-conversions', async (req: Request, re
   }
 });
 
-router.patch('/:restaurantId/inventory/unit-conversions/:id', async (req: Request, res: Response) => {
+router.patch('/:merchantId/inventory/unit-conversions/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const data: Record<string, unknown> = {};
@@ -647,9 +647,9 @@ router.patch('/:restaurantId/inventory/unit-conversions/:id', async (req: Reques
 
 // ============ Inventory Cycle Counts (must be before /:itemId catch-all) ============
 
-router.get('/:restaurantId/inventory/cycle-counts', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/cycle-counts', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const counts = await prisma.cycleCount.findMany({
       where: { restaurantId },
       include: { items: true },
@@ -662,9 +662,9 @@ router.get('/:restaurantId/inventory/cycle-counts', async (req: Request, res: Re
   }
 });
 
-router.post('/:restaurantId/inventory/cycle-counts', async (req: Request, res: Response) => {
+router.post('/:merchantId/inventory/cycle-counts', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { date, items } = req.body;
 
     const createdBy = (req as unknown as { user?: { id?: string } }).user?.id ?? 'system';
@@ -692,7 +692,7 @@ router.post('/:restaurantId/inventory/cycle-counts', async (req: Request, res: R
   }
 });
 
-router.patch('/:restaurantId/inventory/cycle-counts/:id', async (req: Request, res: Response) => {
+router.patch('/:merchantId/inventory/cycle-counts/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const data: Record<string, unknown> = {};
@@ -718,10 +718,10 @@ router.patch('/:restaurantId/inventory/cycle-counts/:id', async (req: Request, r
 });
 
 /**
- * GET /:restaurantId/inventory/:itemId
+ * GET /:merchantId/inventory/:itemId
  * Get a single inventory item (must be after /alerts, /predictions, /report, /expiring, /unit-conversions, /cycle-counts)
  */
-router.get('/:restaurantId/inventory/:itemId', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/:itemId', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const item = await inventoryService.getInventoryItem(itemId);
@@ -739,10 +739,10 @@ router.get('/:restaurantId/inventory/:itemId', async (req: Request, res: Respons
 });
 
 /**
- * GET /:restaurantId/inventory/:itemId/predict
+ * GET /:merchantId/inventory/:itemId/predict
  * AI prediction: When will we run out of this item?
  */
-router.get('/:restaurantId/inventory/:itemId/predict', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/:itemId/predict', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const prediction = await inventoryService.predictItemRunout(itemId);
@@ -756,10 +756,10 @@ router.get('/:restaurantId/inventory/:itemId/predict', async (req: Request, res:
 // ============ Order Profit Insights ============
 
 /**
- * GET /:restaurantId/orders/:orderId/profit-insight
+ * GET /:merchantId/orders/:orderId/profit-insight
  * Get profit insight for a specific order (for checkout confirmation)
  */
-router.get('/:restaurantId/orders/:orderId/profit-insight', async (req: Request, res: Response) => {
+router.get('/:merchantId/orders/:orderId/profit-insight', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
     const insight = await orderProfitService.getOrderProfitInsight(orderId);
@@ -777,12 +777,12 @@ router.get('/:restaurantId/orders/:orderId/profit-insight', async (req: Request,
 });
 
 /**
- * GET /:restaurantId/orders/recent-profit
+ * GET /:merchantId/orders/recent-profit
  * Get profit insights for recent orders (for dashboard)
  */
-router.get('/:restaurantId/orders/recent-profit', async (req: Request, res: Response) => {
+router.get('/:merchantId/orders/recent-profit', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { limit = '10' } = req.query;
 
     const result = await orderProfitService.getRecentOrdersProfit(
@@ -800,12 +800,12 @@ router.get('/:restaurantId/orders/recent-profit', async (req: Request, res: Resp
 // ============ Customers ============
 
 /**
- * GET /:restaurantId/customers
+ * GET /:merchantId/customers
  * Get all customers for a restaurant
  */
-router.get('/:restaurantId/customers', async (req: Request, res: Response) => {
+router.get('/:merchantId/customers', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { search } = req.query;
 
     const where: Record<string, unknown> = { restaurantId };
@@ -833,10 +833,10 @@ router.get('/:restaurantId/customers', async (req: Request, res: Response) => {
 });
 
 /**
- * PATCH /:restaurantId/customers/:customerId
+ * PATCH /:merchantId/customers/:customerId
  * Update customer tags
  */
-router.patch('/:restaurantId/customers/:customerId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/customers/:customerId', async (req: Request, res: Response) => {
   try {
     const { customerId } = req.params;
     const { tags } = req.body;
@@ -856,13 +856,13 @@ router.patch('/:restaurantId/customers/:customerId', async (req: Request, res: R
 // ============ Sales Goals ============
 
 /**
- * GET /:restaurantId/analytics/goals
+ * GET /:merchantId/analytics/goals
  * Returns sales goals for the restaurant.
  * Goals are stored as JSON in restaurant settings — no separate table yet.
  */
-router.get('/:restaurantId/analytics/goals', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/goals', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
@@ -887,23 +887,23 @@ router.get('/:restaurantId/analytics/goals', async (req: Request, res: Response)
 // ============ Sales Alerts ============
 
 /**
- * GET /:restaurantId/analytics/sales-alerts
+ * GET /:merchantId/analytics/sales-alerts
  * Returns active sales alerts (anomaly detection).
  * Currently returns empty — will populate when anomaly detection is wired.
  */
-router.get('/:restaurantId/analytics/sales-alerts', async (_req: Request, res: Response) => {
+router.get('/:merchantId/analytics/sales-alerts', async (_req: Request, res: Response) => {
   res.json([]);
 });
 
 // ============ Reporting Categories ============
 
 /**
- * GET /:restaurantId/reporting-categories
+ * GET /:merchantId/reporting-categories
  * Returns reporting categories used for menu item classification.
  */
-router.get('/:restaurantId/reporting-categories', async (req: Request, res: Response) => {
+router.get('/:merchantId/reporting-categories', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const categories = await prisma.primaryCategory.findMany({
       where: { restaurantId },
@@ -921,12 +921,12 @@ router.get('/:restaurantId/reporting-categories', async (req: Request, res: Resp
 // ============ Realtime KPIs ============
 
 /**
- * GET /:restaurantId/reports/realtime-kpis
+ * GET /:merchantId/reports/realtime-kpis
  * Returns live KPIs computed from today's orders.
  */
-router.get('/:restaurantId/reports/realtime-kpis', async (req: Request, res: Response) => {
+router.get('/:merchantId/reports/realtime-kpis', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -988,12 +988,12 @@ router.get('/:restaurantId/reports/realtime-kpis', async (req: Request, res: Res
 // ============ Reservations: Turn Time Stats ============
 
 /**
- * GET /:restaurantId/bookings/turn-time-stats
+ * GET /:merchantId/bookings/turn-time-stats
  * Computes average table turn time from completed reservations.
  */
-router.get('/:restaurantId/bookings/turn-time-stats', async (req: Request, res: Response) => {
+router.get('/:merchantId/bookings/turn-time-stats', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     // seatedAt/completedAt not in schema yet — use reservationTime + updatedAt as proxy
     const completedReservations = await prisma.reservation.findMany({
@@ -1058,12 +1058,12 @@ router.get('/:restaurantId/bookings/turn-time-stats', async (req: Request, res: 
 // ============ Waitlist ============
 
 /**
- * GET /:restaurantId/waitlist
+ * GET /:merchantId/waitlist
  * Returns active waitlist entries (reservations with status='waitlisted').
  */
-router.get('/:restaurantId/waitlist', async (req: Request, res: Response) => {
+router.get('/:merchantId/waitlist', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const entries = await prisma.reservation.findMany({
       where: {
@@ -1084,12 +1084,12 @@ router.get('/:restaurantId/waitlist', async (req: Request, res: Response) => {
 // ============ Purchase Orders ============
 
 /**
- * GET /:restaurantId/purchase-orders
+ * GET /:merchantId/purchase-orders
  * Returns purchase orders (using PurchaseInvoice with type='purchase_order').
  */
-router.get('/:restaurantId/purchase-orders', async (req: Request, res: Response) => {
+router.get('/:merchantId/purchase-orders', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     // PurchaseInvoice has no 'type' field — return all as purchase orders
     const orders = await prisma.purchaseInvoice.findMany({
@@ -1119,9 +1119,9 @@ const createOrderTemplateSchema = z.object({
   })),
 });
 
-router.get('/:restaurantId/order-templates', async (req: Request, res: Response) => {
+router.get('/:merchantId/order-templates', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const templates = await prisma.orderTemplate.findMany({
       where: { restaurantId },
       orderBy: { createdAt: 'desc' },
@@ -1134,9 +1134,9 @@ router.get('/:restaurantId/order-templates', async (req: Request, res: Response)
   }
 });
 
-router.post('/:restaurantId/order-templates', async (req: Request, res: Response) => {
+router.post('/:merchantId/order-templates', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createOrderTemplateSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten().fieldErrors });
@@ -1155,7 +1155,7 @@ router.post('/:restaurantId/order-templates', async (req: Request, res: Response
   }
 });
 
-router.delete('/:restaurantId/order-templates/:id', async (req: Request, res: Response) => {
+router.delete('/:merchantId/order-templates/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await prisma.orderTemplate.delete({ where: { id } });
@@ -1189,9 +1189,9 @@ const updateSavedReportSchema = z.object({
   })).optional(),
 });
 
-router.get('/:restaurantId/reports/saved', async (req: Request, res: Response) => {
+router.get('/:merchantId/reports/saved', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const reports = await prisma.savedReport.findMany({
       where: { restaurantId },
       orderBy: { createdAt: 'desc' },
@@ -1204,9 +1204,9 @@ router.get('/:restaurantId/reports/saved', async (req: Request, res: Response) =
   }
 });
 
-router.post('/:restaurantId/reports/saved', async (req: Request, res: Response) => {
+router.post('/:merchantId/reports/saved', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createSavedReportSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten().fieldErrors });
@@ -1225,7 +1225,7 @@ router.post('/:restaurantId/reports/saved', async (req: Request, res: Response) 
   }
 });
 
-router.patch('/:restaurantId/reports/saved/:id', async (req: Request, res: Response) => {
+router.patch('/:merchantId/reports/saved/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const parsed = updateSavedReportSchema.safeParse(req.body);
@@ -1245,7 +1245,7 @@ router.patch('/:restaurantId/reports/saved/:id', async (req: Request, res: Respo
   }
 });
 
-router.delete('/:restaurantId/reports/saved/:id', async (req: Request, res: Response) => {
+router.delete('/:merchantId/reports/saved/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await prisma.savedReport.delete({ where: { id } });
@@ -1277,9 +1277,9 @@ const updateScheduleSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-router.get('/:restaurantId/reports/schedules', async (req: Request, res: Response) => {
+router.get('/:merchantId/reports/schedules', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const schedules = await prisma.reportSchedule.findMany({
       where: { restaurantId },
       orderBy: { createdAt: 'desc' },
@@ -1292,9 +1292,9 @@ router.get('/:restaurantId/reports/schedules', async (req: Request, res: Respons
   }
 });
 
-router.post('/:restaurantId/reports/schedules', async (req: Request, res: Response) => {
+router.post('/:merchantId/reports/schedules', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createScheduleSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten().fieldErrors });
@@ -1312,7 +1312,7 @@ router.post('/:restaurantId/reports/schedules', async (req: Request, res: Respon
   }
 });
 
-router.patch('/:restaurantId/reports/schedules/:id', async (req: Request, res: Response) => {
+router.patch('/:merchantId/reports/schedules/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const parsed = updateScheduleSchema.safeParse(req.body);
@@ -1332,7 +1332,7 @@ router.patch('/:restaurantId/reports/schedules/:id', async (req: Request, res: R
   }
 });
 
-router.delete('/:restaurantId/reports/schedules/:id', async (req: Request, res: Response) => {
+router.delete('/:merchantId/reports/schedules/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await prisma.reportSchedule.delete({ where: { id } });
@@ -1346,9 +1346,9 @@ router.delete('/:restaurantId/reports/schedules/:id', async (req: Request, res: 
 
 // ============ Recurring Reservations ============
 
-router.get('/:restaurantId/bookings/recurring', async (req: Request, res: Response) => {
+router.get('/:merchantId/bookings/recurring', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const recurring = await prisma.recurringReservation.findMany({
       where: { restaurantId },
       orderBy: { dayOfWeek: 'asc' },
@@ -1360,9 +1360,9 @@ router.get('/:restaurantId/bookings/recurring', async (req: Request, res: Respon
   }
 });
 
-router.post('/:restaurantId/bookings/recurring', async (req: Request, res: Response) => {
+router.post('/:merchantId/bookings/recurring', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { customerId, customerName, customerPhone, dayOfWeek, time, partySize, notes } = req.body;
 
     if (!customerName || dayOfWeek === undefined || !time || !partySize) {
@@ -1380,7 +1380,7 @@ router.post('/:restaurantId/bookings/recurring', async (req: Request, res: Respo
   }
 });
 
-router.patch('/:restaurantId/bookings/recurring/:id', async (req: Request, res: Response) => {
+router.patch('/:merchantId/bookings/recurring/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const data: Record<string, unknown> = {};
@@ -1402,7 +1402,7 @@ router.patch('/:restaurantId/bookings/recurring/:id', async (req: Request, res: 
   }
 });
 
-router.delete('/:restaurantId/bookings/recurring/:id', async (req: Request, res: Response) => {
+router.delete('/:merchantId/bookings/recurring/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await prisma.recurringReservation.delete({ where: { id } });
@@ -1419,9 +1419,9 @@ router.delete('/:restaurantId/bookings/recurring/:id', async (req: Request, res:
 
 // ============ Waitlist Config (JSON on merchantProfile) ============
 
-router.get('/:restaurantId/waitlist/virtual-config', async (req: Request, res: Response) => {
+router.get('/:merchantId/waitlist/virtual-config', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
       select: { merchantProfile: true },
@@ -1434,9 +1434,9 @@ router.get('/:restaurantId/waitlist/virtual-config', async (req: Request, res: R
   }
 });
 
-router.put('/:restaurantId/waitlist/virtual-config', async (req: Request, res: Response) => {
+router.put('/:merchantId/waitlist/virtual-config', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
       select: { merchantProfile: true },
@@ -1451,9 +1451,9 @@ router.put('/:restaurantId/waitlist/virtual-config', async (req: Request, res: R
   }
 });
 
-router.get('/:restaurantId/waitlist/sms-config', async (req: Request, res: Response) => {
+router.get('/:merchantId/waitlist/sms-config', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
       select: { merchantProfile: true },
@@ -1466,9 +1466,9 @@ router.get('/:restaurantId/waitlist/sms-config', async (req: Request, res: Respo
   }
 });
 
-router.put('/:restaurantId/waitlist/sms-config', async (req: Request, res: Response) => {
+router.put('/:merchantId/waitlist/sms-config', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
       select: { merchantProfile: true },
@@ -1483,10 +1483,10 @@ router.put('/:restaurantId/waitlist/sms-config', async (req: Request, res: Respo
   }
 });
 
-// GET /:restaurantId/waitlist/analytics
-router.get('/:restaurantId/waitlist/analytics', async (req: Request, res: Response) => {
+// GET /:merchantId/waitlist/analytics
+router.get('/:merchantId/waitlist/analytics', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     // Derive from waitlisted reservations that were eventually seated (status = completed or confirmed)
     const seatedReservations = await prisma.reservation.findMany({
@@ -1526,9 +1526,9 @@ router.get('/:restaurantId/waitlist/analytics', async (req: Request, res: Respon
 
 // ============ Calendar Connection (JSON on merchantProfile) ============
 
-router.get('/:restaurantId/calendar/connection', async (req: Request, res: Response) => {
+router.get('/:merchantId/calendar/connection', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
       select: { merchantProfile: true },
@@ -1541,9 +1541,9 @@ router.get('/:restaurantId/calendar/connection', async (req: Request, res: Respo
   }
 });
 
-router.put('/:restaurantId/calendar/connection', async (req: Request, res: Response) => {
+router.put('/:merchantId/calendar/connection', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
       select: { merchantProfile: true },
@@ -1560,9 +1560,9 @@ router.put('/:restaurantId/calendar/connection', async (req: Request, res: Respo
 
 // ============ Events ============
 
-router.get('/:restaurantId/events', async (req: Request, res: Response) => {
+router.get('/:merchantId/events', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const events = await prisma.event.findMany({
       where: { restaurantId },
       orderBy: { date: 'asc' },
@@ -1574,9 +1574,9 @@ router.get('/:restaurantId/events', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/:restaurantId/events', async (req: Request, res: Response) => {
+router.post('/:merchantId/events', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { name, description, date, startTime, endTime, maxCapacity } = req.body;
 
     if (!name || !date || !startTime || !endTime) {
@@ -1594,7 +1594,7 @@ router.post('/:restaurantId/events', async (req: Request, res: Response) => {
   }
 });
 
-router.patch('/:restaurantId/events/:eventId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/events/:eventId', async (req: Request, res: Response) => {
   try {
     const { eventId } = req.params;
     const data: Record<string, unknown> = {};
@@ -1619,7 +1619,7 @@ router.patch('/:restaurantId/events/:eventId', async (req: Request, res: Respons
   }
 });
 
-router.delete('/:restaurantId/events/:eventId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/events/:eventId', async (req: Request, res: Response) => {
   try {
     const { eventId } = req.params;
     await prisma.event.delete({ where: { id: eventId } });
@@ -1636,9 +1636,9 @@ router.delete('/:restaurantId/events/:eventId', async (req: Request, res: Respon
 
 // ============ Customer Feedback ============
 
-router.get('/:restaurantId/customers/feedback', async (req: Request, res: Response) => {
+router.get('/:merchantId/customers/feedback', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const feedback = await prisma.customerFeedback.findMany({
       where: { restaurantId },
       orderBy: { createdAt: 'desc' },
@@ -1651,9 +1651,9 @@ router.get('/:restaurantId/customers/feedback', async (req: Request, res: Respon
   }
 });
 
-router.post('/:restaurantId/customers/feedback', async (req: Request, res: Response) => {
+router.post('/:merchantId/customers/feedback', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { customerId, orderId, rating, comment, source } = req.body;
 
     if (!rating || rating < 1 || rating > 5) {
@@ -1673,9 +1673,9 @@ router.post('/:restaurantId/customers/feedback', async (req: Request, res: Respo
 
 // ============ Smart Groups ============
 
-router.get('/:restaurantId/customers/smart-groups', async (req: Request, res: Response) => {
+router.get('/:merchantId/customers/smart-groups', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const groups = await prisma.smartGroup.findMany({
       where: { restaurantId },
       orderBy: { name: 'asc' },
@@ -1687,9 +1687,9 @@ router.get('/:restaurantId/customers/smart-groups', async (req: Request, res: Re
   }
 });
 
-router.post('/:restaurantId/customers/smart-groups', async (req: Request, res: Response) => {
+router.post('/:merchantId/customers/smart-groups', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { name, rules } = req.body;
 
     if (!name) {
@@ -1707,7 +1707,7 @@ router.post('/:restaurantId/customers/smart-groups', async (req: Request, res: R
   }
 });
 
-router.patch('/:restaurantId/customers/smart-groups/:groupId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/customers/smart-groups/:groupId', async (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     const data: Record<string, unknown> = {};
@@ -1726,7 +1726,7 @@ router.patch('/:restaurantId/customers/smart-groups/:groupId', async (req: Reque
   }
 });
 
-router.delete('/:restaurantId/customers/smart-groups/:groupId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/customers/smart-groups/:groupId', async (req: Request, res: Response) => {
   try {
     const { groupId } = req.params;
     await prisma.smartGroup.delete({ where: { id: groupId } });
@@ -1743,9 +1743,9 @@ router.delete('/:restaurantId/customers/smart-groups/:groupId', async (req: Requ
 
 // ============ Message Threads ============
 
-router.get('/:restaurantId/customers/messages/threads', async (req: Request, res: Response) => {
+router.get('/:merchantId/customers/messages/threads', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const threads = await prisma.messageThread.findMany({
       where: { restaurantId },
       include: { messages: { orderBy: { sentAt: 'desc' }, take: 1 } },
@@ -1760,9 +1760,9 @@ router.get('/:restaurantId/customers/messages/threads', async (req: Request, res
 
 // ============ Message Templates ============
 
-router.get('/:restaurantId/customers/messages/templates', async (req: Request, res: Response) => {
+router.get('/:merchantId/customers/messages/templates', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const templates = await prisma.messageTemplate.findMany({
       where: { restaurantId },
       orderBy: { name: 'asc' },
@@ -1774,9 +1774,9 @@ router.get('/:restaurantId/customers/messages/templates', async (req: Request, r
   }
 });
 
-router.post('/:restaurantId/customers/messages/templates', async (req: Request, res: Response) => {
+router.post('/:merchantId/customers/messages/templates', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { name, channel, subject, body, variables } = req.body;
 
     if (!name || !channel || !body) {
@@ -1794,7 +1794,7 @@ router.post('/:restaurantId/customers/messages/templates', async (req: Request, 
   }
 });
 
-router.patch('/:restaurantId/customers/messages/templates/:templateId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/customers/messages/templates/:templateId', async (req: Request, res: Response) => {
   try {
     const { templateId } = req.params;
     const data: Record<string, unknown> = {};
@@ -1816,7 +1816,7 @@ router.patch('/:restaurantId/customers/messages/templates/:templateId', async (r
   }
 });
 
-router.delete('/:restaurantId/customers/messages/templates/:templateId', async (req: Request, res: Response) => {
+router.delete('/:merchantId/customers/messages/templates/:templateId', async (req: Request, res: Response) => {
   try {
     const { templateId } = req.params;
     await prisma.messageTemplate.delete({ where: { id: templateId } });
@@ -1833,9 +1833,9 @@ router.delete('/:restaurantId/customers/messages/templates/:templateId', async (
 
 // ============ Team Sales Analytics ============
 
-router.get('/:restaurantId/analytics/team/sales', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/team/sales', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { startDate, endDate } = req.query;
 
     const where: Record<string, unknown> = {
@@ -1880,9 +1880,9 @@ router.get('/:restaurantId/analytics/team/sales', async (req: Request, res: Resp
 
 // ============ Reports: Team Member Sales ============
 
-router.get('/:restaurantId/reports/team-member-sales', async (req: Request, res: Response) => {
+router.get('/:merchantId/reports/team-member-sales', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { startDate, endDate } = req.query;
 
     const where: Record<string, unknown> = {
@@ -1924,9 +1924,9 @@ router.get('/:restaurantId/reports/team-member-sales', async (req: Request, res:
 
 // ============ Reports: Tax & Service Charges ============
 
-router.get('/:restaurantId/reports/tax-service-charges', async (req: Request, res: Response) => {
+router.get('/:merchantId/reports/tax-service-charges', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { startDate, endDate } = req.query;
 
     const where: Record<string, unknown> = {
@@ -1960,9 +1960,9 @@ router.get('/:restaurantId/reports/tax-service-charges', async (req: Request, re
 
 // ============ Analytics Forecasts (empty-data-aware) ============
 
-router.get('/:restaurantId/analytics/conversion-funnel', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/conversion-funnel', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     // Derive from order data: views -> cart -> checkout -> completed
     const completedStatuses = ['completed', 'delivered'];
@@ -1988,9 +1988,9 @@ router.get('/:restaurantId/analytics/conversion-funnel', async (req: Request, re
   }
 });
 
-router.get('/:restaurantId/analytics/forecast/revenue', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/forecast/revenue', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     // Simple forecast: average daily revenue over last 30 days projected forward
     const thirtyDaysAgo = new Date();
@@ -2029,9 +2029,9 @@ router.get('/:restaurantId/analytics/forecast/revenue', async (req: Request, res
   }
 });
 
-router.get('/:restaurantId/analytics/forecast/demand', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/forecast/demand', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -2070,9 +2070,9 @@ router.get('/:restaurantId/analytics/forecast/demand', async (req: Request, res:
   }
 });
 
-router.get('/:restaurantId/analytics/forecast/staffing', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/forecast/staffing', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);

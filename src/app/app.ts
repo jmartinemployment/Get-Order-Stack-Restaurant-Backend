@@ -329,36 +329,36 @@ app.use('/api/platform', onboardingRoutes);    // Menu templates + tax rate look
 app.use('/api/onboarding', onboardingRoutes);  // Create new merchant (public)
 
 // --- Authenticated routes (requireAuth) ---
-app.use('/api/restaurant', requireAuth, laborRoutes);  // Labor/scheduling endpoints
-app.use('/api/restaurant', requireAuth, loyaltyRoutes);  // Loyalty program endpoints
-app.use('/api/restaurant', requireAuth, printerRoutes);  // Printer management API
-app.use('/api/restaurant/:restaurantId/orders', requireAuth, checkRoutes);  // Check management (POS) endpoints
-app.use('/api/restaurant/:restaurantId/orders', requireAuth, orderActionRoutes);  // Dining option action endpoints
-app.use('/api/restaurant/:restaurantId/delivery', requireAuth, deliveryRoutes);  // Third-party delivery endpoints
-app.use('/api/restaurant', requireAuth, marketplaceRoutes);  // Marketplace integration config endpoints
-app.use('/api/restaurant/:restaurantId/stations', requireAuth, stationRoutes);  // Station CRUD + category assignment
-app.use('/api/restaurant/:restaurantId/station-category-mappings', requireAuth, stationCategoryMappingRouter);  // Flat mapping list
-app.use('/api/restaurant', requireAuth, giftCardRoutes);  // Gift card CRUD + redemption
-app.use('/api/restaurant', requireAuth, invoiceRoutes);  // Invoice + house account CRUD
-app.use('/api/restaurant', requireAuth, marketingCampaignRoutes);  // Marketing campaign CRUD
-app.use('/api/restaurant', requireAuth, comboRoutes);  // Combo/bundle CRUD
-app.use('/api/restaurant', requireAuth, aiAdminRoutes);  // AI admin config, credentials, usage
-app.use('/api/restaurant', requireAuth, foodCostRoutes);  // Food cost: vendors, invoices, recipes, reports
-app.use('/api/restaurant', requireAuth, teamManagementRoutes);  // Team members + permission sets CRUD
-app.use('/api/restaurant/:restaurantId', requireAuth, supplierOrderingRoutes);  // Supplier ordering: credentials, connection test
-app.use('/api/restaurant-groups', requireAuth, multiLocationRoutes);  // Multi-location: groups, sync, settings propagation
+app.use('/api/merchant', requireAuth, laborRoutes);  // Labor/scheduling endpoints
+app.use('/api/merchant', requireAuth, loyaltyRoutes);  // Loyalty program endpoints
+app.use('/api/merchant', requireAuth, printerRoutes);  // Printer management API
+app.use('/api/merchant/:merchantId/orders', requireAuth, checkRoutes);  // Check management (POS) endpoints
+app.use('/api/merchant/:merchantId/orders', requireAuth, orderActionRoutes);  // Dining option action endpoints
+app.use('/api/merchant/:merchantId/delivery', requireAuth, deliveryRoutes);  // Third-party delivery endpoints
+app.use('/api/merchant', requireAuth, marketplaceRoutes);  // Marketplace integration config endpoints
+app.use('/api/merchant/:merchantId/stations', requireAuth, stationRoutes);  // Station CRUD + category assignment
+app.use('/api/merchant/:merchantId/station-category-mappings', requireAuth, stationCategoryMappingRouter);  // Flat mapping list
+app.use('/api/merchant', requireAuth, giftCardRoutes);  // Gift card CRUD + redemption
+app.use('/api/merchant', requireAuth, invoiceRoutes);  // Invoice + house account CRUD
+app.use('/api/merchant', requireAuth, marketingCampaignRoutes);  // Marketing campaign CRUD
+app.use('/api/merchant', requireAuth, comboRoutes);  // Combo/bundle CRUD
+app.use('/api/merchant', requireAuth, aiAdminRoutes);  // AI admin config, credentials, usage
+app.use('/api/merchant', requireAuth, foodCostRoutes);  // Food cost: vendors, invoices, recipes, reports
+app.use('/api/merchant', requireAuth, teamManagementRoutes);  // Team members + permission sets CRUD
+app.use('/api/merchant/:merchantId', requireAuth, supplierOrderingRoutes);  // Supplier ordering: credentials, connection test
+app.use('/api/merchant-groups', requireAuth, multiLocationRoutes);  // Multi-location: groups, sync, settings propagation
 app.use('/api/analytics', requireAuth, analyticsStandaloneRoutes);  // Standalone analytics (pinned-widgets, proactive-insights)
-app.use('/api/restaurant', requireAuth, retailRoutes);  // Retail module CRUD
-app.use('/api/restaurant', requireAuth, analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
-app.use('/api/restaurant', requireAuth, primaryCategoryRoutes);
-app.use('/api/restaurant', requireAuth, deviceRoutes);  // Device registration routes
-app.use('/api/restaurant', requireAuth, deviceModeRoutes);  // Device mode CRUD
-app.use('/api/restaurant', requireAuth, printerProfileRoutes);  // Printer profile CRUD
-app.use('/api/restaurant', requireAuth, peripheralRoutes);  // Peripheral device CRUD
-app.use('/api/restaurant', requireAuth, kioskProfileRoutes);  // Kiosk profile CRUD
-app.use('/api/restaurant', requireAuth, menuRoutes);
-app.use('/api/restaurant', requireAuth, paymentConnectRoutes);  // Stripe Connect + PayPal Partner Referrals
-app.use('/api/restaurant', requireAuth, subscriptionRoutes);  // Subscription plan tier CRUD
-app.use('/api/restaurant', requireAuth, onboardingRoutes);  // Merchant profile + business hours
+app.use('/api/merchant', requireAuth, retailRoutes);  // Retail module CRUD
+app.use('/api/merchant', requireAuth, analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
+app.use('/api/merchant', requireAuth, primaryCategoryRoutes);
+app.use('/api/merchant', requireAuth, deviceRoutes);  // Device registration routes
+app.use('/api/merchant', requireAuth, deviceModeRoutes);  // Device mode CRUD
+app.use('/api/merchant', requireAuth, printerProfileRoutes);  // Printer profile CRUD
+app.use('/api/merchant', requireAuth, peripheralRoutes);  // Peripheral device CRUD
+app.use('/api/merchant', requireAuth, kioskProfileRoutes);  // Kiosk profile CRUD
+app.use('/api/merchant', requireAuth, menuRoutes);
+app.use('/api/merchant', requireAuth, paymentConnectRoutes);  // Stripe Connect + PayPal Partner Referrals
+app.use('/api/merchant', requireAuth, subscriptionRoutes);  // Subscription plan tier CRUD
+app.use('/api/merchant', requireAuth, onboardingRoutes);  // Merchant profile + business hours
 
 export default app;

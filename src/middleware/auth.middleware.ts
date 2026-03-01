@@ -9,7 +9,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: TokenPayload;
-      restaurantAccess?: {
+      merchantAccess?: {
         hasAccess: boolean;
         role?: string;
       };
@@ -107,10 +107,10 @@ export const requireAdmin = requireRole('super_admin', 'owner');
 // Require manager or higher
 export const requireManager = requireRole('super_admin', 'owner', 'manager');
 
-// ============ Restaurant Access Authorization ============
+// ============ Merchant Access Authorization ============
 
 // Check if user has access to the specified restaurant
-export const requireRestaurantAccess = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const requireMerchantAccess = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ error: 'Authentication required' });
@@ -118,10 +118,10 @@ export const requireRestaurantAccess = async (req: Request, res: Response, next:
     }
 
     // Get restaurantId from route params
-    const restaurantId = req.params.restaurantId;
+    const restaurantId = req.params.merchantId;
 
     if (!restaurantId) {
-      res.status(400).json({ error: 'Restaurant ID required' });
+      res.status(400).json({ error: 'Merchant ID required' });
       return;
     }
 
@@ -129,38 +129,38 @@ export const requireRestaurantAccess = async (req: Request, res: Response, next:
     const access = await authService.checkRestaurantAccess(req.user.teamMemberId, restaurantId);
 
     if (!access.hasAccess) {
-      res.status(403).json({ error: 'Access to this restaurant denied' });
+      res.status(403).json({ error: 'Access to this merchant denied' });
       return;
     }
 
     // Attach access info to request
-    req.restaurantAccess = access;
+    req.merchantAccess = access;
     next();
   } catch (error) {
-    console.error('[Auth Middleware] Restaurant access error:', error);
+    console.error('[Auth Middleware] Merchant access error:', error);
     res.status(500).json({ error: 'Authorization error' });
   }
 };
 
 // Require manager or higher role for the specific restaurant
-export const requireRestaurantManager = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const requireMerchantManager = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
 
-    const restaurantId = req.params.restaurantId;
+    const restaurantId = req.params.merchantId;
 
     if (!restaurantId) {
-      res.status(400).json({ error: 'Restaurant ID required' });
+      res.status(400).json({ error: 'Merchant ID required' });
       return;
     }
 
     const access = await authService.checkRestaurantAccess(req.user.teamMemberId, restaurantId);
 
     if (!access.hasAccess) {
-      res.status(403).json({ error: 'Access to this restaurant denied' });
+      res.status(403).json({ error: 'Access to this merchant denied' });
       return;
     }
 
@@ -171,33 +171,33 @@ export const requireRestaurantManager = async (req: Request, res: Response, next
       return;
     }
 
-    req.restaurantAccess = access;
+    req.merchantAccess = access;
     next();
   } catch (error) {
-    console.error('[Auth Middleware] Restaurant manager access error:', error);
+    console.error('[Auth Middleware] Merchant manager access error:', error);
     res.status(500).json({ error: 'Authorization error' });
   }
 };
 
 // Require owner or higher role for the specific restaurant
-export const requireRestaurantOwner = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const requireMerchantOwner = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
 
-    const restaurantId = req.params.restaurantId;
+    const restaurantId = req.params.merchantId;
 
     if (!restaurantId) {
-      res.status(400).json({ error: 'Restaurant ID required' });
+      res.status(400).json({ error: 'Merchant ID required' });
       return;
     }
 
     const access = await authService.checkRestaurantAccess(req.user.teamMemberId, restaurantId);
 
     if (!access.hasAccess) {
-      res.status(403).json({ error: 'Access to this restaurant denied' });
+      res.status(403).json({ error: 'Access to this merchant denied' });
       return;
     }
 
@@ -208,10 +208,10 @@ export const requireRestaurantOwner = async (req: Request, res: Response, next: 
       return;
     }
 
-    req.restaurantAccess = access;
+    req.merchantAccess = access;
     next();
   } catch (error) {
-    console.error('[Auth Middleware] Restaurant owner access error:', error);
+    console.error('[Auth Middleware] Merchant owner access error:', error);
     res.status(500).json({ error: 'Authorization error' });
   }
 };

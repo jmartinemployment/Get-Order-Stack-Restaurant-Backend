@@ -59,9 +59,9 @@ async function generateInvoiceNumber(restaurantId: string): Promise<string> {
 
 // --- Invoice Routes ---
 
-// GET /:restaurantId/invoices
-router.get('/:restaurantId/invoices', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// GET /:merchantId/invoices
+router.get('/:merchantId/invoices', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   try {
     const invoices = await prisma.invoice.findMany({
       where: { restaurantId },
@@ -75,9 +75,9 @@ router.get('/:restaurantId/invoices', async (req: Request, res: Response) => {
   }
 });
 
-// POST /:restaurantId/invoices
-router.post('/:restaurantId/invoices', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// POST /:merchantId/invoices
+router.post('/:merchantId/invoices', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const parsed = createInvoiceSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -133,8 +133,8 @@ router.post('/:restaurantId/invoices', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /:restaurantId/invoices/:invoiceId
-router.patch('/:restaurantId/invoices/:invoiceId', async (req: Request, res: Response) => {
+// PATCH /:merchantId/invoices/:invoiceId
+router.patch('/:merchantId/invoices/:invoiceId', async (req: Request, res: Response) => {
   const { restaurantId, invoiceId } = req.params;
   const parsed = updateInvoiceSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -164,8 +164,8 @@ router.patch('/:restaurantId/invoices/:invoiceId', async (req: Request, res: Res
   }
 });
 
-// POST /:restaurantId/invoices/:invoiceId/send
-router.post('/:restaurantId/invoices/:invoiceId/send', async (req: Request, res: Response) => {
+// POST /:merchantId/invoices/:invoiceId/send
+router.post('/:merchantId/invoices/:invoiceId/send', async (req: Request, res: Response) => {
   const { restaurantId, invoiceId } = req.params;
   try {
     const invoice = await prisma.invoice.update({
@@ -184,8 +184,8 @@ router.post('/:restaurantId/invoices/:invoiceId/send', async (req: Request, res:
   }
 });
 
-// POST /:restaurantId/invoices/:invoiceId/payment
-router.post('/:restaurantId/invoices/:invoiceId/payment', async (req: Request, res: Response) => {
+// POST /:merchantId/invoices/:invoiceId/payment
+router.post('/:merchantId/invoices/:invoiceId/payment', async (req: Request, res: Response) => {
   const { restaurantId, invoiceId } = req.params;
   const parsed = recordPaymentSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -237,8 +237,8 @@ router.post('/:restaurantId/invoices/:invoiceId/payment', async (req: Request, r
   }
 });
 
-// DELETE /:restaurantId/invoices/:invoiceId
-router.delete('/:restaurantId/invoices/:invoiceId', async (req: Request, res: Response) => {
+// DELETE /:merchantId/invoices/:invoiceId
+router.delete('/:merchantId/invoices/:invoiceId', async (req: Request, res: Response) => {
   const { restaurantId, invoiceId } = req.params;
   try {
     const invoice = await prisma.invoice.update({
@@ -258,9 +258,9 @@ router.delete('/:restaurantId/invoices/:invoiceId', async (req: Request, res: Re
 
 // --- House Account Routes ---
 
-// GET /:restaurantId/house-accounts
-router.get('/:restaurantId/house-accounts', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// GET /:merchantId/house-accounts
+router.get('/:merchantId/house-accounts', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   try {
     const accounts = await prisma.houseAccount.findMany({
       where: { restaurantId },
@@ -273,9 +273,9 @@ router.get('/:restaurantId/house-accounts', async (req: Request, res: Response) 
   }
 });
 
-// POST /:restaurantId/house-accounts
-router.post('/:restaurantId/house-accounts', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// POST /:merchantId/house-accounts
+router.post('/:merchantId/house-accounts', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const parsed = createHouseAccountSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -296,8 +296,8 @@ router.post('/:restaurantId/house-accounts', async (req: Request, res: Response)
   }
 });
 
-// PATCH /:restaurantId/house-accounts/:accountId
-router.patch('/:restaurantId/house-accounts/:accountId', async (req: Request, res: Response) => {
+// PATCH /:merchantId/house-accounts/:accountId
+router.patch('/:merchantId/house-accounts/:accountId', async (req: Request, res: Response) => {
   const { restaurantId, accountId } = req.params;
   const parsed = updateHouseAccountSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -321,8 +321,8 @@ router.patch('/:restaurantId/house-accounts/:accountId', async (req: Request, re
   }
 });
 
-// DELETE /:restaurantId/house-accounts/:accountId
-router.delete('/:restaurantId/house-accounts/:accountId', async (req: Request, res: Response) => {
+// DELETE /:merchantId/house-accounts/:accountId
+router.delete('/:merchantId/house-accounts/:accountId', async (req: Request, res: Response) => {
   const { restaurantId, accountId } = req.params;
   try {
     const account = await prisma.houseAccount.update({

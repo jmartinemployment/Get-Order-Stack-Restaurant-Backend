@@ -51,9 +51,9 @@ function buildSegmentCondition(segment: string): string | undefined {
 
 // --- Routes ---
 
-// GET /:restaurantId/campaigns
-router.get('/:restaurantId/campaigns', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// GET /:merchantId/campaigns
+router.get('/:merchantId/campaigns', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   try {
     const campaigns = await prisma.campaign.findMany({
       where: { restaurantId },
@@ -67,9 +67,9 @@ router.get('/:restaurantId/campaigns', async (req: Request, res: Response) => {
   }
 });
 
-// POST /:restaurantId/campaigns
-router.post('/:restaurantId/campaigns', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// POST /:merchantId/campaigns
+router.post('/:merchantId/campaigns', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const parsed = createCampaignSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -90,8 +90,8 @@ router.post('/:restaurantId/campaigns', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /:restaurantId/campaigns/:campaignId
-router.patch('/:restaurantId/campaigns/:campaignId', async (req: Request, res: Response) => {
+// PATCH /:merchantId/campaigns/:campaignId
+router.patch('/:merchantId/campaigns/:campaignId', async (req: Request, res: Response) => {
   const { restaurantId, campaignId } = req.params;
   const parsed = updateCampaignSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -115,8 +115,8 @@ router.patch('/:restaurantId/campaigns/:campaignId', async (req: Request, res: R
   }
 });
 
-// DELETE /:restaurantId/campaigns/:campaignId
-router.delete('/:restaurantId/campaigns/:campaignId', async (req: Request, res: Response) => {
+// DELETE /:merchantId/campaigns/:campaignId
+router.delete('/:merchantId/campaigns/:campaignId', async (req: Request, res: Response) => {
   const { restaurantId, campaignId } = req.params;
   try {
     const campaign = await prisma.campaign.update({
@@ -134,8 +134,8 @@ router.delete('/:restaurantId/campaigns/:campaignId', async (req: Request, res: 
   }
 });
 
-// POST /:restaurantId/campaigns/:campaignId/send
-router.post('/:restaurantId/campaigns/:campaignId/send', async (req: Request, res: Response) => {
+// POST /:merchantId/campaigns/:campaignId/send
+router.post('/:merchantId/campaigns/:campaignId/send', async (req: Request, res: Response) => {
   const { restaurantId, campaignId } = req.params;
   try {
     const campaign = await prisma.campaign.findFirst({
@@ -172,8 +172,8 @@ router.post('/:restaurantId/campaigns/:campaignId/send', async (req: Request, re
   }
 });
 
-// POST /:restaurantId/campaigns/:campaignId/schedule
-router.post('/:restaurantId/campaigns/:campaignId/schedule', async (req: Request, res: Response) => {
+// POST /:merchantId/campaigns/:campaignId/schedule
+router.post('/:merchantId/campaigns/:campaignId/schedule', async (req: Request, res: Response) => {
   const { restaurantId, campaignId } = req.params;
   const parsed = scheduleSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -200,8 +200,8 @@ router.post('/:restaurantId/campaigns/:campaignId/schedule', async (req: Request
   }
 });
 
-// GET /:restaurantId/campaigns/:campaignId/performance
-router.get('/:restaurantId/campaigns/:campaignId/performance', async (req: Request, res: Response) => {
+// GET /:merchantId/campaigns/:campaignId/performance
+router.get('/:merchantId/campaigns/:campaignId/performance', async (req: Request, res: Response) => {
   const { campaignId } = req.params;
   try {
     const performance = await prisma.campaignPerformance.findUnique({
@@ -218,9 +218,9 @@ router.get('/:restaurantId/campaigns/:campaignId/performance', async (req: Reque
   }
 });
 
-// POST /:restaurantId/campaigns/audience-estimate
-router.post('/:restaurantId/campaigns/audience-estimate', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// POST /:merchantId/campaigns/audience-estimate
+router.post('/:merchantId/campaigns/audience-estimate', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const parsed = audienceEstimateSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -292,9 +292,9 @@ const updateAutomationSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-// GET /:restaurantId/marketing/automations
-router.get('/:restaurantId/marketing/automations', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// GET /:merchantId/marketing/automations
+router.get('/:merchantId/marketing/automations', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   try {
     const automations = await prisma.marketingAutomation.findMany({
       where: { restaurantId },
@@ -307,9 +307,9 @@ router.get('/:restaurantId/marketing/automations', async (req: Request, res: Res
   }
 });
 
-// POST /:restaurantId/marketing/automations
-router.post('/:restaurantId/marketing/automations', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// POST /:merchantId/marketing/automations
+router.post('/:merchantId/marketing/automations', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const parsed = createAutomationSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -333,8 +333,8 @@ router.post('/:restaurantId/marketing/automations', async (req: Request, res: Re
   }
 });
 
-// PATCH /:restaurantId/marketing/automations/:automationId
-router.patch('/:restaurantId/marketing/automations/:automationId', async (req: Request, res: Response) => {
+// PATCH /:merchantId/marketing/automations/:automationId
+router.patch('/:merchantId/marketing/automations/:automationId', async (req: Request, res: Response) => {
   const { restaurantId, automationId } = req.params;
   const parsed = updateAutomationSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -358,8 +358,8 @@ router.patch('/:restaurantId/marketing/automations/:automationId', async (req: R
   }
 });
 
-// DELETE /:restaurantId/marketing/automations/:automationId
-router.delete('/:restaurantId/marketing/automations/:automationId', async (req: Request, res: Response) => {
+// DELETE /:merchantId/marketing/automations/:automationId
+router.delete('/:merchantId/marketing/automations/:automationId', async (req: Request, res: Response) => {
   const { restaurantId, automationId } = req.params;
   try {
     await prisma.marketingAutomation.delete({

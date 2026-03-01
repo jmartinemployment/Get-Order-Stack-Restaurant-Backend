@@ -19,10 +19,10 @@ const TIER_NAMES: Record<string, string> = {
   premium: 'Premium',
 };
 
-// GET /:restaurantId/subscription — current subscription info
-router.get('/:restaurantId/subscription', requireAuth, async (req: Request, res: Response) => {
+// GET /:merchantId/subscription — current subscription info
+router.get('/:merchantId/subscription', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
@@ -62,10 +62,10 @@ router.get('/:restaurantId/subscription', requireAuth, async (req: Request, res:
   }
 });
 
-// POST /:restaurantId/subscription/change-plan — change plan tier
-router.post('/:restaurantId/subscription/change-plan', requireAuth, async (req: Request, res: Response) => {
+// POST /:merchantId/subscription/change-plan — change plan tier
+router.post('/:merchantId/subscription/change-plan', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = changePlanSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -107,10 +107,10 @@ router.post('/:restaurantId/subscription/change-plan', requireAuth, async (req: 
   }
 });
 
-// POST /:restaurantId/subscription/cancel — cancel subscription (downgrade to free)
-router.post('/:restaurantId/subscription/cancel', requireAuth, async (req: Request, res: Response) => {
+// POST /:merchantId/subscription/cancel — cancel subscription (downgrade to free)
+router.post('/:merchantId/subscription/cancel', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const fees = PLATFORM_FEE_TIERS.free;
 
     const restaurant = await prisma.restaurant.update({

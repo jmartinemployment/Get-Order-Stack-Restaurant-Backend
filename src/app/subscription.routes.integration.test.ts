@@ -21,7 +21,7 @@ beforeEach(() => {
   resetPrismaMock();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/subscription`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/subscription`;
 
 // ============ GET /subscription ============
 

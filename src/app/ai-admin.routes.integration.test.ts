@@ -59,7 +59,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/ai-admin`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/ai-admin`;
 
 // ============ GET /ai-admin/config ============
 

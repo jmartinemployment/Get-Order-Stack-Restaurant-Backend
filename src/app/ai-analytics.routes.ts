@@ -13,12 +13,12 @@ const router = Router();
 // ============ Menu Engineering ============
 
 /**
- * GET /:restaurantId/analytics/menu-engineering
+ * GET /:merchantId/analytics/menu-engineering
  * Generate a complete menu engineering report with quadrant analysis
  */
-router.get('/:restaurantId/analytics/menu-engineering', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/menu-engineering', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { days = '30' } = req.query;
 
     const report = await menuEngineeringService.generateReport(
@@ -39,12 +39,12 @@ router.get('/:restaurantId/analytics/menu-engineering', async (req: Request, res
 });
 
 /**
- * GET /:restaurantId/analytics/upsell-suggestions
+ * GET /:merchantId/analytics/upsell-suggestions
  * Get real-time upsell suggestions for POS display
  */
-router.get('/:restaurantId/analytics/upsell-suggestions', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/upsell-suggestions', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { cartItemIds } = req.query;
 
     const currentCartIds = cartItemIds 
@@ -66,12 +66,12 @@ router.get('/:restaurantId/analytics/upsell-suggestions', async (req: Request, r
 // ============ Sales Insights ============
 
 /**
- * GET /:restaurantId/analytics/sales/daily
+ * GET /:merchantId/analytics/sales/daily
  * Get daily sales insights with AI analysis
  */
-router.get('/:restaurantId/analytics/sales/daily', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/sales/daily', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { date } = req.query;
 
     const targetDate = date ? new Date(date as string) : undefined;
@@ -90,12 +90,12 @@ router.get('/:restaurantId/analytics/sales/daily', async (req: Request, res: Res
 });
 
 /**
- * GET /:restaurantId/analytics/sales/weekly
+ * GET /:merchantId/analytics/sales/weekly
  * Get weekly sales insights with AI analysis
  */
-router.get('/:restaurantId/analytics/sales/weekly', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/sales/weekly', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { weeksAgo = '0' } = req.query;
 
     const insights = await salesInsightsService.getWeeklyInsights(
@@ -116,12 +116,12 @@ router.get('/:restaurantId/analytics/sales/weekly', async (req: Request, res: Re
 });
 
 /**
- * GET /:restaurantId/analytics/sales/summary
+ * GET /:merchantId/analytics/sales/summary
  * Get sales summary for a specific date range
  */
-router.get('/:restaurantId/analytics/sales/summary', async (req: Request, res: Response) => {
+router.get('/:merchantId/analytics/sales/summary', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { startDate, endDate } = req.query;
 
     if (!startDate || !endDate) {
@@ -145,12 +145,12 @@ router.get('/:restaurantId/analytics/sales/summary', async (req: Request, res: R
 // ============ Inventory Management ============
 
 /**
- * GET /:restaurantId/inventory
+ * GET /:merchantId/inventory
  * Get all inventory items
  */
-router.get('/:restaurantId/inventory', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const items = await inventoryService.getInventory(restaurantId);
     res.json(items);
   } catch (error) {
@@ -160,10 +160,10 @@ router.get('/:restaurantId/inventory', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /:restaurantId/inventory/:itemId
+ * GET /:merchantId/inventory/:itemId
  * Get a specific inventory item
  */
-router.get('/:restaurantId/inventory/:itemId', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/:itemId', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const item = await inventoryService.getInventoryItem(itemId);
@@ -181,12 +181,12 @@ router.get('/:restaurantId/inventory/:itemId', async (req: Request, res: Respons
 });
 
 /**
- * POST /:restaurantId/inventory
+ * POST /:merchantId/inventory
  * Create a new inventory item
  */
-router.post('/:restaurantId/inventory', async (req: Request, res: Response) => {
+router.post('/:merchantId/inventory', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { name, nameEn, unit, currentStock, minStock, maxStock, costPerUnit, supplier, category } = req.body;
 
     const item = await inventoryService.createInventoryItem({
@@ -210,10 +210,10 @@ router.post('/:restaurantId/inventory', async (req: Request, res: Response) => {
 });
 
 /**
- * PATCH /:restaurantId/inventory/:itemId/stock
+ * PATCH /:merchantId/inventory/:itemId/stock
  * Update stock level (manual count)
  */
-router.patch('/:restaurantId/inventory/:itemId/stock', async (req: Request, res: Response) => {
+router.patch('/:merchantId/inventory/:itemId/stock', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const { newStock, reason } = req.body;
@@ -232,10 +232,10 @@ router.patch('/:restaurantId/inventory/:itemId/stock', async (req: Request, res:
 });
 
 /**
- * POST /:restaurantId/inventory/:itemId/usage
+ * POST /:merchantId/inventory/:itemId/usage
  * Record inventory usage (deduct stock)
  */
-router.post('/:restaurantId/inventory/:itemId/usage', async (req: Request, res: Response) => {
+router.post('/:merchantId/inventory/:itemId/usage', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const { quantity, reason } = req.body;
@@ -254,10 +254,10 @@ router.post('/:restaurantId/inventory/:itemId/usage', async (req: Request, res: 
 });
 
 /**
- * POST /:restaurantId/inventory/:itemId/restock
+ * POST /:merchantId/inventory/:itemId/restock
  * Record restocking (add stock)
  */
-router.post('/:restaurantId/inventory/:itemId/restock', async (req: Request, res: Response) => {
+router.post('/:merchantId/inventory/:itemId/restock', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const { quantity, invoiceNumber } = req.body;
@@ -276,12 +276,12 @@ router.post('/:restaurantId/inventory/:itemId/restock', async (req: Request, res
 });
 
 /**
- * GET /:restaurantId/inventory/alerts
+ * GET /:merchantId/inventory/alerts
  * Get inventory alerts (low stock, out of stock, etc.)
  */
-router.get('/:restaurantId/inventory/alerts', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/alerts', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const alerts = await inventoryService.getAlerts(restaurantId);
     res.json(alerts);
   } catch (error) {
@@ -291,12 +291,12 @@ router.get('/:restaurantId/inventory/alerts', async (req: Request, res: Response
 });
 
 /**
- * GET /:restaurantId/inventory/predictions
+ * GET /:merchantId/inventory/predictions
  * Get stock predictions (when will items run out)
  */
-router.get('/:restaurantId/inventory/predictions', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/predictions', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const predictions = await inventoryService.getStockPredictions(restaurantId);
     res.json(predictions);
   } catch (error) {
@@ -306,12 +306,12 @@ router.get('/:restaurantId/inventory/predictions', async (req: Request, res: Res
 });
 
 /**
- * GET /:restaurantId/inventory/report
+ * GET /:merchantId/inventory/report
  * Get comprehensive inventory report
  */
-router.get('/:restaurantId/inventory/report', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/report', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const report = await inventoryService.generateReport(restaurantId);
     res.json(report);
   } catch (error) {
@@ -321,10 +321,10 @@ router.get('/:restaurantId/inventory/report', async (req: Request, res: Response
 });
 
 /**
- * GET /:restaurantId/inventory/:itemId/prediction
+ * GET /:merchantId/inventory/:itemId/prediction
  * Get prediction for a specific item
  */
-router.get('/:restaurantId/inventory/:itemId/prediction', async (req: Request, res: Response) => {
+router.get('/:merchantId/inventory/:itemId/prediction', async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
     const prediction = await inventoryService.predictItemRunout(itemId);

@@ -21,7 +21,7 @@ beforeEach(() => {
   resetPrismaMock();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/campaigns`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/campaigns`;
 
 const CAMPAIGN = {
   id: 'campaign-00000000-0000-0000-0000-000000000001',

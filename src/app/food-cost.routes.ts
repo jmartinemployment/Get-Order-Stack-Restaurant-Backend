@@ -91,9 +91,9 @@ const updateRecipeSchema = z.object({
 // VENDOR CRUD
 // =====================
 
-// GET /:restaurantId/vendors
-router.get('/:restaurantId/vendors', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// GET /:merchantId/vendors
+router.get('/:merchantId/vendors', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   try {
     const vendors = await prisma.vendor.findMany({
       where: { restaurantId },
@@ -106,9 +106,9 @@ router.get('/:restaurantId/vendors', async (req: Request, res: Response) => {
   }
 });
 
-// POST /:restaurantId/vendors
-router.post('/:restaurantId/vendors', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// POST /:merchantId/vendors
+router.post('/:merchantId/vendors', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const parsed = createVendorSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -126,8 +126,8 @@ router.post('/:restaurantId/vendors', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /:restaurantId/vendors/:vendorId
-router.patch('/:restaurantId/vendors/:vendorId', async (req: Request, res: Response) => {
+// PATCH /:merchantId/vendors/:vendorId
+router.patch('/:merchantId/vendors/:vendorId', async (req: Request, res: Response) => {
   const { restaurantId, vendorId } = req.params;
   const parsed = updateVendorSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -151,8 +151,8 @@ router.patch('/:restaurantId/vendors/:vendorId', async (req: Request, res: Respo
   }
 });
 
-// DELETE /:restaurantId/vendors/:vendorId
-router.delete('/:restaurantId/vendors/:vendorId', async (req: Request, res: Response) => {
+// DELETE /:merchantId/vendors/:vendorId
+router.delete('/:merchantId/vendors/:vendorId', async (req: Request, res: Response) => {
   const { restaurantId, vendorId } = req.params;
   try {
     await prisma.vendor.delete({ where: { id: vendorId, restaurantId } });
@@ -171,9 +171,9 @@ router.delete('/:restaurantId/vendors/:vendorId', async (req: Request, res: Resp
 // PURCHASE INVOICE CRUD + ACTIONS
 // =====================
 
-// GET /:restaurantId/purchase-invoices
-router.get('/:restaurantId/purchase-invoices', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// GET /:merchantId/purchase-invoices
+router.get('/:merchantId/purchase-invoices', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   try {
     const invoices = await prisma.purchaseInvoice.findMany({
       where: { restaurantId },
@@ -187,9 +187,9 @@ router.get('/:restaurantId/purchase-invoices', async (req: Request, res: Respons
   }
 });
 
-// POST /:restaurantId/purchase-invoices
-router.post('/:restaurantId/purchase-invoices', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// POST /:merchantId/purchase-invoices
+router.post('/:merchantId/purchase-invoices', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const parsed = createInvoiceSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -237,9 +237,9 @@ router.post('/:restaurantId/purchase-invoices', async (req: Request, res: Respon
   }
 });
 
-// POST /:restaurantId/purchase-invoices/upload — OCR via Claude Vision
-router.post('/:restaurantId/purchase-invoices/upload', upload.single('image'), async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// POST /:merchantId/purchase-invoices/upload — OCR via Claude Vision
+router.post('/:merchantId/purchase-invoices/upload', upload.single('image'), async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const file = req.file;
   const vendorId = req.body?.vendorId as string | undefined;
 
@@ -364,8 +364,8 @@ If you cannot extract a field, use reasonable defaults. invoiceDate defaults to 
   }
 });
 
-// PATCH /:restaurantId/purchase-invoices/:id/approve
-router.patch('/:restaurantId/purchase-invoices/:id/approve', async (req: Request, res: Response) => {
+// PATCH /:merchantId/purchase-invoices/:id/approve
+router.patch('/:merchantId/purchase-invoices/:id/approve', async (req: Request, res: Response) => {
   const { restaurantId, id } = req.params;
   try {
     const invoice = await prisma.purchaseInvoice.update({
@@ -384,8 +384,8 @@ router.patch('/:restaurantId/purchase-invoices/:id/approve', async (req: Request
   }
 });
 
-// PATCH /:restaurantId/purchase-invoices/:id/paid
-router.patch('/:restaurantId/purchase-invoices/:id/paid', async (req: Request, res: Response) => {
+// PATCH /:merchantId/purchase-invoices/:id/paid
+router.patch('/:merchantId/purchase-invoices/:id/paid', async (req: Request, res: Response) => {
   const { restaurantId, id } = req.params;
   try {
     const invoice = await prisma.purchaseInvoice.update({
@@ -404,8 +404,8 @@ router.patch('/:restaurantId/purchase-invoices/:id/paid', async (req: Request, r
   }
 });
 
-// DELETE /:restaurantId/purchase-invoices/:id
-router.delete('/:restaurantId/purchase-invoices/:id', async (req: Request, res: Response) => {
+// DELETE /:merchantId/purchase-invoices/:id
+router.delete('/:merchantId/purchase-invoices/:id', async (req: Request, res: Response) => {
   const { restaurantId, id } = req.params;
   try {
     await prisma.purchaseInvoice.delete({ where: { id, restaurantId } });
@@ -420,9 +420,9 @@ router.delete('/:restaurantId/purchase-invoices/:id', async (req: Request, res: 
   }
 });
 
-// GET /:restaurantId/purchase-invoices/price-history
-router.get('/:restaurantId/purchase-invoices/price-history', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// GET /:merchantId/purchase-invoices/price-history
+router.get('/:merchantId/purchase-invoices/price-history', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const ingredient = req.query.ingredient as string | undefined;
 
   try {
@@ -458,9 +458,9 @@ router.get('/:restaurantId/purchase-invoices/price-history', async (req: Request
 // RECIPE CRUD
 // =====================
 
-// GET /:restaurantId/recipes
-router.get('/:restaurantId/recipes', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// GET /:merchantId/recipes
+router.get('/:merchantId/recipes', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   try {
     const recipes = await prisma.foodCostRecipe.findMany({
       where: { restaurantId },
@@ -495,9 +495,9 @@ router.get('/:restaurantId/recipes', async (req: Request, res: Response) => {
   }
 });
 
-// POST /:restaurantId/recipes
-router.post('/:restaurantId/recipes', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// POST /:merchantId/recipes
+router.post('/:merchantId/recipes', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const parsed = createRecipeSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -542,8 +542,8 @@ router.post('/:restaurantId/recipes', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /:restaurantId/recipes/:id
-router.patch('/:restaurantId/recipes/:id', async (req: Request, res: Response) => {
+// PATCH /:merchantId/recipes/:id
+router.patch('/:merchantId/recipes/:id', async (req: Request, res: Response) => {
   const { restaurantId, id } = req.params;
   const parsed = updateRecipeSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -596,8 +596,8 @@ router.patch('/:restaurantId/recipes/:id', async (req: Request, res: Response) =
   }
 });
 
-// DELETE /:restaurantId/recipes/:id
-router.delete('/:restaurantId/recipes/:id', async (req: Request, res: Response) => {
+// DELETE /:merchantId/recipes/:id
+router.delete('/:merchantId/recipes/:id', async (req: Request, res: Response) => {
   const { restaurantId, id } = req.params;
   try {
     await prisma.foodCostRecipe.delete({ where: { id, restaurantId } });
@@ -616,9 +616,9 @@ router.delete('/:restaurantId/recipes/:id', async (req: Request, res: Response) 
 // FOOD COST REPORT
 // =====================
 
-// GET /:restaurantId/food-cost-report
-router.get('/:restaurantId/food-cost-report', async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+// GET /:merchantId/food-cost-report
+router.get('/:merchantId/food-cost-report', async (req: Request, res: Response) => {
+  const restaurantId = req.params.merchantId;
   const days = Number.parseInt(req.query.days as string, 10) || 30;
   const since = new Date();
   since.setDate(since.getDate() - days);

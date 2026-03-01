@@ -21,7 +21,7 @@ beforeEach(() => {
   resetPrismaMock();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/peripherals`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/peripherals`;
 const PERIPHERAL_ID = '11111111-1111-4111-a111-111111111111';
 const PARENT_DEVICE_ID = '22222222-2222-4222-a222-222222222222';
 

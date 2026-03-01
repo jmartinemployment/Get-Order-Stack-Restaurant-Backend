@@ -129,9 +129,9 @@ function formatTeamMember(member: FormattableMember) {
 
 // ============ Team Members ============
 
-router.get('/:restaurantId/team-members', async (req: Request, res: Response) => {
+router.get('/:merchantId/team-members', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const members = await prisma.teamMember.findMany({
       where: { restaurantId },
       include: teamMemberInclude,
@@ -145,9 +145,9 @@ router.get('/:restaurantId/team-members', async (req: Request, res: Response) =>
   }
 });
 
-router.post('/:restaurantId/team-members', async (req: Request, res: Response) => {
+router.post('/:merchantId/team-members', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createTeamMemberSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten().fieldErrors });
@@ -223,7 +223,7 @@ router.post('/:restaurantId/team-members', async (req: Request, res: Response) =
   }
 });
 
-router.patch('/:restaurantId/team-members/:id', async (req: Request, res: Response) => {
+router.patch('/:merchantId/team-members/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const parsed = updateTeamMemberSchema.safeParse(req.body);
@@ -305,7 +305,7 @@ router.patch('/:restaurantId/team-members/:id', async (req: Request, res: Respon
   }
 });
 
-router.delete('/:restaurantId/team-members/:id', async (req: Request, res: Response) => {
+router.delete('/:merchantId/team-members/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -334,7 +334,7 @@ router.delete('/:restaurantId/team-members/:id', async (req: Request, res: Respo
 
 // --- Team Member Jobs ---
 
-router.post('/:restaurantId/team-members/:memberId/jobs', async (req: Request, res: Response) => {
+router.post('/:merchantId/team-members/:memberId/jobs', async (req: Request, res: Response) => {
   try {
     const { memberId } = req.params;
     const parsed = jobSchema.safeParse(req.body);
@@ -361,7 +361,7 @@ router.post('/:restaurantId/team-members/:memberId/jobs', async (req: Request, r
   }
 });
 
-router.patch('/:restaurantId/team-members/:memberId/jobs/:jobId', async (req: Request, res: Response) => {
+router.patch('/:merchantId/team-members/:memberId/jobs/:jobId', async (req: Request, res: Response) => {
   try {
     const { jobId } = req.params;
     const parsed = jobSchema.partial().safeParse(req.body);
@@ -384,7 +384,7 @@ router.patch('/:restaurantId/team-members/:memberId/jobs/:jobId', async (req: Re
 // ============ Onboarding ============
 
 // GET onboarding checklist for a team member
-router.get('/:restaurantId/team-members/:memberId/onboarding', async (req: Request, res: Response) => {
+router.get('/:merchantId/team-members/:memberId/onboarding', async (req: Request, res: Response) => {
   try {
     const { memberId } = req.params;
 
@@ -427,7 +427,7 @@ router.get('/:restaurantId/team-members/:memberId/onboarding', async (req: Reque
 });
 
 // PATCH toggle a single onboarding step
-router.patch('/:restaurantId/team-members/:memberId/onboarding/:step', async (req: Request, res: Response) => {
+router.patch('/:merchantId/team-members/:memberId/onboarding/:step', async (req: Request, res: Response) => {
   try {
     const { memberId, step } = req.params;
     const parsed = updateOnboardingStepSchema.safeParse(req.body);
@@ -484,7 +484,7 @@ router.patch('/:restaurantId/team-members/:memberId/onboarding/:step', async (re
 });
 
 // POST complete onboarding (marks all steps done + updates status)
-router.post('/:restaurantId/team-members/:memberId/onboarding/complete', async (req: Request, res: Response) => {
+router.post('/:merchantId/team-members/:memberId/onboarding/complete', async (req: Request, res: Response) => {
   try {
     const { memberId } = req.params;
     const now = new Date();
@@ -533,9 +533,9 @@ router.post('/:restaurantId/team-members/:memberId/onboarding/complete', async (
 // Seed default permission sets (idempotent)
 // Handles migration from old 3-set model (Full Access, Standard, Limited)
 // to new 6-set role-named model (Owner, Manager, Server, Cashier, Kitchen, Host)
-router.post('/:restaurantId/permission-sets/seed-defaults', async (req: Request, res: Response) => {
+router.post('/:merchantId/permission-sets/seed-defaults', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const result = await prisma.$transaction(async (tx) => {
       const existing = await tx.permissionSet.findMany({
@@ -587,7 +587,7 @@ router.post('/:restaurantId/permission-sets/seed-defaults', async (req: Request,
     });
 
     const allSets = await prisma.permissionSet.findMany({
-      where: { restaurantId: req.params.restaurantId },
+      where: { restaurantId: req.params.merchantId },
       orderBy: { name: 'asc' },
     });
 
@@ -603,9 +603,9 @@ router.post('/:restaurantId/permission-sets/seed-defaults', async (req: Request,
   }
 });
 
-router.get('/:restaurantId/permission-sets', async (req: Request, res: Response) => {
+router.get('/:merchantId/permission-sets', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const sets = await prisma.permissionSet.findMany({
       where: { restaurantId },
       orderBy: { name: 'asc' },
@@ -618,9 +618,9 @@ router.get('/:restaurantId/permission-sets', async (req: Request, res: Response)
   }
 });
 
-router.post('/:restaurantId/permission-sets', async (req: Request, res: Response) => {
+router.post('/:merchantId/permission-sets', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createPermissionSetSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten().fieldErrors });
@@ -643,7 +643,7 @@ router.post('/:restaurantId/permission-sets', async (req: Request, res: Response
   }
 });
 
-router.patch('/:restaurantId/permission-sets/:id', async (req: Request, res: Response) => {
+router.patch('/:merchantId/permission-sets/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const parsed = updatePermissionSetSchema.safeParse(req.body);
@@ -667,7 +667,7 @@ router.patch('/:restaurantId/permission-sets/:id', async (req: Request, res: Res
   }
 });
 
-router.delete('/:restaurantId/permission-sets/:id', async (req: Request, res: Response) => {
+router.delete('/:merchantId/permission-sets/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await prisma.permissionSet.delete({ where: { id } });
@@ -681,9 +681,9 @@ router.delete('/:restaurantId/permission-sets/:id', async (req: Request, res: Re
 
 // ============ POS Login ============
 
-router.post('/:restaurantId/pos/login', async (req: Request, res: Response) => {
+router.post('/:merchantId/pos/login', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { passcode } = req.body;
 
     if (!passcode) {

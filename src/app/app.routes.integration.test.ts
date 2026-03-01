@@ -95,7 +95,7 @@ vi.mock('../services/order-throttling.service', () => ({
 
 const prisma = getPrismaMock();
 
-const BASE_URL = `/api/restaurant`;
+const BASE_URL = `/api/merchant`;
 const R_URL = `${BASE_URL}/${RESTAURANT_ID}`;
 
 // Reusable fixture data
@@ -229,7 +229,7 @@ beforeEach(() => {
 
 // ============ Staff PIN Validation ============
 
-describe('POST /api/restaurant/:restaurantId/auth/validate-pin', () => {
+describe('POST /api/merchant/:merchantId/auth/validate-pin', () => {
   const url = `${R_URL}/auth/validate-pin`;
 
   it('returns 401 without auth token', async () => {
@@ -275,7 +275,7 @@ describe('POST /api/restaurant/:restaurantId/auth/validate-pin', () => {
 
 // ============ Restaurant CRUD ============
 
-describe('POST /api/restaurant', () => {
+describe('POST /api/merchant', () => {
   const url = BASE_URL;
 
   it('returns 401 without auth token', async () => {
@@ -308,7 +308,7 @@ describe('POST /api/restaurant', () => {
   });
 });
 
-describe('GET /api/restaurant/:restaurantId', () => {
+describe('GET /api/merchant/:merchantId', () => {
   const url = `${R_URL}`;
 
   it('returns restaurant when found', async () => {
@@ -328,7 +328,7 @@ describe('GET /api/restaurant/:restaurantId', () => {
   });
 });
 
-describe('GET /api/restaurant/slug/:slug', () => {
+describe('GET /api/merchant/slug/:slug', () => {
   it('returns restaurant by slug', async () => {
     prisma.restaurant.findUnique.mockResolvedValue(RESTAURANT);
 
@@ -345,7 +345,7 @@ describe('GET /api/restaurant/slug/:slug', () => {
   });
 });
 
-describe('PATCH /api/restaurant/:restaurantId', () => {
+describe('PATCH /api/merchant/:merchantId', () => {
   const url = `${R_URL}`;
 
   it('updates restaurant with valid data', async () => {
@@ -371,7 +371,7 @@ describe('PATCH /api/restaurant/:restaurantId', () => {
 
 // ============ Full Menu ============
 
-describe('GET /api/restaurant/:restaurantId/menu', () => {
+describe('GET /api/merchant/:merchantId/menu', () => {
   const url = `${R_URL}/menu`;
 
   it('returns transformed menu structure', async () => {
@@ -402,7 +402,7 @@ describe('GET /api/restaurant/:restaurantId/menu', () => {
 
 // ============ Categories ============
 
-describe('GET /api/restaurant/:restaurantId/menu/categories', () => {
+describe('GET /api/merchant/:merchantId/menu/categories', () => {
   const url = `${R_URL}/menu/categories`;
 
   it('returns categories for restaurant', async () => {
@@ -415,7 +415,7 @@ describe('GET /api/restaurant/:restaurantId/menu/categories', () => {
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/menu/categories', () => {
+describe('POST /api/merchant/:merchantId/menu/categories', () => {
   const url = `${R_URL}/menu/categories`;
 
   it('creates a category', async () => {
@@ -429,7 +429,7 @@ describe('POST /api/restaurant/:restaurantId/menu/categories', () => {
   });
 });
 
-describe('PATCH /api/restaurant/:restaurantId/menu/categories/:categoryId', () => {
+describe('PATCH /api/merchant/:merchantId/menu/categories/:categoryId', () => {
   const url = `${R_URL}/menu/categories/${CATEGORY_ID}`;
 
   it('updates a category', async () => {
@@ -442,7 +442,7 @@ describe('PATCH /api/restaurant/:restaurantId/menu/categories/:categoryId', () =
   });
 });
 
-describe('DELETE /api/restaurant/:restaurantId/menu/categories/:categoryId', () => {
+describe('DELETE /api/merchant/:merchantId/menu/categories/:categoryId', () => {
   const url = `${R_URL}/menu/categories/${CATEGORY_ID}`;
 
   it('deletes a category and its items', async () => {
@@ -458,7 +458,7 @@ describe('DELETE /api/restaurant/:restaurantId/menu/categories/:categoryId', () 
 
 // ============ Menu Items ============
 
-describe('GET /api/restaurant/:restaurantId/menu/items', () => {
+describe('GET /api/merchant/:merchantId/menu/items', () => {
   const url = `${R_URL}/menu/items`;
 
   it('returns all menu items', async () => {
@@ -470,7 +470,7 @@ describe('GET /api/restaurant/:restaurantId/menu/items', () => {
   });
 });
 
-describe('GET /api/restaurant/:restaurantId/menu/items/:itemId', () => {
+describe('GET /api/merchant/:merchantId/menu/items/:itemId', () => {
   it('returns item when found', async () => {
     prisma.menuItem.findUnique.mockResolvedValue({ ...MOCK_ITEM, category: MOCK_CATEGORY, modifierGroups: [] });
 
@@ -488,7 +488,7 @@ describe('GET /api/restaurant/:restaurantId/menu/items/:itemId', () => {
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/menu/items', () => {
+describe('POST /api/merchant/:merchantId/menu/items', () => {
   const url = `${R_URL}/menu/items`;
 
   it('creates a menu item', async () => {
@@ -506,7 +506,7 @@ describe('POST /api/restaurant/:restaurantId/menu/items', () => {
   });
 });
 
-describe('PATCH /api/restaurant/:restaurantId/menu/items/:itemId', () => {
+describe('PATCH /api/merchant/:merchantId/menu/items/:itemId', () => {
   const url = `${R_URL}/menu/items/${ITEM_ID}`;
 
   it('updates a menu item', async () => {
@@ -519,7 +519,7 @@ describe('PATCH /api/restaurant/:restaurantId/menu/items/:itemId', () => {
   });
 });
 
-describe('PATCH /api/restaurant/:restaurantId/menu/items/:itemId/86', () => {
+describe('PATCH /api/merchant/:merchantId/menu/items/:itemId/86', () => {
   it('marks item as 86d', async () => {
     prisma.menuItem.update.mockResolvedValue({ ...MOCK_ITEM, eightySixed: true, eightySixReason: 'Out of stock' });
 
@@ -549,7 +549,7 @@ describe('PATCH /api/restaurant/:restaurantId/menu/items/:itemId/86', () => {
   });
 });
 
-describe('DELETE /api/restaurant/:restaurantId/menu/items/:itemId', () => {
+describe('DELETE /api/merchant/:merchantId/menu/items/:itemId', () => {
   it('deletes a menu item and its modifier links', async () => {
     prisma.menuItemModifierGroup.deleteMany.mockResolvedValue({ count: 1 });
     prisma.menuItem.delete.mockResolvedValue(MOCK_ITEM);
@@ -562,7 +562,7 @@ describe('DELETE /api/restaurant/:restaurantId/menu/items/:itemId', () => {
 
 // ============ Modifier Groups ============
 
-describe('GET /api/restaurant/:restaurantId/modifiers', () => {
+describe('GET /api/merchant/:merchantId/modifiers', () => {
   it('returns modifier groups with modifiers', async () => {
     prisma.modifierGroup.findMany.mockResolvedValue([{ ...MOCK_MODIFIER_GROUP, modifiers: [MOCK_MODIFIER] }]);
 
@@ -573,7 +573,7 @@ describe('GET /api/restaurant/:restaurantId/modifiers', () => {
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/modifiers', () => {
+describe('POST /api/merchant/:merchantId/modifiers', () => {
   it('creates a modifier group with inline modifiers', async () => {
     prisma.modifierGroup.aggregate.mockResolvedValue({ _max: { displayOrder: 0 } });
     prisma.modifierGroup.create.mockResolvedValue({ ...MOCK_MODIFIER_GROUP, modifiers: [MOCK_MODIFIER] });
@@ -588,7 +588,7 @@ describe('POST /api/restaurant/:restaurantId/modifiers', () => {
   });
 });
 
-describe('PATCH /api/restaurant/:restaurantId/modifiers/:groupId', () => {
+describe('PATCH /api/merchant/:merchantId/modifiers/:groupId', () => {
   it('updates a modifier group', async () => {
     prisma.modifierGroup.update.mockResolvedValue({ ...MOCK_MODIFIER_GROUP, name: 'Temperature', modifiers: [] });
 
@@ -597,7 +597,7 @@ describe('PATCH /api/restaurant/:restaurantId/modifiers/:groupId', () => {
   });
 });
 
-describe('DELETE /api/restaurant/:restaurantId/modifiers/:groupId', () => {
+describe('DELETE /api/merchant/:merchantId/modifiers/:groupId', () => {
   it('deletes a modifier group and cleans up related records', async () => {
     prisma.modifier.deleteMany.mockResolvedValue({ count: 2 });
     prisma.menuItemModifierGroup.deleteMany.mockResolvedValue({ count: 1 });
@@ -612,7 +612,7 @@ describe('DELETE /api/restaurant/:restaurantId/modifiers/:groupId', () => {
 
 // ============ Individual Modifiers ============
 
-describe('POST /api/restaurant/:restaurantId/modifiers/:groupId/options', () => {
+describe('POST /api/merchant/:merchantId/modifiers/:groupId/options', () => {
   it('creates a modifier option', async () => {
     prisma.modifier.aggregate.mockResolvedValue({ _max: { displayOrder: 0 } });
     prisma.modifier.create.mockResolvedValue(MOCK_MODIFIER);
@@ -626,7 +626,7 @@ describe('POST /api/restaurant/:restaurantId/modifiers/:groupId/options', () => 
   });
 });
 
-describe('PATCH /api/restaurant/:restaurantId/modifiers/:groupId/options/:modifierId', () => {
+describe('PATCH /api/merchant/:merchantId/modifiers/:groupId/options/:modifierId', () => {
   it('updates a modifier option', async () => {
     prisma.modifier.update.mockResolvedValue({ ...MOCK_MODIFIER, name: 'Extra Large' });
 
@@ -637,7 +637,7 @@ describe('PATCH /api/restaurant/:restaurantId/modifiers/:groupId/options/:modifi
   });
 });
 
-describe('DELETE /api/restaurant/:restaurantId/modifiers/:groupId/options/:modifierId', () => {
+describe('DELETE /api/merchant/:merchantId/modifiers/:groupId/options/:modifierId', () => {
   it('deletes a modifier option', async () => {
     prisma.modifier.delete.mockResolvedValue(MOCK_MODIFIER);
 
@@ -648,7 +648,7 @@ describe('DELETE /api/restaurant/:restaurantId/modifiers/:groupId/options/:modif
 
 // ============ Tables ============
 
-describe('GET /api/restaurant/:restaurantId/tables', () => {
+describe('GET /api/merchant/:merchantId/tables', () => {
   it('returns active tables', async () => {
     prisma.restaurantTable.findMany.mockResolvedValue([MOCK_TABLE]);
 
@@ -659,7 +659,7 @@ describe('GET /api/restaurant/:restaurantId/tables', () => {
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/tables', () => {
+describe('POST /api/merchant/:merchantId/tables', () => {
   it('creates a table', async () => {
     prisma.restaurantTable.create.mockResolvedValue(MOCK_TABLE);
 
@@ -674,7 +674,7 @@ describe('POST /api/restaurant/:restaurantId/tables', () => {
   });
 });
 
-describe('PATCH /api/restaurant/:restaurantId/tables/:tableId', () => {
+describe('PATCH /api/merchant/:merchantId/tables/:tableId', () => {
   it('updates a table', async () => {
     prisma.restaurantTable.update.mockResolvedValue({ ...MOCK_TABLE, capacity: 6 });
 
@@ -683,7 +683,7 @@ describe('PATCH /api/restaurant/:restaurantId/tables/:tableId', () => {
   });
 });
 
-describe('DELETE /api/restaurant/:restaurantId/tables/:tableId', () => {
+describe('DELETE /api/merchant/:merchantId/tables/:tableId', () => {
   it('deletes a table', async () => {
     prisma.restaurantTable.delete.mockResolvedValue(MOCK_TABLE);
 
@@ -694,7 +694,7 @@ describe('DELETE /api/restaurant/:restaurantId/tables/:tableId', () => {
 
 // ============ Reservations ============
 
-describe('GET /api/restaurant/:restaurantId/reservations', () => {
+describe('GET /api/merchant/:merchantId/reservations', () => {
   const url = `${R_URL}/reservations`;
 
   it('returns reservations', async () => {
@@ -734,7 +734,7 @@ describe('GET /api/restaurant/:restaurantId/reservations', () => {
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/reservations', () => {
+describe('POST /api/merchant/:merchantId/reservations', () => {
   const url = `${R_URL}/reservations`;
 
   it('creates a reservation with valid data', async () => {
@@ -756,7 +756,7 @@ describe('POST /api/restaurant/:restaurantId/reservations', () => {
   });
 });
 
-describe('GET /api/restaurant/:restaurantId/reservations/:reservationId', () => {
+describe('GET /api/merchant/:merchantId/reservations/:reservationId', () => {
   it('returns reservation when found', async () => {
     prisma.reservation.findUnique.mockResolvedValue(MOCK_RESERVATION);
 
@@ -774,7 +774,7 @@ describe('GET /api/restaurant/:restaurantId/reservations/:reservationId', () => 
   });
 });
 
-describe('PATCH /api/restaurant/:restaurantId/reservations/:reservationId', () => {
+describe('PATCH /api/merchant/:merchantId/reservations/:reservationId', () => {
   it('updates a reservation', async () => {
     prisma.reservation.update.mockResolvedValue({ ...MOCK_RESERVATION, status: 'seated' });
 
@@ -783,7 +783,7 @@ describe('PATCH /api/restaurant/:restaurantId/reservations/:reservationId', () =
   });
 });
 
-describe('DELETE /api/restaurant/:restaurantId/reservations/:reservationId', () => {
+describe('DELETE /api/merchant/:merchantId/reservations/:reservationId', () => {
   it('deletes a reservation', async () => {
     prisma.reservation.delete.mockResolvedValue(MOCK_RESERVATION);
 
@@ -794,7 +794,7 @@ describe('DELETE /api/restaurant/:restaurantId/reservations/:reservationId', () 
 
 // ============ AI Endpoints ============
 
-describe('POST /api/restaurant/:restaurantId/menu/items/:itemId/estimate-cost', () => {
+describe('POST /api/merchant/:merchantId/menu/items/:itemId/estimate-cost', () => {
   const url = `${R_URL}/menu/items/${ITEM_ID}/estimate-cost`;
 
   it('returns 404 when item not found', async () => {
@@ -833,7 +833,7 @@ describe('POST /api/restaurant/:restaurantId/menu/items/:itemId/estimate-cost', 
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/menu/items/:itemId/generate-description', () => {
+describe('POST /api/merchant/:merchantId/menu/items/:itemId/generate-description', () => {
   const url = `${R_URL}/menu/items/${ITEM_ID}/generate-description`;
 
   it('returns 404 when item not found', async () => {
@@ -857,7 +857,7 @@ describe('POST /api/restaurant/:restaurantId/menu/items/:itemId/generate-descrip
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/menu/estimate-all-costs', () => {
+describe('POST /api/merchant/:merchantId/menu/estimate-all-costs', () => {
   it('returns count of processed and estimated items', async () => {
     prisma.menuItem.findMany.mockResolvedValue([]);
     prisma.restaurant.findUnique.mockResolvedValue(RESTAURANT);
@@ -869,7 +869,7 @@ describe('POST /api/restaurant/:restaurantId/menu/estimate-all-costs', () => {
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/menu/generate-all-descriptions', () => {
+describe('POST /api/merchant/:merchantId/menu/generate-all-descriptions', () => {
   it('returns count of processed and generated items', async () => {
     prisma.menuItem.findMany.mockResolvedValue([]);
     prisma.restaurant.findUnique.mockResolvedValue(RESTAURANT);
@@ -883,7 +883,7 @@ describe('POST /api/restaurant/:restaurantId/menu/generate-all-descriptions', ()
 
 // ============ Orders ============
 
-describe('GET /api/restaurant/:restaurantId/orders', () => {
+describe('GET /api/merchant/:merchantId/orders', () => {
   const url = `${R_URL}/orders`;
 
   it('returns 401 without auth token', async () => {
@@ -924,7 +924,7 @@ describe('GET /api/restaurant/:restaurantId/orders', () => {
   });
 });
 
-describe('GET /api/restaurant/:restaurantId/orders/:orderId', () => {
+describe('GET /api/merchant/:merchantId/orders/:orderId', () => {
   it('returns order when found', async () => {
     prisma.order.findUnique.mockResolvedValue(MOCK_ORDER);
 
@@ -942,7 +942,7 @@ describe('GET /api/restaurant/:restaurantId/orders/:orderId', () => {
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/orders', () => {
+describe('POST /api/merchant/:merchantId/orders', () => {
   const url = `${R_URL}/orders`;
 
   const validOrderBody = {
@@ -1014,7 +1014,7 @@ describe('POST /api/restaurant/:restaurantId/orders', () => {
 
 // ============ Order Status ============
 
-describe('PATCH /api/restaurant/:restaurantId/orders/:orderId/status', () => {
+describe('PATCH /api/merchant/:merchantId/orders/:orderId/status', () => {
   const url = `${R_URL}/orders/${ORDER_ID}/status`;
 
   it('updates order status', async () => {
@@ -1036,7 +1036,7 @@ describe('PATCH /api/restaurant/:restaurantId/orders/:orderId/status', () => {
 
 // ============ Fire Course ============
 
-describe('PATCH /api/restaurant/:restaurantId/orders/:orderId/fire-course', () => {
+describe('PATCH /api/merchant/:merchantId/orders/:orderId/fire-course', () => {
   const url = `${R_URL}/orders/${ORDER_ID}/fire-course`;
 
   it('returns 400 when courseGuid is missing', async () => {
@@ -1074,7 +1074,7 @@ describe('PATCH /api/restaurant/:restaurantId/orders/:orderId/fire-course', () =
 
 // ============ Fire Item ============
 
-describe('PATCH /api/restaurant/:restaurantId/orders/:orderId/fire-item', () => {
+describe('PATCH /api/merchant/:merchantId/orders/:orderId/fire-item', () => {
   const url = `${R_URL}/orders/${ORDER_ID}/fire-item`;
 
   it('returns 400 when selectionGuid is missing', async () => {
@@ -1113,7 +1113,7 @@ describe('PATCH /api/restaurant/:restaurantId/orders/:orderId/fire-item', () => 
 
 // ============ Course Pacing Metrics ============
 
-describe('GET /api/restaurant/:restaurantId/course-pacing/metrics', () => {
+describe('GET /api/merchant/:merchantId/course-pacing/metrics', () => {
   it('returns pacing metrics', async () => {
     const res = await api.owner.get(`${R_URL}/course-pacing/metrics`);
     expect(res.status).toBe(200);
@@ -1123,7 +1123,7 @@ describe('GET /api/restaurant/:restaurantId/course-pacing/metrics', () => {
 
 // ============ Throttling ============
 
-describe('GET /api/restaurant/:restaurantId/throttling/status', () => {
+describe('GET /api/merchant/:merchantId/throttling/status', () => {
   it('returns throttling status', async () => {
     const res = await api.owner.get(`${R_URL}/throttling/status`);
     expect(res.status).toBe(200);
@@ -1131,7 +1131,7 @@ describe('GET /api/restaurant/:restaurantId/throttling/status', () => {
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/orders/:orderId/throttle/hold', () => {
+describe('POST /api/merchant/:merchantId/orders/:orderId/throttle/hold', () => {
   it('holds an order', async () => {
     prisma.order.findUnique.mockResolvedValue(MOCK_ORDER);
 
@@ -1148,7 +1148,7 @@ describe('POST /api/restaurant/:restaurantId/orders/:orderId/throttle/hold', () 
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/orders/:orderId/throttle/release', () => {
+describe('POST /api/merchant/:merchantId/orders/:orderId/throttle/release', () => {
   it('releases an order', async () => {
     prisma.order.findUnique.mockResolvedValue(MOCK_ORDER);
 
@@ -1167,7 +1167,7 @@ describe('POST /api/restaurant/:restaurantId/orders/:orderId/throttle/release', 
 
 // ============ Order Status History ============
 
-describe('GET /api/restaurant/:restaurantId/orders/:orderId/history', () => {
+describe('GET /api/merchant/:merchantId/orders/:orderId/history', () => {
   it('returns order status history', async () => {
     const res = await api.owner.get(`${R_URL}/orders/${ORDER_ID}/history`);
     expect(res.status).toBe(200);
@@ -1177,7 +1177,7 @@ describe('GET /api/restaurant/:restaurantId/orders/:orderId/history', () => {
 
 // ============ Reprint ============
 
-describe('POST /api/restaurant/:restaurantId/orders/:orderId/reprint', () => {
+describe('POST /api/merchant/:merchantId/orders/:orderId/reprint', () => {
   it('queues a print job', async () => {
     const res = await api.owner.post(`${R_URL}/orders/${ORDER_ID}/reprint`);
     expect(res.status).toBe(200);
@@ -1188,7 +1188,7 @@ describe('POST /api/restaurant/:restaurantId/orders/:orderId/reprint', () => {
 
 // ============ KDS Item Status ============
 
-describe('PATCH /api/restaurant/:restaurantId/orders/:orderId/items/:itemId/status', () => {
+describe('PATCH /api/merchant/:merchantId/orders/:orderId/items/:itemId/status', () => {
   const url = `${R_URL}/orders/${ORDER_ID}/items/${ORDER_ITEM_ID}/status`;
 
   it('updates item status to preparing', async () => {
@@ -1236,7 +1236,7 @@ describe('PATCH /api/restaurant/:restaurantId/orders/:orderId/items/:itemId/stat
   });
 });
 
-describe('PATCH /api/restaurant/:restaurantId/orders/:orderId/items/ready', () => {
+describe('PATCH /api/merchant/:merchantId/orders/:orderId/items/ready', () => {
   const url = `${R_URL}/orders/${ORDER_ID}/items/ready`;
 
   it('returns 400 when itemIds is missing', async () => {
@@ -1285,7 +1285,7 @@ describe('PATCH /api/restaurant/:restaurantId/orders/:orderId/items/ready', () =
 
 // ============ Delete Order ============
 
-describe('DELETE /api/restaurant/:restaurantId/orders/:orderId', () => {
+describe('DELETE /api/merchant/:merchantId/orders/:orderId', () => {
   it('deletes an order and its items/modifiers', async () => {
     prisma.orderItem.findMany.mockResolvedValue([{ id: 'oi-1' }, { id: 'oi-2' }]);
     prisma.orderItemModifier.deleteMany.mockResolvedValue({ count: 1 });
@@ -1300,7 +1300,7 @@ describe('DELETE /api/restaurant/:restaurantId/orders/:orderId', () => {
 
 // ============ Payments ============
 
-describe('POST /api/restaurant/:restaurantId/orders/:orderId/payment-intent', () => {
+describe('POST /api/merchant/:merchantId/orders/:orderId/payment-intent', () => {
   const url = `${R_URL}/orders/${ORDER_ID}/payment-intent`;
 
   it('returns 404 when order not found', async () => {
@@ -1321,7 +1321,7 @@ describe('POST /api/restaurant/:restaurantId/orders/:orderId/payment-intent', ()
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/orders/:orderId/paypal-create', () => {
+describe('POST /api/merchant/:merchantId/orders/:orderId/paypal-create', () => {
   const url = `${R_URL}/orders/${ORDER_ID}/paypal-create`;
 
   it('returns 404 when order not found', async () => {
@@ -1340,7 +1340,7 @@ describe('POST /api/restaurant/:restaurantId/orders/:orderId/paypal-create', () 
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/orders/:orderId/paypal-capture', () => {
+describe('POST /api/merchant/:merchantId/orders/:orderId/paypal-capture', () => {
   const url = `${R_URL}/orders/${ORDER_ID}/paypal-capture`;
 
   it('returns 404 when order not found', async () => {
@@ -1369,7 +1369,7 @@ describe('POST /api/restaurant/:restaurantId/orders/:orderId/paypal-capture', ()
   });
 });
 
-describe('GET /api/restaurant/:restaurantId/orders/:orderId/payment-status', () => {
+describe('GET /api/merchant/:merchantId/orders/:orderId/payment-status', () => {
   const url = `${R_URL}/orders/${ORDER_ID}/payment-status`;
 
   it('returns 404 when order not found', async () => {
@@ -1417,7 +1417,7 @@ describe('GET /api/restaurant/:restaurantId/orders/:orderId/payment-status', () 
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/orders/:orderId/cancel-payment', () => {
+describe('POST /api/merchant/:merchantId/orders/:orderId/cancel-payment', () => {
   const url = `${R_URL}/orders/${ORDER_ID}/cancel-payment`;
 
   it('returns 404 when order not found', async () => {
@@ -1449,7 +1449,7 @@ describe('POST /api/restaurant/:restaurantId/orders/:orderId/cancel-payment', ()
   });
 });
 
-describe('POST /api/restaurant/:restaurantId/orders/:orderId/refund', () => {
+describe('POST /api/merchant/:merchantId/orders/:orderId/refund', () => {
   const url = `${R_URL}/orders/${ORDER_ID}/refund`;
 
   it('returns 404 when order not found', async () => {
@@ -1506,7 +1506,7 @@ describe('POST /api/restaurant/:restaurantId/orders/:orderId/refund', () => {
 
 // ============ Tax Lookup ============
 
-describe('GET /api/restaurant/tax-rate/:zipCode', () => {
+describe('GET /api/merchant/tax-rate/:zipCode', () => {
   it('returns tax rate for zip code', async () => {
     const res = await api.owner.get(`${BASE_URL}/tax-rate/33301`);
     expect(res.status).toBe(200);

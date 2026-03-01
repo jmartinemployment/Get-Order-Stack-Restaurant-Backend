@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import rateLimit from 'express-rate-limit';
 import { authService } from '../services/auth.service';
-import { requireAuth, requireAdmin, requireSuperAdmin, requireRestaurantManager } from '../middleware/auth.middleware';
+import { requireAuth, requireAdmin, requireSuperAdmin, requireMerchantManager } from '../middleware/auth.middleware';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -261,9 +261,9 @@ router.get('/me', async (req: Request, res: Response) => {
 // ============ Staff PIN Authentication ============
 
 // Verify staff PIN for a restaurant
-router.post('/:restaurantId/pin/verify', pinRateLimiter, async (req: Request, res: Response) => {
+router.post('/:merchantId/pin/verify', pinRateLimiter, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { pin } = req.body;
 
     if (!pin) {
@@ -308,9 +308,9 @@ router.post('/:restaurantId/pin/verify', pinRateLimiter, async (req: Request, re
 // ============ Staff PIN Management (admin only) ============
 
 // List all staff PINs for a restaurant (without actual PIN values)
-router.get('/:restaurantId/pins', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.get('/:merchantId/pins', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const pins = await prisma.staffPin.findMany({
       where: { restaurantId, isActive: true },
@@ -331,9 +331,9 @@ router.get('/:restaurantId/pins', requireAuth, requireRestaurantManager, async (
 });
 
 // Create a new staff PIN
-router.post('/:restaurantId/pins', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.post('/:merchantId/pins', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const { name, pin, role = 'staff' } = req.body;
 
     if (!name || !pin) {
@@ -356,7 +356,7 @@ router.post('/:restaurantId/pins', requireAuth, requireRestaurantManager, async 
 });
 
 // Update a staff PIN (including PIN value change)
-router.patch('/:restaurantId/pins/:pinId', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.patch('/:merchantId/pins/:pinId', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
     const { restaurantId, pinId } = req.params;
     const { name, role, isActive, newPin } = req.body;
@@ -387,7 +387,7 @@ router.patch('/:restaurantId/pins/:pinId', requireAuth, requireRestaurantManager
 });
 
 // Delete (deactivate) a staff PIN
-router.delete('/:restaurantId/pins/:pinId', requireAuth, requireRestaurantManager, async (req: Request, res: Response) => {
+router.delete('/:merchantId/pins/:pinId', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
     const { pinId } = req.params;
 
@@ -550,7 +550,7 @@ router.post('/users', requireAuth, requireSuperAdmin, async (req: Request, res: 
 });
 
 // Grant user access to a restaurant
-router.post('/users/:userId/restaurants/:restaurantId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+router.post('/users/:userId/restaurants/:merchantId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { userId, restaurantId } = req.params;
     const { role = 'staff' } = req.body;
@@ -577,7 +577,7 @@ router.post('/users/:userId/restaurants/:restaurantId', requireAuth, requireAdmi
 });
 
 // Revoke user access to a restaurant
-router.delete('/users/:userId/restaurants/:restaurantId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+router.delete('/users/:userId/restaurants/:merchantId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { userId, restaurantId } = req.params;
 

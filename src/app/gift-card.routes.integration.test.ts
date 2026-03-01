@@ -21,7 +21,7 @@ beforeEach(() => {
   resetPrismaMock();
 });
 
-const BASE_URL = `/api/restaurant/${RESTAURANT_ID}/gift-cards`;
+const BASE_URL = `/api/merchant/${RESTAURANT_ID}/gift-cards`;
 
 // Gift card fixture matching the actual schema the route uses
 const CARD = {

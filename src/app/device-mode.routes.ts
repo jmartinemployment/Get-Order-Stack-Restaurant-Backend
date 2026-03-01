@@ -80,9 +80,9 @@ const updateModeSchema = z.object({
 // --- Device Mode CRUD ---
 
 // List all modes for a restaurant
-router.get('/:restaurantId/device-modes', async (req: Request, res: Response) => {
+router.get('/:merchantId/device-modes', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
 
     const modes = await prisma.deviceMode.findMany({
       where: { restaurantId },
@@ -96,9 +96,9 @@ router.get('/:restaurantId/device-modes', async (req: Request, res: Response) =>
 });
 
 // Create a new mode
-router.post('/:restaurantId/device-modes', async (req: Request, res: Response) => {
+router.post('/:merchantId/device-modes', async (req: Request, res: Response) => {
   try {
-    const { restaurantId } = req.params;
+    const restaurantId = req.params.merchantId;
     const parsed = createModeSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -130,7 +130,7 @@ router.post('/:restaurantId/device-modes', async (req: Request, res: Response) =
 });
 
 // Update a mode
-router.patch('/:restaurantId/device-modes/:id', async (req: Request, res: Response) => {
+router.patch('/:merchantId/device-modes/:id', async (req: Request, res: Response) => {
   try {
     const { restaurantId, id } = req.params;
     const parsed = updateModeSchema.safeParse(req.body);
@@ -173,7 +173,7 @@ router.patch('/:restaurantId/device-modes/:id', async (req: Request, res: Respon
 });
 
 // Delete a mode
-router.delete('/:restaurantId/device-modes/:id', async (req: Request, res: Response) => {
+router.delete('/:merchantId/device-modes/:id', async (req: Request, res: Response) => {
   try {
     const { restaurantId, id } = req.params;
 
