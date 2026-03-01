@@ -317,7 +317,7 @@ app.use(express.json());
 
 // Health check
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: 'bcryptjs-v2' });
 });
 
 // Routes - ORDER MATTERS! More specific routes first
