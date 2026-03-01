@@ -87,7 +87,8 @@ export function validateDiningData(
   }
 ): ValidationResult {
   const errors: string[] = [];
-  const isAnonymousSource = data.orderSource === 'kiosk';
+  const anonymousSources = new Set(['kiosk', 'register', 'bar']);
+  const isAnonymousSource = anonymousSources.has(data.orderSource ?? '');
 
   switch (orderType) {
     case 'delivery':
