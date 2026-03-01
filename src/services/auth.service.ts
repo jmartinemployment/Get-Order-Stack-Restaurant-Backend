@@ -237,9 +237,13 @@ class AuthService {
         where: { restaurantId, isActive: true }
       });
 
+      console.log(`[verifyStaffPin] pin="${pin}" (type=${typeof pin}, length=${pin.length}, charCodes=${[...pin].map(c => c.charCodeAt(0)).join(',')})`);
+      console.log(`[verifyStaffPin] Found ${staffPins.length} pins for ${restaurantId}`);
+
       // Check each PIN (we can't query by hash directly)
       for (const staffPin of staffPins) {
         const isValid = await this.verifyPin(pin, staffPin.pin);
+        console.log(`[verifyStaffPin] ${staffPin.name}: isValid=${isValid}`);
         if (isValid) {
           return {
             success: true,
