@@ -886,7 +886,7 @@ router.delete('/:restaurantId/tables/:tableId', async (req: Request, res: Respon
 
 // ============ Reservations ============
 
-router.get('/:restaurantId/reservations', async (req: Request, res: Response) => {
+router.get('/:restaurantId/bookings', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
     const { status, date } = req.query;
@@ -914,7 +914,7 @@ router.get('/:restaurantId/reservations', async (req: Request, res: Response) =>
   }
 });
 
-router.post('/:restaurantId/reservations', async (req: Request, res: Response) => {
+router.post('/:restaurantId/bookings', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
     const {
@@ -947,7 +947,7 @@ router.post('/:restaurantId/reservations', async (req: Request, res: Response) =
   }
 });
 
-router.get('/:restaurantId/reservations/:reservationId', async (req: Request, res: Response) => {
+router.get('/:restaurantId/bookings/:reservationId', async (req: Request, res: Response) => {
   try {
     const { reservationId } = req.params;
     const reservation = await prisma.reservation.findUnique({
@@ -965,7 +965,7 @@ router.get('/:restaurantId/reservations/:reservationId', async (req: Request, re
   }
 });
 
-router.patch('/:restaurantId/reservations/:reservationId', async (req: Request, res: Response) => {
+router.patch('/:restaurantId/bookings/:reservationId', async (req: Request, res: Response) => {
   try {
     const { reservationId } = req.params;
     const { status, tableNumber, partySize, reservationTime, specialRequests, customerName, customerPhone, customerEmail } = req.body;
@@ -991,7 +991,7 @@ router.patch('/:restaurantId/reservations/:reservationId', async (req: Request, 
   }
 });
 
-router.delete('/:restaurantId/reservations/:reservationId', async (req: Request, res: Response) => {
+router.delete('/:restaurantId/bookings/:reservationId', async (req: Request, res: Response) => {
   try {
     const { reservationId } = req.params;
     await prisma.reservation.delete({ where: { id: reservationId } });

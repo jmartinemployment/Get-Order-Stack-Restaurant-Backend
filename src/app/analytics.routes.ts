@@ -988,10 +988,10 @@ router.get('/:restaurantId/reports/realtime-kpis', async (req: Request, res: Res
 // ============ Reservations: Turn Time Stats ============
 
 /**
- * GET /:restaurantId/reservations/turn-time-stats
+ * GET /:restaurantId/bookings/turn-time-stats
  * Computes average table turn time from completed reservations.
  */
-router.get('/:restaurantId/reservations/turn-time-stats', async (req: Request, res: Response) => {
+router.get('/:restaurantId/bookings/turn-time-stats', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
 
@@ -1346,7 +1346,7 @@ router.delete('/:restaurantId/reports/schedules/:id', async (req: Request, res: 
 
 // ============ Recurring Reservations ============
 
-router.get('/:restaurantId/reservations/recurring', async (req: Request, res: Response) => {
+router.get('/:restaurantId/bookings/recurring', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
     const recurring = await prisma.recurringReservation.findMany({
@@ -1360,7 +1360,7 @@ router.get('/:restaurantId/reservations/recurring', async (req: Request, res: Re
   }
 });
 
-router.post('/:restaurantId/reservations/recurring', async (req: Request, res: Response) => {
+router.post('/:restaurantId/bookings/recurring', async (req: Request, res: Response) => {
   try {
     const { restaurantId } = req.params;
     const { customerId, customerName, customerPhone, dayOfWeek, time, partySize, notes } = req.body;
@@ -1380,7 +1380,7 @@ router.post('/:restaurantId/reservations/recurring', async (req: Request, res: R
   }
 });
 
-router.patch('/:restaurantId/reservations/recurring/:id', async (req: Request, res: Response) => {
+router.patch('/:restaurantId/bookings/recurring/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const data: Record<string, unknown> = {};
@@ -1402,7 +1402,7 @@ router.patch('/:restaurantId/reservations/recurring/:id', async (req: Request, r
   }
 });
 
-router.delete('/:restaurantId/reservations/recurring/:id', async (req: Request, res: Response) => {
+router.delete('/:restaurantId/bookings/recurring/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await prisma.recurringReservation.delete({ where: { id } });
