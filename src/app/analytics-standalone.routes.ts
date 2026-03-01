@@ -5,10 +5,10 @@ import { requireAuth } from '../middleware/auth.middleware';
 const prisma = new PrismaClient();
 const router = Router();
 
-// GET /api/analytics/pinned-widgets?restaurantId=xxx
+// GET /api/analytics/pinned-widgets?merchantId=xxx
 router.get('/pinned-widgets', requireAuth, async (req: Request, res: Response) => {
   try {
-    const restaurantId = req.query.restaurantId as string;
+    const restaurantId = req.query.merchantId as string;
     if (!restaurantId) {
       res.status(400).json({ error: 'restaurantId query param is required' });
       return;
@@ -32,7 +32,7 @@ router.get('/pinned-widgets', requireAuth, async (req: Request, res: Response) =
 // POST /api/analytics/pinned-widgets
 router.post('/pinned-widgets', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { restaurantId, ...widget } = req.body;
+    const { merchantId: restaurantId, ...widget } = req.body;
     if (!restaurantId) {
       res.status(400).json({ error: 'restaurantId is required' });
       return;
@@ -65,7 +65,7 @@ router.post('/pinned-widgets', requireAuth, async (req: Request, res: Response) 
 router.delete('/pinned-widgets/:widgetId', requireAuth, async (req: Request, res: Response) => {
   try {
     const { widgetId } = req.params;
-    const restaurantId = req.query.restaurantId as string;
+    const restaurantId = req.query.merchantId as string;
     if (!restaurantId) {
       res.status(400).json({ error: 'restaurantId query param is required' });
       return;
@@ -97,7 +97,7 @@ router.delete('/pinned-widgets/:widgetId', requireAuth, async (req: Request, res
 // GET /api/analytics/proactive-insights?restaurantId=xxx
 router.get('/proactive-insights', requireAuth, async (req: Request, res: Response) => {
   try {
-    const restaurantId = req.query.restaurantId as string;
+    const restaurantId = req.query.merchantId as string;
     if (!restaurantId) {
       res.status(400).json({ error: 'restaurantId query param is required' });
       return;
