@@ -106,6 +106,10 @@ export async function seedAuth() {
     { name: 'Sofia (Host)', pin: '4444', role: 'staff' },
     { name: 'Miguel (Kitchen)', pin: '5555', role: 'staff' },
     { name: 'Isabella (Expo)', pin: '6666', role: 'staff' },
+    { name: 'Carmen', pin: '7777', role: 'staff' },
+    { name: 'Elena', pin: '8888', role: 'staff' },
+    { name: 'Pablo', pin: '9999', role: 'staff' },
+    { name: 'Roberto', pin: '0000', role: 'staff' },
   ];
 
   for (const r of restaurants) {
