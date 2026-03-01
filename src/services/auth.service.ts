@@ -680,9 +680,12 @@ class AuthService {
         },
       });
 
+      console.log(`[posLogin] Found ${staffPins.length} active pins for restaurant ${restaurantId}`);
+
       let matchedPin: typeof staffPins[number] | null = null;
       for (const pin of staffPins) {
         const isValid = await this.verifyPin(passcode, pin.pin);
+        console.log(`[posLogin] Comparing against ${pin.name}: ${isValid}`);
         if (isValid) {
           matchedPin = pin;
           break;

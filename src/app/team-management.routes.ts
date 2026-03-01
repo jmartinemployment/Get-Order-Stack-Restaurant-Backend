@@ -686,12 +686,15 @@ router.post('/:merchantId/pos/login', async (req: Request, res: Response) => {
     const restaurantId = req.params.merchantId;
     const { passcode } = req.body;
 
+    console.log(`[POS Login] merchantId=${restaurantId}, passcode length=${passcode?.length}`);
+
     if (!passcode) {
       res.status(400).json({ error: 'Passcode is required' });
       return;
     }
 
     const result = await authService.posLogin(restaurantId, passcode);
+    console.log(`[POS Login] result=${result ? 'success' : 'null (no match)'}`);
 
     if (!result) {
       res.status(401).json({ error: 'Invalid passcode' });
