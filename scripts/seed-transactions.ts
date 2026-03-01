@@ -1,8 +1,9 @@
 /**
  * Seed script for Transaction History
- * Creates 15 completed+paid orders on the first active device for each Taipa restaurant.
- * Orders have varied payment methods (cash, card, stripe, paypal), tip amounts,
- * and timestamps spanning today, yesterday, and this week.
+ * Creates 15 completed+paid orders on EVERY active device for each Taipa restaurant.
+ * Also ensures a "Browser" device exists so browser-based testing works immediately.
+ *
+ * Re-running deletes existing TX-* orders and re-creates with fresh timestamps.
  *
  * Usage: npx tsx scripts/seed-transactions.ts
  */
@@ -10,9 +11,6 @@
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-
-const PAYMENT_METHODS = ['cash', 'card', 'stripe', 'paypal'];
-const ORDER_TYPES = ['dine_in', 'dine_in', 'dine_in', 'pickup', 'delivery'];
 
 function hoursAgo(hours: number): Date {
   return new Date(Date.now() - hours * 60 * 60 * 1000);
@@ -52,6 +50,19 @@ function generatePlans(): TransactionPlan[] {
 async function seedTransactions() {
   console.log('\n💳 Seeding transaction history...');
 
+  // Delete existing TX-* orders (and their items) so we can re-seed with fresh timestamps
+  const existingTx = await prisma.order.findMany({
+    where: { orderNumber: { startsWith: 'TX-' } },
+    select: { id: true },
+  });
+
+  if (existingTx.length > 0) {
+    const ids = existingTx.map(o => o.id);
+    await prisma.orderItem.deleteMany({ where: { orderId: { in: ids } } });
+    await prisma.order.deleteMany({ where: { id: { in: ids } } });
+    console.log(`   🗑️  Deleted ${existingTx.length} existing TX orders`);
+  }
+
   const restaurants = await prisma.restaurant.findMany({
     where: { slug: { in: ['taipa-kendall', 'taipa-coral-gables'] } },
     select: { id: true, slug: true },
@@ -63,14 +74,33 @@ async function seedTransactions() {
   }
 
   for (const restaurant of restaurants) {
-    // Find the first active device for this restaurant
-    const device = await prisma.device.findFirst({
+    // Find ALL active devices for this restaurant
+    let devices = await prisma.device.findMany({
       where: { restaurantId: restaurant.id, status: 'active' },
       select: { id: true, deviceName: true },
     });
 
-    if (!device) {
-      console.log(`   ⚠️  No active device for ${restaurant.slug} — skipping`);
+    // Ensure at least one "Browser" device exists for browser-based testing
+    const hasBrowserDevice = devices.some(d => d.deviceName === 'Browser');
+    if (!hasBrowserDevice) {
+      const browserDevice = await prisma.device.create({
+        data: {
+          restaurantId: restaurant.id,
+          deviceName: 'Browser',
+          deviceType: 'terminal',
+          posMode: 'full_service',
+          status: 'active',
+          pairedAt: new Date(),
+          hardwareInfo: { platform: 'Browser' },
+        },
+        select: { id: true, deviceName: true },
+      });
+      devices = [...devices, browserDevice];
+      console.log(`   🖥️  Created Browser device for ${restaurant.slug} (${browserDevice.id.slice(0, 8)}...)`);
+    }
+
+    if (devices.length === 0) {
+      console.log(`   ⚠️  No active devices for ${restaurant.slug} — skipping`);
       continue;
     }
 
@@ -98,76 +128,77 @@ async function seedTransactions() {
     });
 
     const plans = generatePlans();
-    let created = 0;
+    const slugPrefix = restaurant.slug === 'taipa-kendall' ? 'K' : 'G';
 
-    for (let i = 0; i < plans.length; i++) {
-      const plan = plans[i];
-      const orderDate = hoursAgo(plan.hoursAgo);
-      const orderNumber = `TX-${restaurant.slug === 'taipa-kendall' ? 'K' : 'G'}${String(i + 1).padStart(3, '0')}`;
+    for (let d = 0; d < devices.length; d++) {
+      const device = devices[d];
+      let created = 0;
 
-      // Check if order number already exists
-      const exists = await prisma.order.findUnique({ where: { orderNumber } });
-      if (exists) continue;
+      for (let i = 0; i < plans.length; i++) {
+        const plan = plans[i];
+        const orderDate = hoursAgo(plan.hoursAgo);
+        const orderNumber = `TX-${slugPrefix}${d > 0 ? `D${d}-` : ''}${String(i + 1).padStart(3, '0')}`;
 
-      // Pick 2-4 random menu items
-      const itemCount = 2 + Math.floor(Math.random() * 3);
-      const shuffled = [...menuItems].sort(() => Math.random() - 0.5);
-      const selectedItems = shuffled.slice(0, itemCount);
+        // Pick 2-4 random menu items
+        const itemCount = 2 + Math.floor(Math.random() * 3);
+        const shuffled = [...menuItems].sort(() => Math.random() - 0.5);
+        const selectedItems = shuffled.slice(0, itemCount);
 
-      let subtotal = plan.subtotal;
-      const tax = Math.round(subtotal * 0.075 * 100) / 100;
-      const tip = plan.tipPercent > 0 ? Math.round(subtotal * (plan.tipPercent / 100) * 100) / 100 : 0;
-      const deliveryFee = plan.orderType === 'delivery' ? 5.99 : 0;
-      const total = Math.round((subtotal + tax + tip + deliveryFee) * 100) / 100;
+        const subtotal = plan.subtotal;
+        const tax = Math.round(subtotal * 0.075 * 100) / 100;
+        const tip = plan.tipPercent > 0 ? Math.round(subtotal * (plan.tipPercent / 100) * 100) / 100 : 0;
+        const deliveryFee = plan.orderType === 'delivery' ? 5.99 : 0;
+        const total = Math.round((subtotal + tax + tip + deliveryFee) * 100) / 100;
 
-      const completedAt = new Date(orderDate.getTime() + 25 * 60000);
+        const completedAt = new Date(orderDate.getTime() + 25 * 60000);
 
-      await prisma.order.create({
-        data: {
-          restaurantId: restaurant.id,
-          sourceDeviceId: device.id,
-          serverId: server?.id ?? null,
-          tableId: plan.orderType === 'dine_in' && table ? table.id : null,
-          orderNumber,
-          orderType: plan.orderType,
-          orderSource: 'pos',
-          status: 'completed',
-          subtotal,
-          tax,
-          tip,
-          discount: 0,
-          deliveryFee,
-          total,
-          paymentMethod: plan.paymentMethod,
-          paymentStatus: 'paid',
-          deliveryAddress: plan.orderType === 'delivery' ? '456 Coral Way, Miami, FL 33145' : null,
-          confirmedAt: new Date(orderDate.getTime() + 2 * 60000),
-          preparingAt: new Date(orderDate.getTime() + 5 * 60000),
-          readyAt: new Date(orderDate.getTime() + 18 * 60000),
-          completedAt,
-          createdAt: orderDate,
-          orderItems: {
-            create: selectedItems.map(item => {
-              const qty = Math.random() < 0.3 ? 2 : 1;
-              const unitPrice = Number(item.price);
-              return {
-                menuItemId: item.id,
-                menuItemName: item.name,
-                quantity: qty,
-                unitPrice,
-                modifiersPrice: 0,
-                totalPrice: unitPrice * qty,
-                status: 'completed',
-              };
-            }),
+        await prisma.order.create({
+          data: {
+            restaurantId: restaurant.id,
+            sourceDeviceId: device.id,
+            serverId: server?.id ?? null,
+            tableId: plan.orderType === 'dine_in' && table ? table.id : null,
+            orderNumber,
+            orderType: plan.orderType,
+            orderSource: 'pos',
+            status: 'completed',
+            subtotal,
+            tax,
+            tip,
+            discount: 0,
+            deliveryFee,
+            total,
+            paymentMethod: plan.paymentMethod,
+            paymentStatus: 'paid',
+            deliveryAddress: plan.orderType === 'delivery' ? '456 Coral Way, Miami, FL 33145' : null,
+            confirmedAt: new Date(orderDate.getTime() + 2 * 60000),
+            preparingAt: new Date(orderDate.getTime() + 5 * 60000),
+            readyAt: new Date(orderDate.getTime() + 18 * 60000),
+            completedAt,
+            createdAt: orderDate,
+            orderItems: {
+              create: selectedItems.map(item => {
+                const qty = Math.random() < 0.3 ? 2 : 1;
+                const unitPrice = Number(item.price);
+                return {
+                  menuItemId: item.id,
+                  menuItemName: item.name,
+                  quantity: qty,
+                  unitPrice,
+                  modifiersPrice: 0,
+                  totalPrice: unitPrice * qty,
+                  status: 'completed',
+                };
+              }),
+            },
           },
-        },
-      });
+        });
 
-      created++;
+        created++;
+      }
+
+      console.log(`   ✅ Created ${created} transactions for ${restaurant.slug} → ${device.deviceName} (${device.id.slice(0, 8)}...)`);
     }
-
-    console.log(`   ✅ Created ${created} transaction orders for ${restaurant.slug} (device: ${device.deviceName})`);
   }
 
   const totalPaid = await prisma.order.count({

@@ -129,6 +129,25 @@ router.post('/:restaurantId/devices/register-browser', async (req: Request, res:
 
     const { posMode, hardwareInfo } = parsed.data;
 
+    // Reuse an existing active Browser device for this restaurant if one exists
+    const existing = await prisma.device.findFirst({
+      where: { restaurantId, deviceName: 'Browser', deviceType: 'terminal', status: 'active' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existing) {
+      const updated = await prisma.device.update({
+        where: { id: existing.id },
+        data: {
+          posMode,
+          lastSeenAt: new Date(),
+          hardwareInfo: hardwareInfo ?? existing.hardwareInfo,
+        },
+      });
+      res.status(200).json(updated);
+      return;
+    }
+
     const device = await prisma.device.create({
       data: {
         restaurantId,
