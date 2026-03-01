@@ -679,6 +679,36 @@ router.delete('/:merchantId/permission-sets/:id', async (req: Request, res: Resp
   }
 });
 
+// ============ DEBUG: PIN Hash Diagnostic (TEMPORARY) ============
+
+router.get('/:merchantId/pos/debug-pins', async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.params.merchantId;
+    const pins = await prisma.staffPin.findMany({
+      where: { restaurantId, isActive: true },
+      select: { name: true, pin: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const bcrypt = await import('bcryptjs');
+    const results = [];
+    for (const p of pins) {
+      const match7777 = await bcrypt.compare('7777', p.pin);
+      const match1234 = await bcrypt.compare('1234', p.pin);
+      results.push({
+        name: p.name,
+        hashPrefix: p.pin.substring(0, 30),
+        hashLength: p.pin.length,
+        match7777,
+        match1234,
+      });
+    }
+    res.json({ count: pins.length, results });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    res.status(500).json({ error: message });
+  }
+});
+
 // ============ POS Login ============
 
 router.post('/:merchantId/pos/login', async (req: Request, res: Response) => {
