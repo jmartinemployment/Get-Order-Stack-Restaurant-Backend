@@ -679,52 +679,6 @@ router.delete('/:merchantId/permission-sets/:id', async (req: Request, res: Resp
   }
 });
 
-// ============ DEBUG: PIN Hash Diagnostic (TEMPORARY) ============
-
-router.post('/:merchantId/pos/debug-pins', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = req.params.merchantId;
-    const { pin: testPin } = req.body;
-    const pins = await prisma.staffPin.findMany({
-      where: { restaurantId, isActive: true },
-      select: { name: true, pin: true },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    // Test with the authService.verifyPin method (same as posLogin uses)
-    const authResults = [];
-    for (const p of pins) {
-      const viaService = await authService.verifyPin(testPin, p.pin);
-      authResults.push({ name: p.name, viaService });
-    }
-
-    // Also test with direct bcryptjs.compare using the same input
-    const bcryptjs = await import('bcryptjs');
-    const directResults = [];
-    for (const p of pins) {
-      const viaDirect = await bcryptjs.compare(testPin, p.pin);
-      directResults.push({ name: p.name, viaDirect });
-    }
-
-    // Also test with hardcoded string literal
-    const literalResults = [];
-    for (const p of pins) {
-      const viaLiteral = await bcryptjs.compare('7777', p.pin);
-      literalResults.push({ name: p.name, viaLiteral });
-    }
-
-    res.json({
-      input: { pin: testPin, type: typeof testPin, length: testPin?.length, charCodes: testPin ? [...testPin].map((c: string) => c.charCodeAt(0)) : null },
-      authResults,
-      directResults,
-      literalResults,
-    });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    res.status(500).json({ error: message });
-  }
-});
-
 // ============ POS Login ============
 
 router.post('/:merchantId/pos/login', async (req: Request, res: Response) => {

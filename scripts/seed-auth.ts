@@ -96,32 +96,67 @@ export async function seedAuth() {
   }
   console.log(`   ✅ ${createdMembers.length * restaurants.length} access records created`);
 
-  // 4. Create staff PINs per restaurant
+  // 4. Create staff PINs per restaurant, each linked to a TeamMember
+  //
+  // Each staff PIN gets a corresponding TeamMember record in the same restaurant.
+  // The StaffPin.teamMemberId FK links them so posLogin() can create a UserSession
+  // (which requires a valid TeamMember.id as userId).
   const staffPins = [
-    { name: 'Carlos (Owner)', pin: '1234', role: 'owner' },
-    { name: 'Maria (Manager)', pin: '5678', role: 'manager' },
-    { name: 'Luis (Server)', pin: '1111', role: 'staff' },
-    { name: 'Ana (Server)', pin: '2222', role: 'staff' },
-    { name: 'Diego (Bartender)', pin: '3333', role: 'staff' },
-    { name: 'Sofia (Host)', pin: '4444', role: 'staff' },
-    { name: 'Miguel (Kitchen)', pin: '5555', role: 'staff' },
-    { name: 'Isabella (Expo)', pin: '6666', role: 'staff' },
-    { name: 'Carmen', pin: '7777', role: 'staff' },
-    { name: 'Elena', pin: '8888', role: 'staff' },
-    { name: 'Pablo', pin: '9999', role: 'staff' },
-    { name: 'Roberto', pin: '0000', role: 'staff' },
+    { displayName: 'Carlos (Owner)', pin: '1234', role: 'owner' },
+    { displayName: 'Maria (Manager)', pin: '5678', role: 'manager' },
+    { displayName: 'Luis (Server)', pin: '1111', role: 'staff' },
+    { displayName: 'Ana (Server)', pin: '2222', role: 'staff' },
+    { displayName: 'Diego (Bartender)', pin: '3333', role: 'staff' },
+    { displayName: 'Sofia (Host)', pin: '4444', role: 'staff' },
+    { displayName: 'Miguel (Kitchen)', pin: '5555', role: 'staff' },
+    { displayName: 'Isabella (Expo)', pin: '6666', role: 'staff' },
+    { displayName: 'Carmen', pin: '7777', role: 'staff' },
+    { displayName: 'Elena', pin: '8888', role: 'staff' },
+    { displayName: 'Pablo', pin: '9999', role: 'staff' },
+    { displayName: 'Roberto', pin: '0000', role: 'staff' },
   ];
 
+  // Clean up existing StaffPins (and unlink any TeamMember.staffPin references)
   for (const r of restaurants) {
     await prisma.staffPin.deleteMany({ where: { restaurantId: r.id } });
+  }
+
+  for (const r of restaurants) {
     for (const sp of staffPins) {
+      // Upsert a TeamMember for this staff person in this restaurant.
+      // Use displayName + restaurantId to find existing records.
+      let teamMember = await prisma.teamMember.findFirst({
+        where: { displayName: sp.displayName, restaurantId: r.id },
+      });
+
+      if (!teamMember) {
+        // Extract first name from displayName (strip parenthetical like "Diego (Bartender)")
+        const nameParts = sp.displayName.replaceAll(/\s*\(.*?\)/g, '').trim().split(/\s+/);
+        teamMember = await prisma.teamMember.create({
+          data: {
+            displayName: sp.displayName,
+            firstName: nameParts[0],
+            lastName: nameParts.length > 1 ? nameParts.at(-1) : null,
+            role: sp.role,
+            restaurantId: r.id,
+            status: 'active',
+          },
+        });
+      }
+
       const pinHash = await hashPin(sp.pin);
       await prisma.staffPin.create({
-        data: { restaurantId: r.id, name: sp.name, pin: pinHash, role: sp.role },
+        data: {
+          restaurantId: r.id,
+          name: sp.displayName,
+          pin: pinHash,
+          role: sp.role,
+          teamMemberId: teamMember.id,
+        },
       });
     }
   }
-  console.log(`   ✅ ${staffPins.length * restaurants.length} staff PINs created`);
+  console.log(`   ✅ ${staffPins.length * restaurants.length} staff PINs created (linked to TeamMembers)`);
 
   // 5. Create kitchen stations
   const stations = [
