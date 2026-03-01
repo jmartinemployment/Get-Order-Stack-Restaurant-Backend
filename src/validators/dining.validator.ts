@@ -42,8 +42,8 @@ export const CateringInfoSchema = z.object({
 // Customer information schema
 export const CustomerInfoSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required'),
-  phone: z.string().min(10, 'Phone number must be at least 10 digits'),
+  lastName: z.string().optional().default(''),
+  phone: z.string().min(10, 'Phone number must be at least 10 digits').optional().default(''),
   email: z.string().email('Valid email is required').optional(),
 });
 
