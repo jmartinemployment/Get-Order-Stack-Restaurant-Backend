@@ -3,7 +3,9 @@ const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(o => o.trim()).filter(o => o)
   : [
     'http://localhost:4200',
+    'https://localhost:4200',
     'http://localhost:4201',
+    'https://localhost:4201',
     'http://localhost:8081',
     'http://localhost:8082',
     'http://127.0.0.1:8081',
