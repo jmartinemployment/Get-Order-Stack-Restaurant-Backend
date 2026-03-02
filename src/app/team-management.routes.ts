@@ -684,16 +684,21 @@ router.delete('/:merchantId/permission-sets/:id', async (req: Request, res: Resp
 router.post('/:merchantId/pos/login', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
-    const { passcode } = req.body;
+    const { passcode, staffPinId } = req.body;
 
-    console.log(`[POS Login] merchantId=${restaurantId}, passcode length=${passcode?.length}`);
+    console.log(`[POS Login] merchantId=${restaurantId}, staffPinId=${staffPinId}, passcode length=${passcode?.length}`);
 
     if (!passcode) {
       res.status(400).json({ error: 'Passcode is required' });
       return;
     }
 
-    const result = await authService.posLogin(restaurantId, passcode);
+    if (!staffPinId) {
+      res.status(400).json({ error: 'Staff PIN ID is required' });
+      return;
+    }
+
+    const result = await authService.posLogin(restaurantId, passcode, staffPinId);
     console.log(`[POS Login] result=${result ? 'success' : 'null (no match)'}`);
 
     if (!result) {

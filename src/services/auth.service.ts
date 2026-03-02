@@ -662,7 +662,7 @@ class AuthService {
 
   // ============ POS Login (PIN + Permissions) ============
 
-  async posLogin(restaurantId: string, passcode: string): Promise<{
+  async posLogin(restaurantId: string, passcode: string, staffPinId?: string): Promise<{
     token: string;
     staffPinId: string;
     teamMemberId: string | null;
@@ -673,9 +673,9 @@ class AuthService {
     activeTimecardId: string | null;
   } | null> {
     try {
-      // Find matching PIN
-      const staffPins = await prisma.staffPin.findMany({
-        where: { restaurantId, isActive: true },
+      // Find the specific staff PIN
+      const staffPin = await prisma.staffPin.findFirst({
+        where: { id: staffPinId, restaurantId, isActive: true },
         include: {
           teamMember: {
             include: {
@@ -685,19 +685,17 @@ class AuthService {
         },
       });
 
-      console.log(`[posLogin] Found ${staffPins.length} active pins for restaurant ${restaurantId}`);
-
-      let matchedPin: typeof staffPins[number] | null = null;
-      for (const pin of staffPins) {
-        const isValid = await this.verifyPin(passcode, pin.pin);
-        console.log(`[posLogin] Comparing against ${pin.name}: ${isValid}`);
-        if (isValid) {
-          matchedPin = pin;
-          break;
-        }
+      if (!staffPin) {
+        console.log(`[posLogin] Staff PIN ${staffPinId} not found for restaurant ${restaurantId}`);
+        return null;
       }
 
-      if (!matchedPin) return null;
+      const isValid = await this.verifyPin(passcode, staffPin.pin);
+      console.log(`[posLogin] Validating PIN for ${staffPin.name}: ${isValid}`);
+
+      if (!isValid) return null;
+
+      const matchedPin = staffPin;
 
       // Resolve permissions from TeamMember's PermissionSet
       const teamMember = matchedPin.teamMember;
