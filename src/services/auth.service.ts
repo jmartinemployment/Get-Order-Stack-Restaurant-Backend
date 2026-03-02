@@ -664,6 +664,7 @@ class AuthService {
 
   async posLogin(restaurantId: string, passcode: string): Promise<{
     token: string;
+    staffPinId: string;
     teamMemberId: string | null;
     teamMemberName: string;
     role: string;
@@ -740,6 +741,7 @@ class AuthService {
 
       return {
         token,
+        staffPinId: matchedPin.id,
         teamMemberId: teamMember?.id ?? null,
         teamMemberName: matchedPin.name,
         role: matchedPin.role,
