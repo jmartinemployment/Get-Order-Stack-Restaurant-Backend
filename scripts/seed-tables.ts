@@ -14,23 +14,24 @@ interface TableDef {
   capacity: number;
   section: string;
   status: string;
+  serverName?: string;
   posX: number;
   posY: number;
 }
 
 const tables: TableDef[] = [
-  // Main Floor — Tables 1-8
-  { tableNumber: '1', tableName: 'Table 1', capacity: 2, section: 'Main Floor', status: 'available', posX: 100, posY: 100 },
-  { tableNumber: '2', tableName: 'Table 2', capacity: 2, section: 'Main Floor', status: 'available', posX: 250, posY: 100 },
-  { tableNumber: '3', tableName: 'Table 3', capacity: 4, section: 'Main Floor', status: 'occupied', posX: 400, posY: 100 },
-  { tableNumber: '4', tableName: 'Table 4', capacity: 4, section: 'Main Floor', status: 'occupied', posX: 100, posY: 250 },
-  { tableNumber: '5', tableName: 'Table 5', capacity: 4, section: 'Main Floor', status: 'reserved', posX: 250, posY: 250 },
-  { tableNumber: '6', tableName: 'Table 6', capacity: 6, section: 'Main Floor', status: 'available', posX: 400, posY: 250 },
-  { tableNumber: '7', tableName: 'Table 7', capacity: 6, section: 'Main Floor', status: 'dirty', posX: 100, posY: 400 },
-  { tableNumber: '8', tableName: 'Table 8', capacity: 4, section: 'Main Floor', status: 'available', posX: 250, posY: 400 },
-  // Patio — Tables P1-P4
+  // Main Floor — Areas 1-8
+  { tableNumber: '1', tableName: 'Area 1', capacity: 2, section: 'Main Floor', status: 'available', posX: 100, posY: 100 },
+  { tableNumber: '2', tableName: 'Area 2', capacity: 2, section: 'Main Floor', status: 'available', posX: 250, posY: 100 },
+  { tableNumber: '3', tableName: 'Area 3', capacity: 4, section: 'Main Floor', status: 'occupied', serverName: 'Carmen', posX: 400, posY: 100 },
+  { tableNumber: '4', tableName: 'Area 4', capacity: 4, section: 'Main Floor', status: 'occupied', serverName: 'Carmen', posX: 100, posY: 250 },
+  { tableNumber: '5', tableName: 'Area 5', capacity: 4, section: 'Main Floor', status: 'reserved', posX: 250, posY: 250 },
+  { tableNumber: '6', tableName: 'Area 6', capacity: 6, section: 'Main Floor', status: 'available', posX: 400, posY: 250 },
+  { tableNumber: '7', tableName: 'Area 7', capacity: 6, section: 'Main Floor', status: 'dirty', posX: 100, posY: 400 },
+  { tableNumber: '8', tableName: 'Area 8', capacity: 4, section: 'Main Floor', status: 'available', posX: 250, posY: 400 },
+  // Patio — Areas P1-P4
   { tableNumber: 'P1', tableName: 'Patio 1', capacity: 4, section: 'Patio', status: 'available', posX: 550, posY: 100 },
-  { tableNumber: 'P2', tableName: 'Patio 2', capacity: 6, section: 'Patio', status: 'occupied', posX: 550, posY: 250 },
+  { tableNumber: 'P2', tableName: 'Patio 2', capacity: 6, section: 'Patio', status: 'occupied', serverName: 'Carmen', posX: 550, posY: 250 },
   { tableNumber: 'P3', tableName: 'Patio 3', capacity: 8, section: 'Patio', status: 'available', posX: 550, posY: 400 },
   { tableNumber: 'P4', tableName: 'Patio 4', capacity: 4, section: 'Patio', status: 'reserved', posX: 700, posY: 100 },
 ];
@@ -54,6 +55,7 @@ export async function seedTables(restaurantIds: string[]) {
           capacity: table.capacity,
           section: table.section,
           status: table.status,
+          serverName: table.serverName ?? null,
           posX: table.posX,
           posY: table.posY,
         },

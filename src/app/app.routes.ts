@@ -834,11 +834,11 @@ router.get('/:merchantId/tables', async (req: Request, res: Response) => {
 router.post('/:merchantId/tables', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
-    const { tableNumber, tableName, capacity = 4, section, posX, posY } = req.body;
+    const { tableNumber, tableName, capacity = 4, section, posX, posY, serverName } = req.body;
 
     const table = await prisma.restaurantTable.create({
       data: {
-        restaurantId, tableNumber, tableName, capacity, section, posX, posY, updatedAt: new Date()
+        restaurantId, tableNumber, tableName, capacity, section, posX, posY, serverName, updatedAt: new Date()
       }
     });
     res.status(201).json(table);
@@ -851,7 +851,7 @@ router.post('/:merchantId/tables', async (req: Request, res: Response) => {
 router.patch('/:merchantId/tables/:tableId', async (req: Request, res: Response) => {
   try {
     const { tableId } = req.params;
-    const { tableNumber, tableName, capacity, section, status, posX, posY, active } = req.body;
+    const { tableNumber, tableName, capacity, section, status, posX, posY, active, serverName } = req.body;
 
     const table = await prisma.restaurantTable.update({
       where: { id: tableId },
@@ -863,7 +863,8 @@ router.patch('/:merchantId/tables/:tableId', async (req: Request, res: Response)
         ...(status !== undefined && { status }),
         ...(posX !== undefined && { posX }),
         ...(posY !== undefined && { posY }),
-        ...(active !== undefined && { active })
+        ...(active !== undefined && { active }),
+        ...(serverName !== undefined && { serverName })
       }
     });
     res.json(table);

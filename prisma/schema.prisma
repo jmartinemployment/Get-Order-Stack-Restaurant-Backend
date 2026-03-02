@@ -448,6 +448,7 @@ model RestaurantTable {
   capacity     Int      @default(4)
   section      String?
   status       String   @default("available")
+  serverName   String?  @map("server_name")
   posX         Int?     @map("pos_x")
   posY         Int?     @map("pos_y")
   active       Boolean  @default(true)
