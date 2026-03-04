@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { broadcastOrderEvent, broadcastToSourceAndKDS } from './socket.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
@@ -12,9 +12,11 @@ const prisma = new PrismaClient();
 
 /**
  * Generate a DoorDash Drive JWT per their spec:
+ * https://developer.doordash.com/en-US/docs/drive/tutorials/get_started/
+ *
  * Header: { "alg": "HS256", "typ": "JWT", "dd-ver": "DD-JWT-V1", "kid": keyId }
- * Payload: { "aud": "doordash", "iss": developerId, "kid": keyId, "iat": now, "exp": now+300 }
- * Signed with HMAC-SHA256 using the signing secret.
+ * Payload: { "aud": "doordash", "iss": developerId, "kid": keyId, "iat": now, "exp": now+30 }
+ * Signed with HS256 using the signing secret. Fresh token generated per API call.
  *
  * The apiKey is formatted as "developerId:keyId" per DoorDash developer portal.
  */
@@ -23,36 +25,24 @@ function generateDoorDashJWT(credentials: DoorDashRuntimeCredentials): string {
     ? credentials.apiKey.split(':')
     : [credentials.apiKey, credentials.apiKey];
 
-  const now = Math.floor(Date.now() / 1000);
-
-  const header = {
-    alg: 'HS256',
-    typ: 'JWT',
-    'dd-ver': 'DD-JWT-V1',
-    kid: keyId,
-  };
-
-  const payload = {
-    aud: 'doordash',
-    iss: developerId,
-    kid: keyId,
-    iat: now,
-    exp: now + 300, // 5 minutes
-  };
-
-  const encode = (obj: Record<string, unknown>) =>
-    Buffer.from(JSON.stringify(obj)).toString('base64url');
-
-  const headerB64 = encode(header);
-  const payloadB64 = encode(payload);
-  const signingInput = `${headerB64}.${payloadB64}`;
-
-  const signature = crypto
-    .createHmac('sha256', credentials.signingSecret)
-    .update(signingInput)
-    .digest('base64url');
-
-  return `${signingInput}.${signature}`;
+  return jwt.sign(
+    {
+      aud: 'doordash',
+      iss: developerId,
+      kid: keyId,
+    },
+    credentials.signingSecret,
+    {
+      algorithm: 'HS256',
+      header: {
+        alg: 'HS256',
+        typ: 'JWT',
+        'dd-ver': 'DD-JWT-V1',
+        kid: keyId,
+      } as jwt.JwtHeader & { 'dd-ver': string; kid: string },
+      expiresIn: 30,
+    },
+  );
 }
 
 // DaaS dispatch status (matches frontend DeliveryDispatchStatus)
