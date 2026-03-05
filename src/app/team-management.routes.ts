@@ -17,6 +17,17 @@ const jobSchema = z.object({
   overtimeEligible: z.boolean(),
 });
 
+const taxInfoSchema = z.object({
+  filingStatus: z.enum(['single', 'married_jointly', 'married_separately', 'head_of_household', 'qualifying_widow']),
+  multipleJobs: z.boolean(),
+  qualifyingChildrenAmount: z.number().min(0),
+  otherDependentsAmount: z.number().min(0),
+  otherIncome: z.number().min(0),
+  deductions: z.number().min(0),
+  extraWithholding: z.number().min(0),
+  state: z.string().min(2).max(2),
+});
+
 const createTeamMemberSchema = z.object({
   displayName: z.string().min(1),
   email: z.string().email().optional(),
@@ -28,6 +39,7 @@ const createTeamMemberSchema = z.object({
   assignedLocationIds: z.array(z.string()).optional(),
   hireDate: z.string().optional(),
   jobs: z.array(jobSchema),
+  taxInfo: taxInfoSchema.optional(),
 });
 
 const updateTeamMemberSchema = z.object({
@@ -41,6 +53,7 @@ const updateTeamMemberSchema = z.object({
   assignedLocationIds: z.array(z.string()).optional(),
   hireDate: z.string().nullable().optional(),
   status: z.enum(['active', 'inactive', 'terminated']).optional(),
+  taxInfo: taxInfoSchema.nullable().optional(),
 });
 
 const createPermissionSetSchema = z.object({
@@ -77,6 +90,7 @@ const teamMemberInclude = {
   jobs: true,
   permissionSet: { select: { name: true } },
   staffPin: { select: { id: true } },
+  taxInfo: true,
 } as const;
 
 interface FormattableMember {
@@ -95,6 +109,17 @@ interface FormattableMember {
   createdAt: Date;
   permissionSet: { name: string } | null;
   staffPin?: { id: string } | null;
+  taxInfo?: {
+    id: string;
+    filingStatus: string;
+    multipleJobs: boolean;
+    qualifyingChildrenAmount: number;
+    otherDependentsAmount: number;
+    otherIncome: number;
+    deductions: number;
+    extraWithholding: number;
+    state: string;
+  } | null;
   jobs: {
     id: string;
     teamMemberId: string;
@@ -124,6 +149,16 @@ function formatTeamMember(member: FormattableMember) {
     onboardingStatus: member.onboardingStatus,
     createdAt: member.createdAt.toISOString(),
     staffPinId: member.staffPin?.id ?? null,
+    taxInfo: member.taxInfo ? {
+      filingStatus: member.taxInfo.filingStatus,
+      multipleJobs: member.taxInfo.multipleJobs,
+      qualifyingChildrenAmount: member.taxInfo.qualifyingChildrenAmount,
+      otherDependentsAmount: member.taxInfo.otherDependentsAmount,
+      otherIncome: member.taxInfo.otherIncome,
+      deductions: member.taxInfo.deductions,
+      extraWithholding: member.taxInfo.extraWithholding,
+      state: member.taxInfo.state,
+    } : null,
   };
 }
 
@@ -153,7 +188,7 @@ router.post('/:merchantId/team-members', async (req: Request, res: Response) => 
       res.status(400).json({ error: parsed.error.flatten().fieldErrors });
       return;
     }
-    const { displayName, email, phone, passcode, password, tempPasswordExpiresInHours, permissionSetId, assignedLocationIds, hireDate, jobs } = parsed.data;
+    const { displayName, email, phone, passcode, password, tempPasswordExpiresInHours, permissionSetId, assignedLocationIds, hireDate, jobs, taxInfo } = parsed.data;
 
     const hashedPin = passcode ? await authService.hashPin(passcode) : await authService.hashPin('0000');
 
@@ -208,6 +243,12 @@ router.post('/:merchantId/team-members', async (req: Request, res: Response) => 
           role: 'team_member',
         },
       });
+
+      if (taxInfo) {
+        await tx.staffTaxInfo.create({
+          data: { teamMemberId: tm.id, ...taxInfo },
+        });
+      }
 
       return tx.teamMember.findUniqueOrThrow({
         where: { id: tm.id },
@@ -274,6 +315,19 @@ router.patch('/:merchantId/team-members/:id', async (req: Request, res: Response
         include: teamMemberInclude,
       });
 
+      // Upsert tax info if provided
+      if (d.taxInfo !== undefined) {
+        if (d.taxInfo === null) {
+          await tx.staffTaxInfo.deleteMany({ where: { teamMemberId: id } });
+        } else {
+          await tx.staffTaxInfo.upsert({
+            where: { teamMemberId: id },
+            create: { teamMemberId: id, ...d.taxInfo },
+            update: d.taxInfo,
+          });
+        }
+      }
+
       // Sync linked StaffPin if it exists
       const linkedPin = await tx.staffPin.findUnique({
         where: { teamMemberId: id },
@@ -294,7 +348,11 @@ router.patch('/:merchantId/team-members/:id', async (req: Request, res: Response
         }
       }
 
-      return tm;
+      // Re-fetch to include updated taxInfo
+      return tx.teamMember.findUniqueOrThrow({
+        where: { id },
+        include: teamMemberInclude,
+      });
     });
 
     res.json(formatTeamMember(member));

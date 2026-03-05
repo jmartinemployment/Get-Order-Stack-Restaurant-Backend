@@ -1840,6 +1840,7 @@ model TeamMember {
   restaurantAccess    UserRestaurantAccess[]
   sessions            UserSession[]
   onboardingChecklists OnboardingChecklist[]
+  taxInfo             StaffTaxInfo?
 
   @@index([restaurantId])
   @@index([restaurantGroupId])
@@ -1877,6 +1878,25 @@ model TeamMemberJob {
 
   @@index([teamMemberId])
   @@map("team_member_jobs")
+}
+
+model StaffTaxInfo {
+  id                      String   @id @default(uuid())
+  teamMemberId            String   @unique @map("team_member_id")
+  filingStatus            String   @default("single") @map("filing_status") // single, married_jointly, married_separately, head_of_household, qualifying_widow
+  multipleJobs            Boolean  @default(false) @map("multiple_jobs")
+  qualifyingChildrenAmount Float   @default(0) @map("qualifying_children_amount")
+  otherDependentsAmount   Float    @default(0) @map("other_dependents_amount")
+  otherIncome             Float    @default(0) @map("other_income")
+  deductions              Float    @default(0)
+  extraWithholding        Float    @default(0) @map("extra_withholding")
+  state                   String   @default("FL")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  teamMember              TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@map("staff_tax_info")
 }
 
 model OnboardingChecklist {
