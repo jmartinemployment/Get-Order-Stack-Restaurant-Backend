@@ -817,8 +817,9 @@ model InventoryItem {
   supplier      String?   @db.VarChar(255)
   category      String    @default("general") @db.VarChar(100)
   lastRestocked DateTime? @map("last_restocked")
-  lastCountDate DateTime? @map("last_count_date")
-  active        Boolean   @default(true)
+  lastCountDate  DateTime? @map("last_count_date")
+  expirationDate DateTime? @map("expiration_date")
+  active         Boolean   @default(true)
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 

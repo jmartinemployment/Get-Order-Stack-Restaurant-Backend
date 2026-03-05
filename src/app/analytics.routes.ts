@@ -559,28 +559,35 @@ router.get('/:merchantId/inventory/report', async (req: Request, res: Response) 
 router.get('/:merchantId/inventory/expiring', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
+    const daysAhead = Number.parseInt(req.query.days as string, 10) || 7;
 
+    const now = new Date();
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + daysAhead);
+
+    // Items with an expiration date that is either already past or within the window
     const items = await prisma.inventoryItem.findMany({
       where: {
         restaurantId,
         active: true,
+        expirationDate: { not: null, lte: cutoff },
       },
-      orderBy: { updatedAt: 'desc' },
-      take: 50,
+      orderBy: { expirationDate: 'asc' },
     });
 
-    const expiring = items
-      .filter(item =>
-        Number(item.currentStock) <= Number(item.minStock) && Number(item.minStock) > 0
-      )
-      .map(item => ({
+    const expiring = items.map(item => {
+      const expDate = item.expirationDate!;
+      const diffMs = expDate.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      return {
         inventoryItemId: item.id,
         itemName: item.name,
         unit: item.unit,
         currentStock: Number(item.currentStock),
-        expirationDate: item.updatedAt.toISOString(),
-        daysUntilExpiration: 0,
-      }));
+        expirationDate: expDate.toISOString(),
+        daysUntilExpiration: diffDays,
+      };
+    });
 
     res.json(expiring);
   } catch (error: unknown) {
