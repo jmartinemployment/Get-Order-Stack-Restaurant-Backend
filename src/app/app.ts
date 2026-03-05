@@ -39,6 +39,7 @@ import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
 import { marketplaceService } from '../services/marketplace.service';
+import publicMenuRoutes from './public-menu.routes';
 import { requireAuth } from '../middleware/auth.middleware';
 
 const app = express();
@@ -327,6 +328,7 @@ app.use('/api/cloudprnt', cloudprntRoutes);  // CloudPRNT protocol endpoints (no
 app.use('/api/devices', devicePairingRoutes);  // Device pairing (POST /pair) + lookup (GET /:id)
 app.use('/api/platform', onboardingRoutes);    // Menu templates + tax rate lookup (public)
 app.use('/api/onboarding', onboardingRoutes);  // Create new merchant (public)
+app.use('/api/public', publicMenuRoutes);      // Public menu for online ordering (no auth)
 
 // --- Authenticated routes (requireAuth) ---
 app.use('/api/merchant', requireAuth, laborRoutes);  // Labor/scheduling endpoints

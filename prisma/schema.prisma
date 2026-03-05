@@ -332,6 +332,7 @@ model MenuCategory {
   displayOrder      Int      @default(0) @map("display_order")
   image             String?
   active            Boolean  @default(true)
+  channelVisibility String[] @default([]) @map("channel_visibility")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -360,6 +361,7 @@ model MenuItem {
   eightySixReason  String?   @map("eighty_six_reason")
   popular          Boolean   @default(false)
   dietary          String[]  @default([])
+  channelVisibility String[] @default([]) @map("channel_visibility")
   displayOrder     Int       @default(0) @map("display_order")
   prepTimeMinutes  Int?      @map("prep_time_minutes")
   taxCategory      String    @default("prepared_food") @map("tax_category")
