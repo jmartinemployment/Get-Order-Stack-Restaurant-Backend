@@ -35,6 +35,7 @@ import subscriptionRoutes from './subscription.routes';
 import analyticsStandaloneRoutes from './analytics-standalone.routes';
 import teamManagementRoutes from './team-management.routes';
 import retailRoutes from './retail.routes';
+import cateringRoutes from './catering.routes';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
@@ -351,6 +352,7 @@ app.use('/api/merchant/:merchantId', requireAuth, supplierOrderingRoutes);  // S
 app.use('/api/merchant-groups', requireAuth, multiLocationRoutes);  // Multi-location: groups, sync, settings propagation
 app.use('/api/analytics', requireAuth, analyticsStandaloneRoutes);  // Standalone analytics (pinned-widgets, proactive-insights)
 app.use('/api/merchant', requireAuth, retailRoutes);  // Retail module CRUD
+app.use('/api/merchant', requireAuth, cateringRoutes);  // Catering event + capacity CRUD
 app.use('/api/merchant', requireAuth, analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
 app.use('/api/merchant', requireAuth, primaryCategoryRoutes);
 app.use('/api/merchant', requireAuth, deviceRoutes);  // Device registration routes

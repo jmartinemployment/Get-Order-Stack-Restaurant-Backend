@@ -24,6 +24,7 @@ model Restaurant {
   latitude         Decimal?  @db.Decimal(10, 7)
   longitude        Decimal?  @db.Decimal(10, 7)
   cuisineType      String?  @map("cuisine_type")
+  businessCategory String?  @map("business_category")
   tier             Int      @default(1)
   monthlyRevenue   Decimal? @db.Decimal(10, 2) @map("monthly_revenue")
   deliveryPercent  Int?     @map("delivery_percentage")
@@ -107,6 +108,8 @@ model Restaurant {
   marketingAutomations MarketingAutomation[]
   unitConversions      UnitConversion[]
   cycleCounts          CycleCount[]
+  cateringEvents           CateringEvent[]
+  cateringCapacitySettings CateringCapacitySettings?
 
   // Payment Connect (Stripe Connect / PayPal Partner Referrals)
   stripeConnectedAccountId  String?  @map("stripe_connected_account_id")
@@ -2294,4 +2297,44 @@ model CycleCountItem {
 
   @@index([cycleCountId])
   @@map("cycle_count_items")
+}
+
+model CateringEvent {
+  id              String    @id @default(uuid())
+  restaurantId    String    @map("restaurant_id")
+  title           String
+  eventType       String    @map("event_type")
+  status          String    @default("inquiry")
+  eventDate       DateTime  @map("event_date") @db.Date
+  startTime       String    @map("start_time") @db.VarChar(5)
+  endTime         String    @map("end_time") @db.VarChar(5)
+  headcount       Int
+  locationType    String    @default("on_site") @map("location_type")
+  locationAddress String?   @map("location_address")
+  contactName     String    @map("contact_name")
+  contactPhone    String    @map("contact_phone")
+  contactEmail    String    @map("contact_email")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@index([restaurantId, status])
+  @@index([restaurantId, eventDate])
+  @@map("catering_events")
+}
+
+model CateringCapacitySettings {
+  id                    String    @id @default(uuid())
+  restaurantId          String    @unique @map("restaurant_id")
+  maxEventsPerDay       Int       @default(3) @map("max_events_per_day")
+  maxHeadcountPerDay    Int       @default(200) @map("max_headcount_per_day")
+  conflictAlertsEnabled Boolean   @default(true) @map("conflict_alerts_enabled")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  restaurant            Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("catering_capacity_settings")
 }
