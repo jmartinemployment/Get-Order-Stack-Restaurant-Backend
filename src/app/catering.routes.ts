@@ -87,7 +87,7 @@ router.post('/:merchantId/catering/events', async (req: Request, res: Response) 
     res.status(201).json(event);
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation failed', details: error.errors });
+      res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
     res.status(500).json({ error: 'Failed to create catering event' });
@@ -137,7 +137,7 @@ router.patch('/:merchantId/catering/events/:id', async (req: Request, res: Respo
     res.json(updated);
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation failed', details: error.errors });
+      res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
     res.status(500).json({ error: 'Failed to update catering event' });
@@ -205,7 +205,7 @@ router.put('/:merchantId/catering/capacity', async (req: Request, res: Response)
     res.json(settings);
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation failed', details: error.errors });
+      res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
     res.status(500).json({ error: 'Failed to save capacity settings' });
