@@ -8,8 +8,9 @@ const router = Router();
  * Returns true if the entity is visible on the 'online' channel.
  * Empty channelVisibility array = visible on all channels (backward compatible).
  */
-function isOnlineVisible(channelVisibility: string[]): boolean {
-  return channelVisibility.length === 0 || channelVisibility.includes('online');
+function isOnlineVisible(channelVisibility: string[] | null | undefined): boolean {
+  const visibility = channelVisibility ?? [];
+  return visibility.length === 0 || visibility.includes('online');
 }
 
 /**
