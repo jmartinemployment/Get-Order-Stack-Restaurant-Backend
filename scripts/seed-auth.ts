@@ -102,18 +102,18 @@ export async function seedAuth() {
   // The StaffPin.teamMemberId FK links them so posLogin() can create a UserSession
   // (which requires a valid TeamMember.id as userId).
   const staffPins = [
-    { displayName: 'Carlos (Owner)', pin: '1234', role: 'owner' },
-    { displayName: 'Maria (Manager)', pin: '5678', role: 'manager' },
-    { displayName: 'Luis (Server)', pin: '1111', role: 'staff' },
-    { displayName: 'Ana (Server)', pin: '2222', role: 'staff' },
-    { displayName: 'Diego (Bartender)', pin: '3333', role: 'staff' },
-    { displayName: 'Sofia (Host)', pin: '4444', role: 'staff' },
-    { displayName: 'Miguel (Kitchen)', pin: '5555', role: 'staff' },
-    { displayName: 'Isabella (Expo)', pin: '6666', role: 'staff' },
-    { displayName: 'Carmen', pin: '7777', role: 'staff' },
-    { displayName: 'Elena', pin: '8888', role: 'staff' },
-    { displayName: 'Pablo', pin: '9999', role: 'staff' },
-    { displayName: 'Roberto', pin: '0000', role: 'staff' },
+    { displayName: 'Carlos', pin: '1234', role: 'owner', jobTitle: 'Owner', hourlyRate: 0, isTipEligible: false },
+    { displayName: 'Maria', pin: '5678', role: 'manager', jobTitle: 'Manager', hourlyRate: 2500, isTipEligible: false },
+    { displayName: 'Luis', pin: '1111', role: 'staff', jobTitle: 'Server', hourlyRate: 1200, isTipEligible: true },
+    { displayName: 'Ana', pin: '2222', role: 'staff', jobTitle: 'Server', hourlyRate: 1200, isTipEligible: true },
+    { displayName: 'Diego', pin: '3333', role: 'staff', jobTitle: 'Bartender', hourlyRate: 1500, isTipEligible: true },
+    { displayName: 'Sofia', pin: '4444', role: 'staff', jobTitle: 'Host', hourlyRate: 1400, isTipEligible: false },
+    { displayName: 'Miguel', pin: '5555', role: 'staff', jobTitle: 'Line Cook', hourlyRate: 1800, isTipEligible: false },
+    { displayName: 'Isabella', pin: '6666', role: 'staff', jobTitle: 'Expo', hourlyRate: 1500, isTipEligible: false },
+    { displayName: 'Carmen', pin: '7777', role: 'staff', jobTitle: 'Server', hourlyRate: 1200, isTipEligible: true },
+    { displayName: 'Elena', pin: '8888', role: 'staff', jobTitle: 'Host', hourlyRate: 1400, isTipEligible: false },
+    { displayName: 'Pablo', pin: '9999', role: 'staff', jobTitle: 'Line Cook', hourlyRate: 1800, isTipEligible: false },
+    { displayName: 'Roberto', pin: '0000', role: 'staff', jobTitle: 'Dishwasher', hourlyRate: 1100, isTipEligible: false },
   ];
 
   // Clean up existing StaffPins (and unlink any TeamMember.staffPin references)
@@ -122,27 +122,58 @@ export async function seedAuth() {
   }
 
   for (const r of restaurants) {
+    // Clean up old TeamMemberJob records for this restaurant's staff
+    const existingMembers = await prisma.teamMember.findMany({
+      where: { restaurantId: r.id },
+      select: { id: true },
+    });
+    if (existingMembers.length > 0) {
+      await prisma.teamMemberJob.deleteMany({
+        where: { teamMemberId: { in: existingMembers.map(m => m.id) } },
+      });
+    }
+
     for (const sp of staffPins) {
-      // Upsert a TeamMember for this staff person in this restaurant.
-      // Use displayName + restaurantId to find existing records.
+      // Find existing by clean name or old parenthetical name
       let teamMember = await prisma.teamMember.findFirst({
-        where: { displayName: sp.displayName, restaurantId: r.id },
+        where: {
+          restaurantId: r.id,
+          OR: [
+            { displayName: sp.displayName },
+            { displayName: { startsWith: sp.displayName + ' (' } },
+          ],
+        },
       });
 
-      if (!teamMember) {
-        // Extract first name from displayName (strip parenthetical like "Diego (Bartender)")
-        const nameParts = sp.displayName.replaceAll(/\s*\(.*?\)/g, '').trim().split(/\s+/);
+      if (teamMember) {
+        // Update to clean displayName if it had parenthetical
+        await prisma.teamMember.update({
+          where: { id: teamMember.id },
+          data: { displayName: sp.displayName },
+        });
+      } else {
         teamMember = await prisma.teamMember.create({
           data: {
             displayName: sp.displayName,
-            firstName: nameParts[0],
-            lastName: nameParts.length > 1 ? nameParts.at(-1) : null,
+            firstName: sp.displayName,
             role: sp.role,
             restaurantId: r.id,
             status: 'active',
           },
         });
       }
+
+      // Create TeamMemberJob
+      await prisma.teamMemberJob.create({
+        data: {
+          teamMemberId: teamMember.id,
+          jobTitle: sp.jobTitle,
+          hourlyRate: sp.hourlyRate,
+          isTipEligible: sp.isTipEligible,
+          isPrimary: true,
+          overtimeEligible: sp.role === 'staff',
+        },
+      });
 
       const pinHash = await hashPin(sp.pin);
       await prisma.staffPin.create({
