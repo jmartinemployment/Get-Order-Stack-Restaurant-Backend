@@ -160,7 +160,9 @@ router.get('/:merchantId/catering/events', async (req: Request, res: Response) =
     });
     res.json(events);
   } catch (error: unknown) {
-    res.status(500).json({ error: 'Failed to fetch catering events' });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[catering] GET events error:', msg);
+    res.status(500).json({ error: 'Failed to fetch catering events', detail: msg });
   }
 });
 
