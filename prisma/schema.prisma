@@ -2305,25 +2305,95 @@ model CateringEvent {
   title           String
   eventType       String    @map("event_type")
   status          String    @default("inquiry")
-  eventDate       DateTime  @map("event_date") @db.Date
+  fulfillmentDate DateTime  @map("fulfillment_date") @db.Date
+  bookingDate     DateTime  @default(now()) @map("booking_date") @db.Date
   startTime       String    @map("start_time") @db.VarChar(5)
   endTime         String    @map("end_time") @db.VarChar(5)
   headcount       Int
   locationType    String    @default("on_site") @map("location_type")
   locationAddress String?   @map("location_address")
-  contactName     String    @map("contact_name")
-  contactPhone    String    @map("contact_phone")
-  contactEmail    String    @map("contact_email")
+  clientName      String    @map("client_name")
+  clientPhone     String?   @map("client_phone")
+  clientEmail     String?   @map("client_email")
+  companyName     String?   @map("company_name")
   notes           String?
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  restaurant      Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  // Financial
+  subtotalCents          Int       @default(0) @map("subtotal_cents")
+  serviceChargePercent   Decimal?  @db.Decimal(5, 2) @map("service_charge_percent")
+  serviceChargeCents     Int       @default(0) @map("service_charge_cents")
+  taxPercent             Decimal?  @db.Decimal(5, 2) @map("tax_percent")
+  taxCents               Int       @default(0) @map("tax_cents")
+  gratuityPercent        Decimal?  @db.Decimal(5, 2) @map("gratuity_percent")
+  gratuityCents          Int       @default(0) @map("gratuity_cents")
+  totalCents             Int       @default(0) @map("total_cents")
+  paidCents              Int       @default(0) @map("paid_cents")
+
+  // Packages & milestones (JSON arrays)
+  packages               Json      @default("[]")
+  selectedPackageId      String?   @map("selected_package_id")
+  milestones             Json      @default("[]")
+
+  // Documents & proposals
+  estimateId             String?   @map("estimate_id")
+  invoiceId              String?   @map("invoice_id")
+  contractUrl            String?   @map("contract_url")
+  contractSignedAt       DateTime? @map("contract_signed_at")
+
+  // Invoice branding overrides
+  brandingLogoUrl        String?   @map("branding_logo_url")
+  brandingColor          String?   @map("branding_color")
+  invoiceNotes           String?   @map("invoice_notes")
+
+  // Dietary requirements (JSON object)
+  dietaryRequirements    Json?     @map("dietary_requirements")
+
+  // Tastings (JSON array)
+  tastings               Json?
+
+  // Delivery logistics (JSON object, off-site events)
+  deliveryDetails        Json?     @map("delivery_details")
+
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  restaurant             Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  activities             CateringActivity[]
+  proposalTokens         CateringProposalToken[]
 
   @@index([restaurantId])
   @@index([restaurantId, status])
-  @@index([restaurantId, eventDate])
+  @@index([restaurantId, fulfillmentDate])
   @@map("catering_events")
+}
+
+model CateringProposalToken {
+  id          String    @id @default(uuid())
+  jobId       String    @map("job_id")
+  token       String    @unique
+  expiresAt   DateTime  @map("expires_at")
+  viewedAt    DateTime? @map("viewed_at")
+  approvedAt  DateTime? @map("approved_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  job         CateringEvent @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("catering_proposal_tokens")
+}
+
+model CateringActivity {
+  id          String    @id @default(uuid())
+  jobId       String    @map("job_id")
+  action      String
+  description String
+  metadata    Json?
+  actorType   String    @default("operator") @map("actor_type")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  job         CateringEvent @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("catering_activities")
 }
 
 model CateringCapacitySettings {
