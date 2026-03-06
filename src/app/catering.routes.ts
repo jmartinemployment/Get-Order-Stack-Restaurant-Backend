@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
 
 const prisma = new PrismaClient();
@@ -144,7 +144,7 @@ async function logActivity(
   metadata?: Record<string, unknown>,
 ): Promise<void> {
   await prisma.cateringActivity.create({
-    data: { jobId, action, description, actorType, metadata: metadata ?? undefined },
+    data: { jobId, action, description, actorType, metadata: metadata as Prisma.InputJsonValue ?? undefined },
   });
 }
 
@@ -286,10 +286,10 @@ router.patch('/:merchantId/catering/events/:id', async (req: Request, res: Respo
     if (parsed.subtotalCents !== undefined || parsed.serviceChargePercent !== undefined ||
         parsed.taxPercent !== undefined || parsed.gratuityPercent !== undefined) {
       const fees = calculateFees({
-        subtotalCents: parsed.subtotalCents ?? (existing.subtotalCents as number),
-        serviceChargePercent: parsed.serviceChargePercent ?? (existing.serviceChargePercent as number | null),
-        taxPercent: parsed.taxPercent ?? (existing.taxPercent as number | null),
-        gratuityPercent: parsed.gratuityPercent ?? (existing.gratuityPercent as number | null),
+        subtotalCents: parsed.subtotalCents ?? Number(existing.subtotalCents),
+        serviceChargePercent: parsed.serviceChargePercent ?? (existing.serviceChargePercent != null ? Number(existing.serviceChargePercent) : null),
+        taxPercent: parsed.taxPercent ?? (existing.taxPercent != null ? Number(existing.taxPercent) : null),
+        gratuityPercent: parsed.gratuityPercent ?? (existing.gratuityPercent != null ? Number(existing.gratuityPercent) : null),
       });
       data.serviceChargeCents = fees.serviceChargeCents;
       data.taxCents = fees.taxCents;
@@ -592,9 +592,9 @@ router.post('/catering/proposal/:token/approve', async (req: Request, res: Respo
 
     const fees = calculateFees({
       subtotalCents,
-      serviceChargePercent: job.serviceChargePercent as number | null,
-      taxPercent: job.taxPercent as number | null,
-      gratuityPercent: job.gratuityPercent as number | null,
+      serviceChargePercent: job.serviceChargePercent != null ? Number(job.serviceChargePercent) : null,
+      taxPercent: job.taxPercent != null ? Number(job.taxPercent) : null,
+      gratuityPercent: job.gratuityPercent != null ? Number(job.gratuityPercent) : null,
     });
 
     // Update milestones with calculated amounts
