@@ -9,7 +9,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET environment variable is not set. The server cannot start without it.');
 }
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'; // Admin sessions: 7 days
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h'; // Admin sessions: 8 hours
 const DEVICE_TOKEN_EXPIRES_IN = '30d'; // Device sessions: 30 days (was 365d — reduced for security)
 const SALT_ROUNDS = 10;
 
