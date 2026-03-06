@@ -107,10 +107,15 @@ router.patch('/:merchantId/merchant-profile', async (req: Request, res: Response
     const currentProfile = (existing.merchantProfile as Record<string, unknown>) ?? {};
     const merged = { ...currentProfile, ...updates };
 
+    const data: Record<string, unknown> = { merchantProfile: merged };
+    if (typeof updates.businessName === 'string' && updates.businessName.trim()) {
+      data.name = updates.businessName.trim();
+    }
+
     const restaurant = await prisma.restaurant.update({
       where: { id: restaurantId },
-      data: { merchantProfile: merged },
-      select: { merchantProfile: true },
+      data,
+      select: { merchantProfile: true, name: true },
     });
 
     res.json(restaurant.merchantProfile);
