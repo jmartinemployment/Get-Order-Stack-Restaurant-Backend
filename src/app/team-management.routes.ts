@@ -68,22 +68,6 @@ const updatePermissionSetSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 
-const updateOnboardingStepSchema = z.object({
-  isComplete: z.boolean(),
-  notes: z.string().optional(),
-});
-
-// --- Onboarding step definitions ---
-const ONBOARDING_STEPS = ['personal_info', 'tax_forms', 'direct_deposit', 'documents', 'training'] as const;
-
-const ONBOARDING_STEP_LABELS: Record<string, string> = {
-  personal_info: 'Personal Information',
-  tax_forms: 'Tax Forms (W-4 / W-9)',
-  direct_deposit: 'Direct Deposit',
-  documents: 'Documents & ID Verification',
-  training: 'Training & Acknowledgements',
-};
-
 // --- Team Member helpers ---
 
 const teamMemberInclude = {
@@ -105,7 +89,6 @@ interface FormattableMember {
   avatarUrl: string | null;
   hireDate: Date | null;
   status: string;
-  onboardingStatus: string;
   createdAt: Date;
   permissionSet: { name: string } | null;
   staffPin?: { id: string } | null;
@@ -146,7 +129,6 @@ function formatTeamMember(member: FormattableMember) {
     avatarUrl: member.avatarUrl,
     hireDate: member.hireDate?.toISOString() ?? null,
     status: member.status,
-    onboardingStatus: member.onboardingStatus,
     createdAt: member.createdAt.toISOString(),
     staffPinId: member.staffPin?.id ?? null,
     taxInfo: member.taxInfo ? {
@@ -226,7 +208,6 @@ router.post('/:merchantId/team-members', async (req: Request, res: Response) => 
           permissionSetId: permissionSetId ?? null,
           assignedLocationIds: assignedLocationIds ?? [],
           hireDate: hireDate ? new Date(hireDate) : null,
-          onboardingStatus: password ? 'not_started' : 'complete',
           tempPasswordExpiresAt: tempPasswordExpiresAt ?? null,
           tempPasswordSetBy: tempPasswordSetBy ?? null,
           jobs: { create: jobs },
@@ -295,7 +276,6 @@ router.patch('/:merchantId/team-members/:id', async (req: Request, res: Response
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + hours);
         data.tempPasswordExpiresAt = expiresAt;
-        data.onboardingStatus = 'not_started';
 
         const authHeader = req.headers.authorization;
         if (authHeader) {
@@ -436,153 +416,6 @@ router.patch('/:merchantId/team-members/:memberId/jobs/:jobId', async (req: Requ
     const message = error instanceof Error ? error.message : String(error);
     console.error('Error updating job:', message);
     res.status(500).json({ error: 'Failed to update job' });
-  }
-});
-
-// ============ Onboarding ============
-
-// GET onboarding checklist for a team member
-router.get('/:merchantId/team-members/:memberId/onboarding', async (req: Request, res: Response) => {
-  try {
-    const { memberId } = req.params;
-
-    const rows = await prisma.onboardingChecklist.findMany({
-      where: { teamMemberId: memberId },
-      orderBy: { step: 'asc' },
-    });
-
-    const member = await prisma.teamMember.findUnique({
-      where: { id: memberId },
-      select: { onboardingStatus: true },
-    });
-
-    // Build complete step list (include steps that haven't been started)
-    const rowMap = new Map(rows.map(r => [r.step, r]));
-    const steps = ONBOARDING_STEPS.map(step => {
-      const row = rowMap.get(step);
-      return {
-        step,
-        label: ONBOARDING_STEP_LABELS[step],
-        isComplete: row?.isComplete ?? false,
-        completedAt: row?.completedAt?.toISOString() ?? null,
-        notes: row?.notes ?? null,
-      };
-    });
-
-    const allComplete = steps.every(s => s.isComplete);
-
-    res.json({
-      teamMemberId: memberId,
-      onboardingStatus: member?.onboardingStatus ?? 'not_started',
-      steps,
-      completedAt: allComplete ? rows.find(r => r.isComplete)?.completedAt?.toISOString() ?? null : null,
-    });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error('Error getting onboarding checklist:', message);
-    res.status(500).json({ error: 'Failed to get onboarding checklist' });
-  }
-});
-
-// PATCH toggle a single onboarding step
-router.patch('/:merchantId/team-members/:memberId/onboarding/:step', async (req: Request, res: Response) => {
-  try {
-    const { memberId, step } = req.params;
-    const parsed = updateOnboardingStepSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.flatten().fieldErrors });
-      return;
-    }
-
-    if (!ONBOARDING_STEPS.includes(step as typeof ONBOARDING_STEPS[number])) {
-      res.status(400).json({ error: `Invalid step: ${step}` });
-      return;
-    }
-
-    await prisma.onboardingChecklist.upsert({
-      where: {
-        teamMemberId_step: { teamMemberId: memberId, step },
-      },
-      create: {
-        teamMemberId: memberId,
-        step,
-        isComplete: parsed.data.isComplete,
-        completedAt: parsed.data.isComplete ? new Date() : null,
-        notes: parsed.data.notes ?? null,
-      },
-      update: {
-        isComplete: parsed.data.isComplete,
-        completedAt: parsed.data.isComplete ? new Date() : null,
-        notes: parsed.data.notes ?? null,
-      },
-    });
-
-    // Update team member onboardingStatus based on step completions
-    const allSteps = await prisma.onboardingChecklist.findMany({
-      where: { teamMemberId: memberId },
-    });
-    const completedCount = allSteps.filter(s => s.isComplete).length;
-    let newStatus = 'not_started';
-    if (completedCount === ONBOARDING_STEPS.length) {
-      newStatus = 'complete';
-    } else if (completedCount > 0) {
-      newStatus = 'in_progress';
-    }
-    await prisma.teamMember.update({
-      where: { id: memberId },
-      data: { onboardingStatus: newStatus },
-    });
-
-    res.json({ success: true, onboardingStatus: newStatus });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error('Error updating onboarding step:', message);
-    res.status(500).json({ error: 'Failed to update onboarding step' });
-  }
-});
-
-// POST complete onboarding (marks all steps done + updates status)
-router.post('/:merchantId/team-members/:memberId/onboarding/complete', async (req: Request, res: Response) => {
-  try {
-    const { memberId } = req.params;
-    const now = new Date();
-
-    await prisma.$transaction(async (tx) => {
-      // Upsert all steps as complete
-      for (const step of ONBOARDING_STEPS) {
-        await tx.onboardingChecklist.upsert({
-          where: {
-            teamMemberId_step: { teamMemberId: memberId, step },
-          },
-          create: {
-            teamMemberId: memberId,
-            step,
-            isComplete: true,
-            completedAt: now,
-          },
-          update: {
-            isComplete: true,
-            completedAt: now,
-          },
-        });
-      }
-
-      // Mark team member onboarding as complete + clear temp password
-      await tx.teamMember.update({
-        where: { id: memberId },
-        data: {
-          onboardingStatus: 'complete',
-          tempPasswordExpiresAt: null,
-          tempPasswordSetBy: null,
-        },
-      });
-    });
-
-    res.json({ success: true, onboardingStatus: 'complete' });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error('Error completing onboarding:', message);
-    res.status(500).json({ error: 'Failed to complete onboarding' });
   }
 });
 

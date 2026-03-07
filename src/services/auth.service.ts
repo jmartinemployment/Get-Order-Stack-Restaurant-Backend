@@ -32,7 +32,6 @@ export interface AuthResult {
     lastName: string | null;
     role: string;
     restaurantGroupId: string | null;
-    onboardingStatus: string;
   };
   restaurants?: Array<{
     id: string;
@@ -218,7 +217,6 @@ class AuthService {
           lastName: member.lastName,
           role: member.role,
           restaurantGroupId: member.restaurantGroupId,
-          onboardingStatus: member.onboardingStatus,
         },
         restaurants
       };

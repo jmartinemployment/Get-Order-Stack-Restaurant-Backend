@@ -216,15 +216,6 @@ router.get('/me', async (req: Request, res: Response) => {
       return;
     }
 
-    // Self-heal: owners should always have onboardingStatus = 'complete'
-    if (member.role === 'owner' && member.onboardingStatus !== 'complete') {
-      await prisma.teamMember.update({
-        where: { id: member.id },
-        data: { onboardingStatus: 'complete' },
-      });
-      member.onboardingStatus = 'complete';
-    }
-
     // Get accessible restaurants
     let restaurants: Array<{ id: string; name: string; slug: string; role: string }> = [];
 
@@ -257,7 +248,6 @@ router.get('/me', async (req: Request, res: Response) => {
         lastName: member.lastName,
         role: member.role,
         restaurantGroupId: member.restaurantGroupId,
-        onboardingStatus: member.onboardingStatus,
       },
       restaurants
     });
