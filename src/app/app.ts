@@ -1,5 +1,6 @@
 import express from 'express';
 import crypto from 'node:crypto';
+import helmet from 'helmet';
 import cors from 'cors';
 import { config } from './app.config';
 import menuRoutes from './app.routes';
@@ -35,7 +36,7 @@ import subscriptionRoutes from './subscription.routes';
 import analyticsStandaloneRoutes from './analytics-standalone.routes';
 import teamManagementRoutes from './team-management.routes';
 import retailRoutes from './retail.routes';
-import cateringRoutes from './catering.routes';
+import cateringRoutes, { publicRouter as cateringPublicRoutes } from './catering.routes';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
@@ -44,6 +45,20 @@ import publicMenuRoutes from './public-menu.routes';
 import { requireAuth } from '../middleware/auth.middleware';
 
 const app = express();
+
+// Trust Render.com reverse proxy so req.ip returns the real client IP
+app.set('trust proxy', 1);
+
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
 
 // Middleware
 app.use(cors({ origin: config.corsOrigins }));
@@ -352,6 +367,7 @@ app.use('/api/merchant/:merchantId', requireAuth, supplierOrderingRoutes);  // S
 app.use('/api/merchant-groups', requireAuth, multiLocationRoutes);  // Multi-location: groups, sync, settings propagation
 app.use('/api/analytics', requireAuth, analyticsStandaloneRoutes);  // Standalone analytics (pinned-widgets, proactive-insights)
 app.use('/api/merchant', requireAuth, retailRoutes);  // Retail module CRUD
+app.use('/api', cateringPublicRoutes);                  // Public catering routes (proposal, portal, lead) — no auth
 app.use('/api/merchant', requireAuth, cateringRoutes);  // Catering event + capacity CRUD
 app.use('/api/merchant', requireAuth, analyticsRoutes);  // Must be before menuRoutes for /orders/recent-profit
 app.use('/api/merchant', requireAuth, primaryCategoryRoutes);

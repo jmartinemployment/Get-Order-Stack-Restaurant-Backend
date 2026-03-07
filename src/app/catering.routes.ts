@@ -2,9 +2,11 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { Prisma, PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
+import { sendProposal } from '../services/email.service';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
+export const publicRouter = Router();
 
 // --- Zod schemas ---
 
@@ -503,6 +505,22 @@ router.post('/:merchantId/catering/events/:id/proposal', async (req: Request, re
 
     await logActivity(id, 'proposal_sent', 'Proposal generated and ready to send', 'operator', { token });
 
+    // Send proposal email (non-blocking — failure does not fail the API response)
+    if (job.clientEmail) {
+      try {
+        const restaurant = await prisma.restaurant.findUnique({ where: { id: merchantId }, select: { name: true, defaultBrandingColor: true } });
+        const proposalUrl = `${process.env.FRONTEND_URL ?? 'https://www.getorderstack.com'}/catering/proposal/${token}`;
+        await sendProposal(
+          { title: job.title, clientEmail: job.clientEmail, clientName: job.clientName ?? undefined, fulfillmentDate: job.fulfillmentDate.toISOString(), headcount: job.headcount ?? undefined, totalCents: job.totalCents },
+          proposalUrl,
+          restaurant?.name ?? 'OrderStack',
+          restaurant?.defaultBrandingColor ?? null,
+        );
+      } catch (emailError: unknown) {
+        console.error('[Catering] Failed to send proposal email:', emailError);
+      }
+    }
+
     res.status(201).json({ token, url: `/catering/proposal/${token}`, expiresAt: proposalToken.expiresAt });
   } catch (error: unknown) {
     res.status(500).json({ error: 'Failed to generate proposal' });
@@ -512,7 +530,7 @@ router.post('/:merchantId/catering/events/:id/proposal', async (req: Request, re
 // --- Public Proposal Routes (no auth) ---
 
 // GET /api/catering/proposal/:token
-router.get('/catering/proposal/:token', async (req: Request, res: Response) => {
+publicRouter.get('/catering/proposal/:token', async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
 
@@ -547,7 +565,7 @@ router.get('/catering/proposal/:token', async (req: Request, res: Response) => {
 });
 
 // POST /api/catering/proposal/:token/approve
-router.post('/catering/proposal/:token/approve', async (req: Request, res: Response) => {
+publicRouter.post('/catering/proposal/:token/approve', async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
     const { packageId } = req.body;
@@ -639,7 +657,7 @@ router.post('/catering/proposal/:token/approve', async (req: Request, res: Respo
 // --- Public Portal Route ---
 
 // GET /api/catering/portal/:token
-router.get('/catering/portal/:token', async (req: Request, res: Response) => {
+publicRouter.get('/catering/portal/:token', async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
 
@@ -936,7 +954,7 @@ router.get('/:merchantId/reports/catering/performance', async (req: Request, res
 // --- Lead Capture (Public) ---
 
 // POST /api/catering/lead/:merchantSlug
-router.post('/catering/lead/:merchantSlug', async (req: Request, res: Response) => {
+publicRouter.post('/catering/lead/:merchantSlug', async (req: Request, res: Response) => {
   try {
     const { merchantSlug } = req.params;
 
@@ -1038,6 +1056,88 @@ router.put('/:merchantId/catering/capacity', async (req: Request, res: Response)
       return;
     }
     res.status(500).json({ error: 'Failed to save capacity settings' });
+  }
+});
+
+// --- Package Templates ---
+
+const packageTemplateSchema = z.object({
+  name: z.string().min(1),
+  tier: z.enum(['standard', 'premium', 'custom']),
+  pricingModel: z.enum(['per_person', 'per_tray', 'flat']),
+  pricePerUnitCents: z.number().int().nonnegative(),
+  minimumHeadcount: z.number().int().min(1).default(1),
+  description: z.string().optional(),
+  menuItemIds: z.array(z.string()).default([]),
+});
+
+router.get('/:merchantId/catering/packages', async (req, res) => {
+  const { merchantId } = req.params;
+  try {
+    const templates = await prisma.cateringPackageTemplate.findMany({
+      where: { merchantId, isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(templates);
+  } catch {
+    res.status(500).json({ error: 'Failed to load package templates' });
+  }
+});
+
+router.post('/:merchantId/catering/packages', async (req, res) => {
+  const { merchantId } = req.params;
+  try {
+    const parsed = packageTemplateSchema.parse(req.body);
+    const template = await prisma.cateringPackageTemplate.create({
+      data: {
+        merchantId,
+        name: parsed.name,
+        tier: parsed.tier,
+        pricingModel: parsed.pricingModel,
+        pricePerUnitCents: parsed.pricePerUnitCents,
+        minimumHeadcount: parsed.minimumHeadcount,
+        description: parsed.description,
+        menuItemIds: parsed.menuItemIds,
+      },
+    });
+    res.status(201).json(template);
+  } catch (error: unknown) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Validation failed', details: error.issues });
+      return;
+    }
+    res.status(500).json({ error: 'Failed to create package template' });
+  }
+});
+
+router.patch('/:merchantId/catering/packages/:templateId', async (req, res) => {
+  const { merchantId, templateId } = req.params;
+  try {
+    const parsed = packageTemplateSchema.partial().parse(req.body);
+    const template = await prisma.cateringPackageTemplate.update({
+      where: { id: templateId, merchantId },
+      data: parsed,
+    });
+    res.json(template);
+  } catch (error: unknown) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Validation failed', details: error.issues });
+      return;
+    }
+    res.status(500).json({ error: 'Failed to update package template' });
+  }
+});
+
+router.delete('/:merchantId/catering/packages/:templateId', async (req, res) => {
+  const { merchantId, templateId } = req.params;
+  try {
+    await prisma.cateringPackageTemplate.update({
+      where: { id: templateId, merchantId },
+      data: { isActive: false },
+    });
+    res.status(204).send();
+  } catch {
+    res.status(500).json({ error: 'Failed to delete package template' });
   }
 });
 
