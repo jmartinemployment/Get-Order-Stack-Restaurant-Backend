@@ -14,12 +14,12 @@ model Restaurant {
   name             String
   description      String?
   logo             String?
-  phone            String?
-  email            String?
-  address          String?
-  city             String?
-  state            String?
-  zip              String?
+  phone            String   @default("")
+  email            String
+  address          String
+  city             String
+  state            String
+  zip              String
   location         String?
   latitude         Decimal?  @db.Decimal(10, 7)
   longitude        Decimal?  @db.Decimal(10, 7)

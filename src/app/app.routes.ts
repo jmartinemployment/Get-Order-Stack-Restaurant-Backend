@@ -122,12 +122,18 @@ router.post('/:merchantId/auth/validate-pin', async (req: Request, res: Response
 
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { 
-      slug, name, description, logo, phone, email, 
+    const {
+      slug, name, description, logo, phone, email,
       address, city, state = 'FL', zip, cuisineType, tier,
       monthlyRevenue, deliveryPercent, platformsUsed, posSystem,
       taxRate, deliveryEnabled, pickupEnabled, dineInEnabled
     } = req.body;
+
+    // Validate required fields
+    if (!email?.trim() || !address?.trim() || !city?.trim() || !state?.trim() || !zip?.trim()) {
+      res.status(400).json({ error: 'Email, address, city, state, and zip are required' });
+      return;
+    }
 
     // Auto-lookup tax rate if ZIP provided but taxRate not specified
     let finalTaxRate = taxRate;
@@ -139,8 +145,9 @@ router.post('/', async (req: Request, res: Response) => {
 
     const restaurant = await prisma.restaurant.create({
       data: {
-        slug, name, description, logo, phone, email,
-        address, city, state, zip, cuisineType, tier,
+        slug, name, description, logo, phone: phone ?? '', email: email.trim(),
+        address: address.trim(), city: city.trim(), state: state.trim(), zip: zip.trim(),
+        cuisineType, tier,
         monthlyRevenue, deliveryPercent, platformsUsed, posSystem,
         taxRate: finalTaxRate ?? 0.07,
         deliveryEnabled, pickupEnabled, dineInEnabled

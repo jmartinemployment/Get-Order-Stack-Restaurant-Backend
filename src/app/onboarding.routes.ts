@@ -411,6 +411,17 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
       return;
     }
 
+    // Validate required Restaurant fields — address info must be provided
+    const street = address?.street?.trim() ?? '';
+    const addrCity = address?.city?.trim() ?? '';
+    const addrState = address?.state?.trim() ?? '';
+    const addrZip = address?.zip?.trim() ?? '';
+
+    if (!street || !addrCity || !addrState || !addrZip) {
+      res.status(400).json({ error: 'Address, city, state, and zip are required' });
+      return;
+    }
+
     // Look up authenticated team member if present
     let existingMember: { id: string; email: string | null; firstName: string | null; lastName: string | null } | null = null;
     if (isAuthenticated) {
@@ -431,17 +442,20 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
 
     const result = await prisma.$transaction(async (tx) => {
       // Create restaurant — include owner email for account lookup and notifications
-      const ownerEmailForRestaurant = existingMember?.email ?? ownerEmail ?? null;
+      const ownerEmailForRestaurant = existingMember?.email ?? ownerEmail ?? '';
+      if (!ownerEmailForRestaurant) {
+        throw new Error('Owner email is required to create a restaurant');
+      }
       const restaurant = await tx.restaurant.create({
         data: {
           name: businessName,
           slug: slug + '-' + Date.now().toString(36),
           email: ownerEmailForRestaurant,
-          address: address?.street ?? null,
-          city: address?.city ?? null,
-          state: address?.state ?? null,
-          zip: address?.zip ?? null,
-          phone: address?.phone ?? null,
+          address: street,
+          city: addrCity,
+          state: addrState,
+          zip: addrZip,
+          phone: address?.phone ?? '',
           taxRate: (taxLocale?.taxRate ?? 0) / 100,
           merchantProfile: {
             id: crypto.randomUUID(),
