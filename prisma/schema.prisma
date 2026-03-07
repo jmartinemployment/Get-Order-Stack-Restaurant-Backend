@@ -373,6 +373,7 @@ model MenuItem {
   aiProfitMargin   Decimal?  @db.Decimal(5, 2) @map("ai_profit_margin")
   aiConfidence     String?   @map("ai_confidence")
   aiLastUpdated    DateTime? @map("ai_last_updated")
+  cateringPricing  Json      @default("[]") @map("catering_pricing")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 

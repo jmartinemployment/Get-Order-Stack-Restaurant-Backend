@@ -271,6 +271,7 @@ router.get('/:merchantId/menu', async (req: Request, res: Response) => {
         popular: item.popular,
         dietary: item.dietary,
         prepTimeMinutes: item.prepTimeMinutes,
+        cateringPricing: item.cateringPricing ?? [],
         modifierGroups: item.modifierGroups.map(mg => ({
           id: mg.modifierGroup.id,
           name: lang === 'en' && mg.modifierGroup.nameEn ? mg.modifierGroup.nameEn : mg.modifierGroup.name,
@@ -458,10 +459,10 @@ router.get('/:merchantId/menu/items/:itemId', async (req: Request, res: Response
 router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
-    const { 
-      categoryId, name, nameEn, description, descriptionEn, 
+    const {
+      categoryId, name, nameEn, description, descriptionEn,
       price, cost, image, available = true, dietary = [],
-      prepTimeMinutes, modifierGroupIds = []
+      prepTimeMinutes, modifierGroupIds = [], cateringPricing
     } = req.body;
 
     const restaurant = await prisma.restaurant.findUnique({
@@ -500,9 +501,10 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
 
     const item = await prisma.menuItem.create({
       data: {
-        restaurantId, categoryId, name, nameEn, description, 
+        restaurantId, categoryId, name, nameEn, description,
         descriptionEn: generatedDescEn, price, cost, image,
         available, dietary, eightySixed: false, prepTimeMinutes,
+        ...(cateringPricing !== undefined && { cateringPricing }),
         displayOrder: (maxOrder._max.displayOrder || 0) + 1,
         ...aiData,
         modifierGroups: {
@@ -531,7 +533,7 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
     const {
       categoryId, name, nameEn, description, descriptionEn, price, cost, image,
       available, eightySixed, eightySixReason, popular, dietary, displayOrder,
-      prepTimeMinutes, modifierGroupIds
+      prepTimeMinutes, modifierGroupIds, cateringPricing
     } = req.body;
 
     let generatedDescEn: string | null | undefined = descriptionEn;
@@ -606,6 +608,7 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
         ...(dietary !== undefined && { dietary }),
         ...(displayOrder !== undefined && { displayOrder }),
         ...(prepTimeMinutes !== undefined && { prepTimeMinutes }),
+        ...(cateringPricing !== undefined && { cateringPricing }),
         ...aiData
       },
       include: {

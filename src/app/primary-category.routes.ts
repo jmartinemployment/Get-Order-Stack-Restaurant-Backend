@@ -346,6 +346,7 @@ router.get('/:merchantId/menu/grouped', async (req: Request, res: Response) => {
       prepTimeMinutes: item.prepTimeMinutes,
       displayOrder: item.displayOrder ?? 0,
       sku: item.sku ?? null,
+      cateringPricing: item.cateringPricing ?? [],
       modifierGroups: item.modifierGroups.map((mg: any) => ({
         id: mg.modifierGroup.id,
         name: lang === 'en' && mg.modifierGroup.nameEn ? mg.modifierGroup.nameEn : mg.modifierGroup.name,
