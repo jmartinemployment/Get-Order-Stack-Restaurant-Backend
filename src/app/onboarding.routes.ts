@@ -430,11 +430,13 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
       .replaceAll(/^-|-$/g, '');
 
     const result = await prisma.$transaction(async (tx) => {
-      // Create restaurant
+      // Create restaurant — include owner email for account lookup and notifications
+      const ownerEmailForRestaurant = existingMember?.email ?? ownerEmail ?? null;
       const restaurant = await tx.restaurant.create({
         data: {
           name: businessName,
           slug: slug + '-' + Date.now().toString(36),
+          email: ownerEmailForRestaurant,
           address: address?.street ?? null,
           city: address?.city ?? null,
           state: address?.state ?? null,
