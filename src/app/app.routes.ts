@@ -279,6 +279,8 @@ router.get('/:merchantId/menu', async (req: Request, res: Response) => {
         dietary: item.dietary,
         prepTimeMinutes: item.prepTimeMinutes,
         cateringPricing: item.cateringPricing ?? [],
+        menuType: item.menuType ?? 'standard',
+        cateringPricingModel: item.cateringPricingModel ?? null,
         modifierGroups: item.modifierGroups.map(mg => ({
           id: mg.modifierGroup.id,
           name: lang === 'en' && mg.modifierGroup.nameEn ? mg.modifierGroup.nameEn : mg.modifierGroup.name,
@@ -416,8 +418,15 @@ router.delete('/:merchantId/menu/categories/:categoryId', async (req: Request, r
 router.get('/:merchantId/menu/items', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
+    const { menuType } = req.query;
+
+    const where: Record<string, unknown> = { restaurantId };
+    if (menuType === 'standard' || menuType === 'catering') {
+      where.menuType = menuType;
+    }
+
     const items = await prisma.menuItem.findMany({
-      where: { restaurantId },
+      where,
       orderBy: [{ categoryId: 'asc' }, { displayOrder: 'asc' }],
       include: {
         modifierGroups: {
@@ -469,8 +478,25 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
     const {
       categoryId, name, nameEn, description, descriptionEn,
       price, cost, image, available = true, dietary = [],
-      prepTimeMinutes, modifierGroupIds = [], cateringPricing
+      prepTimeMinutes, modifierGroupIds = [], cateringPricing,
+      menuType = 'standard', cateringPricingModel
     } = req.body;
+
+    const validMenuTypes = ['standard', 'catering'];
+    const validPricingModels = ['per_person', 'per_tray', 'flat'];
+    if (!validMenuTypes.includes(menuType)) {
+      res.status(400).json({ error: `menuType must be one of: ${validMenuTypes.join(', ')}` });
+      return;
+    }
+    if (cateringPricingModel !== undefined && cateringPricingModel !== null && !validPricingModels.includes(cateringPricingModel)) {
+      res.status(400).json({ error: `cateringPricingModel must be one of: ${validPricingModels.join(', ')}` });
+      return;
+    }
+
+    if (!categoryId) {
+      res.status(400).json({ error: 'categoryId is required' });
+      return;
+    }
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId }
@@ -479,25 +505,33 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
     // Auto-generate English description if not provided
     let generatedDescEn = descriptionEn;
     if (!descriptionEn && description) {
-      generatedDescEn = await aiCostService.generateEnglishDescription(
-        restaurantId, name, description, restaurant?.cuisineType || undefined
-      );
+      try {
+        generatedDescEn = await aiCostService.generateEnglishDescription(
+          restaurantId, name, description, restaurant?.cuisineType || undefined
+        );
+      } catch {
+        // AI description generation failed — continue without it
+      }
     }
 
     // Auto-estimate cost if not provided
     let aiData: any = {};
     if (!cost) {
-      const estimation = await aiCostService.estimateCost(
-        restaurantId, name, description, Number(price), restaurant?.cuisineType || undefined
-      );
-      if (estimation) {
-        aiData = {
-          aiEstimatedCost: estimation.estimatedCost,
-          aiSuggestedPrice: estimation.suggestedPrice,
-          aiProfitMargin: estimation.profitMargin,
-          aiConfidence: estimation.confidence,
-          aiLastUpdated: new Date()
-        };
+      try {
+        const estimation = await aiCostService.estimateCost(
+          restaurantId, name, description, Number(price), restaurant?.cuisineType || undefined
+        );
+        if (estimation) {
+          aiData = {
+            aiEstimatedCost: estimation.estimatedCost,
+            aiSuggestedPrice: estimation.suggestedPrice,
+            aiProfitMargin: estimation.profitMargin,
+            aiConfidence: estimation.confidence,
+            aiLastUpdated: new Date()
+          };
+        }
+      } catch {
+        // AI cost estimation failed — continue without it
       }
     }
 
@@ -511,6 +545,8 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
         restaurantId, categoryId, name, nameEn, description,
         descriptionEn: generatedDescEn, price, cost, image,
         available, dietary, eightySixed: false, prepTimeMinutes,
+        menuType,
+        ...(cateringPricingModel !== undefined && { cateringPricingModel }),
         ...(cateringPricing !== undefined && { cateringPricing }),
         displayOrder: (maxOrder._max.displayOrder || 0) + 1,
         ...aiData,
@@ -540,8 +576,20 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
     const {
       categoryId, name, nameEn, description, descriptionEn, price, cost, image,
       available, eightySixed, eightySixReason, popular, dietary, displayOrder,
-      prepTimeMinutes, modifierGroupIds, cateringPricing
+      prepTimeMinutes, modifierGroupIds, cateringPricing,
+      menuType, cateringPricingModel
     } = req.body;
+
+    const validMenuTypes = ['standard', 'catering'];
+    const validPricingModels = ['per_person', 'per_tray', 'flat'];
+    if (menuType !== undefined && !validMenuTypes.includes(menuType)) {
+      res.status(400).json({ error: `menuType must be one of: ${validMenuTypes.join(', ')}` });
+      return;
+    }
+    if (cateringPricingModel !== undefined && cateringPricingModel !== null && !validPricingModels.includes(cateringPricingModel)) {
+      res.status(400).json({ error: `cateringPricingModel must be one of: ${validPricingModels.join(', ')}` });
+      return;
+    }
 
     let generatedDescEn: string | null | undefined = descriptionEn;
     let aiData: any = {};
@@ -615,6 +663,8 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
         ...(dietary !== undefined && { dietary }),
         ...(displayOrder !== undefined && { displayOrder }),
         ...(prepTimeMinutes !== undefined && { prepTimeMinutes }),
+        ...(menuType !== undefined && { menuType }),
+        ...(cateringPricingModel !== undefined && { cateringPricingModel }),
         ...(cateringPricing !== undefined && { cateringPricing }),
         ...aiData
       },
@@ -858,10 +908,17 @@ router.post('/:merchantId/tables', async (req: Request, res: Response) => {
   }
 });
 
+const tableStatusValues = ['available', 'reserved', 'occupied', 'dirty', 'maintenance', 'closing'] as const;
+
 router.patch('/:merchantId/tables/:tableId', async (req: Request, res: Response) => {
   try {
     const { tableId } = req.params;
     const { tableNumber, tableName, capacity, section, status, posX, posY, active, serverName } = req.body;
+
+    if (status !== undefined && !tableStatusValues.includes(status)) {
+      res.status(400).json({ error: `Invalid table status. Must be one of: ${tableStatusValues.join(', ')}` });
+      return;
+    }
 
     const table = await prisma.restaurantTable.update({
       where: { id: tableId },
