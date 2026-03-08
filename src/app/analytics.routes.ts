@@ -970,7 +970,7 @@ router.patch('/:merchantId/reporting-categories/:id', async (req: Request, res: 
     if (displayOrder !== undefined) data['displayOrder'] = displayOrder;
 
     const category = await prisma.primaryCategory.update({
-      where: { id, restaurantId },
+      where: { id },
       data,
     });
 
@@ -990,7 +990,7 @@ router.delete('/:merchantId/reporting-categories/:id', async (req: Request, res:
   try {
     const { id, merchantId: restaurantId } = req.params;
 
-    await prisma.primaryCategory.delete({ where: { id, restaurantId } });
+    await prisma.primaryCategory.delete({ where: { id } });
 
     res.status(204).send();
   } catch (error: unknown) {
