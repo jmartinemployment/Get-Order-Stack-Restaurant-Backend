@@ -4,6 +4,7 @@ import { config } from './app/app.config';
 import { initializeSocketServer } from './services/socket.service';
 import { startPrintJobCleanup } from './jobs/print-job-cleanup';
 import { startMarketplaceStatusSyncJob } from './jobs/marketplace-status-sync';
+import { startMilestoneReminderCron } from './jobs/milestone-reminders';
 import { getSecret } from './utils/secrets';
 
 function validateRequiredEnvVars(): void {
@@ -55,4 +56,7 @@ httpServer.listen(config.port, () => {
 
   // Start outbound marketplace status sync worker
   startMarketplaceStatusSyncJob();
+
+  // Start milestone payment reminder cron (daily at 9am)
+  startMilestoneReminderCron();
 });

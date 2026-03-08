@@ -14,7 +14,11 @@ const authRateLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts. Please try again in 15 minutes.' },
-  keyGenerator: (req) => req.ip ?? 'unknown',
+  keyGenerator: (req) => {
+    const ip = req.ip ?? 'unknown';
+    const email = (req.body?.email ?? '').toLowerCase().trim();
+    return email ? `${ip}:${email}` : ip;
+  },
 });
 
 // Stricter rate limit for PIN auth (4-6 digit PINs are easily brute-forced)
@@ -59,7 +63,9 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
     });
 
     if (!createResult.success) {
-      res.status(400).json({ error: createResult.error });
+      // Timing-safe: delay to match bcrypt hashing time on the success path
+      await new Promise(resolve => setTimeout(resolve, 200));
+      res.status(200).json({ message: 'If this email is not already registered, your account has been created.' });
       return;
     }
 

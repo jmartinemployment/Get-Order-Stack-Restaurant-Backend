@@ -675,6 +675,24 @@ router.patch('/:orderId/checks/:checkGuid/items/:itemGuid/void', async (req: Req
     await recalculateCheck(checkGuid, taxRate);
     await recalculateOrderTotals(orderId);
 
+    // Revert table from closing to occupied when an item is voided
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { tableId: true },
+    });
+    if (order?.tableId) {
+      const table = await prisma.restaurantTable.findUnique({
+        where: { id: order.tableId },
+        select: { status: true },
+      });
+      if (table?.status === 'closing') {
+        await prisma.restaurantTable.update({
+          where: { id: order.tableId },
+          data: { status: 'occupied' },
+        });
+      }
+    }
+
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
     res.json(enriched);
   } catch (error: unknown) {
