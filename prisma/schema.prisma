@@ -111,6 +111,11 @@ model Restaurant {
   cateringEvents           CateringEvent[]
   cateringCapacitySettings CateringCapacitySettings?
 
+  // Branding Defaults (proposals, invoices, BEOs)
+  defaultBrandingLogoUrl String?  @map("default_branding_logo_url")
+  defaultBrandingColor   String?  @map("default_branding_color")
+  defaultInvoiceNotes    String?  @map("default_invoice_notes")
+
   // Payment Connect (Stripe Connect / PayPal Partner Referrals)
   stripeConnectedAccountId  String?  @map("stripe_connected_account_id")
   paypalMerchantId          String?  @map("paypal_merchant_id")
@@ -373,8 +378,10 @@ model MenuItem {
   aiProfitMargin   Decimal?  @db.Decimal(5, 2) @map("ai_profit_margin")
   aiConfidence     String?   @map("ai_confidence")
   aiLastUpdated    DateTime? @map("ai_last_updated")
-  cateringPricing  Json      @default("[]") @map("catering_pricing")
-  createdAt        DateTime  @default(now()) @map("created_at")
+  cateringPricing      Json      @default("[]") @map("catering_pricing")
+  menuType             String    @default("standard") @map("menu_type")
+  cateringPricingModel String?   @map("catering_pricing_model")
+  createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
   restaurant        Restaurant              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
@@ -2389,4 +2396,22 @@ model CateringCapacitySettings {
   restaurant            Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@map("catering_capacity_settings")
+}
+
+model CateringPackageTemplate {
+  id                String   @id @default(uuid())
+  merchantId        String   @map("merchant_id")
+  name              String
+  tier              String
+  pricingModel      String   @map("pricing_model")
+  pricePerUnitCents Int      @map("price_per_unit_cents")
+  minimumHeadcount  Int      @default(1) @map("minimum_headcount")
+  description       String?
+  menuItemIds       Json     @default("[]") @map("menu_item_ids")
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([merchantId])
+  @@map("catering_package_templates")
 }
