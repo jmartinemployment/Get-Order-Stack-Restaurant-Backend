@@ -1946,4 +1946,256 @@ router.get('/:merchantId/labor/compliance/summary', async (req: Request, res: Re
   }
 });
 
+// ============ Timecards (aggregated from TimeEntry) ============
+
+// GET /:merchantId/timecards — list timecards mapped from time_entries
+router.get('/:merchantId/timecards', async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.params.merchantId;
+    const { status, startDate, endDate, teamMemberId } = req.query;
+
+    const where: Record<string, unknown> = { restaurantId };
+
+    if (status === 'OPEN') where.clockOut = null;
+    if (status === 'CLOSED') where.clockOut = { not: null };
+
+    if (startDate || endDate) {
+      const clockInFilter: Record<string, Date> = {};
+      if (startDate) clockInFilter.gte = new Date(startDate as string);
+      if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        clockInFilter.lte = end;
+      }
+      where.clockIn = clockInFilter;
+    }
+
+    if (teamMemberId) where.staffPinId = teamMemberId as string;
+
+    const entries = await prisma.timeEntry.findMany({
+      where,
+      include: { staffPin: { select: { name: true, role: true } } },
+      orderBy: { clockIn: 'desc' },
+      take: 500,
+    });
+
+    res.json(entries.map((e) => {
+      const clockInMs = e.clockIn.getTime();
+      const clockOutMs = e.clockOut?.getTime() ?? Date.now();
+      const totalMinutes = (clockOutMs - clockInMs) / 60000 - e.breakMinutes;
+      const totalHours = Math.max(0, totalMinutes / 60);
+
+      return {
+        id: e.id,
+        merchantId: restaurantId,
+        locationId: null,
+        teamMemberId: e.staffPinId,
+        teamMemberName: e.staffPin.name,
+        clockInAt: e.clockIn.toISOString(),
+        clockOutAt: e.clockOut?.toISOString() ?? null,
+        status: e.clockOut ? 'CLOSED' : 'OPEN',
+        jobTitle: e.staffPin.role ?? 'staff',
+        hourlyRate: 0,
+        isTipEligible: false,
+        declaredCashTips: null,
+        regularHours: Math.round(Math.min(totalHours, 40) * 100) / 100,
+        overtimeHours: Math.round(Math.max(0, totalHours - 40) * 100) / 100,
+        totalPaidHours: Math.round(totalHours * 100) / 100,
+        totalBreakMinutes: e.breakMinutes,
+        breaks: [],
+        deviceId: null,
+        createdBy: null,
+        modifiedBy: null,
+        modificationReason: e.notes ?? null,
+      };
+    }));
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching timecards:', error);
+    res.status(500).json({ error: 'Failed to fetch timecards' });
+  }
+});
+
+// ============ Timecard Edits (alias for /staff/timecard-edits with frontend field mapping) ============
+
+// GET /:merchantId/timecard-edits — alias route mapped to frontend TimecardEdit shape
+router.get('/:merchantId/timecard-edits', async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.params.merchantId;
+    const { status, teamMemberId } = req.query;
+
+    const where: Record<string, unknown> = { restaurantId };
+    if (status) where.status = status as string;
+    if (teamMemberId) where.staffPinId = teamMemberId as string;
+
+    const edits = await prisma.timecardEditRequest.findMany({
+      where,
+      include: {
+        timeEntry: { select: { clockIn: true, clockOut: true, breakMinutes: true } },
+        staffPin: { select: { name: true, role: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(edits.map((e) => ({
+      id: e.id,
+      timecardId: e.timeEntryId,
+      requestedBy: e.staffPinId,
+      requestedByName: e.staffPin.name,
+      approvedBy: e.respondedBy ?? null,
+      approvedByName: null,
+      editType: e.editType,
+      originalValue: e.originalValue,
+      newValue: e.newValue,
+      reason: e.reason,
+      status: e.status,
+      createdAt: e.createdAt.toISOString(),
+      resolvedAt: e.respondedAt?.toISOString() ?? null,
+      expiresAt: null,
+    })));
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching timecard edits:', error);
+    res.status(500).json({ error: 'Failed to fetch timecard edits' });
+  }
+});
+
+// ============ PTO Requests ============
+
+// GET /:merchantId/labor/pto/requests — list PTO requests
+router.get('/:merchantId/labor/pto/requests', async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.params.merchantId;
+    const { status } = req.query;
+
+    const where: Record<string, unknown> = { restaurantId };
+    if (status) where.status = status as string;
+
+    const requests = await prisma.ptoRequest.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(requests.map((r) => ({
+      id: r.id,
+      teamMemberId: r.staffPinId,
+      displayName: r.displayName,
+      type: r.type,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      hoursRequested: r.hoursRequested,
+      status: r.status,
+      reason: r.reason,
+      reviewedBy: r.reviewedBy,
+      reviewedAt: r.reviewedAt?.toISOString() ?? null,
+      createdAt: r.createdAt.toISOString(),
+    })));
+  } catch (error: unknown) {
+    console.error('[Labor] Error fetching PTO requests:', error);
+    res.status(500).json({ error: 'Failed to fetch PTO requests' });
+  }
+});
+
+// POST /:merchantId/labor/pto/requests — create PTO request
+router.post('/:merchantId/labor/pto/requests', async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.params.merchantId;
+    const { teamMemberId, type, startDate, endDate, hoursRequested, reason } = req.body;
+
+    if (!teamMemberId || !type || !startDate || !endDate || hoursRequested === undefined) {
+      res.status(400).json({ error: 'teamMemberId, type, startDate, endDate, and hoursRequested are required' });
+      return;
+    }
+
+    const staffPin = await prisma.staffPin.findFirst({
+      where: { id: teamMemberId, restaurantId },
+      select: { name: true },
+    });
+
+    if (!staffPin) {
+      res.status(404).json({ error: 'Staff member not found' });
+      return;
+    }
+
+    const request = await prisma.ptoRequest.create({
+      data: {
+        restaurantId,
+        staffPinId: teamMemberId,
+        displayName: staffPin.name,
+        type,
+        startDate,
+        endDate,
+        hoursRequested,
+        reason: reason ?? null,
+      },
+    });
+
+    res.status(201).json({
+      id: request.id,
+      teamMemberId: request.staffPinId,
+      displayName: request.displayName,
+      type: request.type,
+      startDate: request.startDate,
+      endDate: request.endDate,
+      hoursRequested: request.hoursRequested,
+      status: request.status,
+      reason: request.reason,
+      reviewedBy: null,
+      reviewedAt: null,
+      createdAt: request.createdAt.toISOString(),
+    });
+  } catch (error: unknown) {
+    console.error('[Labor] Error creating PTO request:', error);
+    res.status(500).json({ error: 'Failed to create PTO request' });
+  }
+});
+
+// PATCH /:merchantId/labor/pto/requests/:id — approve or deny PTO request
+router.patch('/:merchantId/labor/pto/requests/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const restaurantId = req.params.merchantId;
+    const { status, reviewedBy } = req.body;
+
+    if (!status || !['approved', 'denied'].includes(status)) {
+      res.status(400).json({ error: 'status must be "approved" or "denied"' });
+      return;
+    }
+
+    const existing = await prisma.ptoRequest.findFirst({
+      where: { id, restaurantId },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'PTO request not found' });
+      return;
+    }
+
+    const updated = await prisma.ptoRequest.update({
+      where: { id },
+      data: {
+        status,
+        reviewedBy: reviewedBy ?? null,
+        reviewedAt: new Date(),
+      },
+    });
+
+    res.json({
+      id: updated.id,
+      teamMemberId: updated.staffPinId,
+      displayName: updated.displayName,
+      type: updated.type,
+      startDate: updated.startDate,
+      endDate: updated.endDate,
+      hoursRequested: updated.hoursRequested,
+      status: updated.status,
+      reason: updated.reason,
+      reviewedBy: updated.reviewedBy,
+      reviewedAt: updated.reviewedAt?.toISOString() ?? null,
+      createdAt: updated.createdAt.toISOString(),
+    });
+  } catch (error: unknown) {
+    console.error('[Labor] Error updating PTO request:', error);
+    res.status(500).json({ error: 'Failed to update PTO request' });
+  }
+});
+
 export default router;

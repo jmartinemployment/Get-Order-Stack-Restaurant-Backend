@@ -503,7 +503,18 @@ router.post('/:merchantId/catering/events/:id/proposal', async (req: Request, re
       data: { estimateId: token, status: job.status === 'inquiry' ? 'proposal_sent' : job.status },
     });
 
-    await logActivity(id, 'proposal_sent', 'Proposal generated and ready to send', 'operator', { token });
+    // Guard against duplicate activity entries (e.g., rapid double-click or Render cold-start retry)
+    const recentDuplicate = await prisma.cateringActivity.findFirst({
+      where: {
+        jobId: id,
+        action: 'proposal_sent',
+        createdAt: { gte: new Date(Date.now() - 60_000) },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!recentDuplicate) {
+      await logActivity(id, 'proposal_sent', 'Proposal sent to client', 'operator', { token });
+    }
 
     // Send proposal email (non-blocking — failure does not fail the API response)
     if (job.clientEmail) {

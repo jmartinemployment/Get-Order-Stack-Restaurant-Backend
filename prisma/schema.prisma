@@ -948,6 +948,7 @@ model StaffPin {
   availability       StaffAvailability[]
   swapRequestsMade   SwapRequest[]       @relation("SwapRequestor")
   timecardEdits      TimecardEditRequest[]
+  ptoRequests        PtoRequest[]
 
   @@index([restaurantId])
   @@map("staff_pins")
@@ -1089,6 +1090,28 @@ model TimecardEditRequest {
   @@index([restaurantId, status])
   @@index([staffPinId])
   @@map("timecard_edit_requests")
+}
+
+model PtoRequest {
+  id              String    @id @default(uuid())
+  restaurantId    String    @map("restaurant_id")
+  staffPinId      String    @map("staff_pin_id")
+  displayName     String    @map("display_name")
+  type            String    // vacation | sick | personal | holiday
+  startDate       String    @map("start_date") @db.VarChar(10)
+  endDate         String    @map("end_date") @db.VarChar(10)
+  hoursRequested  Float     @map("hours_requested")
+  status          String    @default("pending") // pending | approved | denied
+  reason          String?
+  reviewedBy      String?   @map("reviewed_by")
+  reviewedAt      DateTime? @map("reviewed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  staffPin        StaffPin  @relation(fields: [staffPinId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, status])
+  @@index([staffPinId])
+  @@map("pto_requests")
 }
 
 model ScheduleTemplate {
