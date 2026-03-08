@@ -925,6 +925,81 @@ router.get('/:merchantId/reporting-categories', async (req: Request, res: Respon
   }
 });
 
+/**
+ * POST /:merchantId/reporting-categories
+ * Creates a new reporting category.
+ */
+router.post('/:merchantId/reporting-categories', async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.params.merchantId;
+    const { name, displayOrder = 0 } = req.body as { name?: string; displayOrder?: number };
+
+    if (!name?.trim()) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    const slug = name.trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    const category = await prisma.primaryCategory.create({
+      data: { restaurantId, name: name.trim(), slug, displayOrder },
+    });
+
+    res.status(201).json(category);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error creating reporting category:', message);
+    res.status(500).json({ error: 'Failed to create reporting category' });
+  }
+});
+
+/**
+ * PATCH /:merchantId/reporting-categories/:id
+ * Updates a reporting category.
+ */
+router.patch('/:merchantId/reporting-categories/:id', async (req: Request, res: Response) => {
+  try {
+    const { id, merchantId: restaurantId } = req.params;
+    const { name, displayOrder } = req.body as { name?: string; displayOrder?: number };
+
+    const data: Record<string, unknown> = {};
+    if (name !== undefined) {
+      data['name'] = name.trim();
+      data['slug'] = name.trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    }
+    if (displayOrder !== undefined) data['displayOrder'] = displayOrder;
+
+    const category = await prisma.primaryCategory.update({
+      where: { id, restaurantId },
+      data,
+    });
+
+    res.json(category);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error updating reporting category:', message);
+    res.status(500).json({ error: 'Failed to update reporting category' });
+  }
+});
+
+/**
+ * DELETE /:merchantId/reporting-categories/:id
+ * Deletes a reporting category.
+ */
+router.delete('/:merchantId/reporting-categories/:id', async (req: Request, res: Response) => {
+  try {
+    const { id, merchantId: restaurantId } = req.params;
+
+    await prisma.primaryCategory.delete({ where: { id, restaurantId } });
+
+    res.status(204).send();
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error deleting reporting category:', message);
+    res.status(500).json({ error: 'Failed to delete reporting category' });
+  }
+});
+
 // ============ Realtime KPIs ============
 
 /**
