@@ -1,12 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { translationService } from '../services/translation.service';
 import { aiCostService } from '../services/ai-cost.service';
 import { taxService } from '../services/tax.service';
 import { updateOrderStatus, getOrderStatusHistory } from '../services/order-status.service';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
-import { broadcastOrderEvent, sendOrderEventToDevice, broadcastToSourceAndKDS } from '../services/socket.service';
+import { sendOrderEventToDevice, broadcastToSourceAndKDS } from '../services/socket.service';
 import { cloudPrntService } from '../services/cloudprnt.service';
 import { notificationService } from '../services/notification.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
@@ -55,6 +54,247 @@ function generateOrderNumber(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).substring(2, 6).toUpperCase();
   return `ORD-${timestamp}-${random}`;
+}
+
+// --- Helpers for POST /:merchantId/orders (cognitive complexity reduction) ---
+
+async function resolveTableId(
+  restaurantId: string,
+  tableId: string | undefined,
+  tableNumber: string | undefined,
+): Promise<string | undefined> {
+  if (tableId) return tableId;
+  if (!tableNumber) return undefined;
+  const table = await prisma.restaurantTable.findFirst({
+    where: { restaurantId, tableNumber: String(tableNumber) },
+  });
+  return table?.id ?? undefined;
+}
+
+function buildCustomerData(
+  customerInfo: { firstName?: string; lastName?: string; phone?: string; email?: string } | undefined,
+  customerName: string | undefined,
+  customerPhone: string | undefined,
+  customerEmail: string | undefined,
+): { firstName?: string; lastName?: string; phone?: string; email?: string } | undefined {
+  if (customerInfo) return customerInfo;
+  if (!customerName) return undefined;
+  return {
+    firstName: customerName.split(' ')[0],
+    lastName: customerName.split(' ').slice(1).join(' '),
+    phone: customerPhone,
+    email: customerEmail,
+  };
+}
+
+function resolveCustomerFields(
+  customerInfo: { firstName?: string; lastName?: string; phone?: string; email?: string } | undefined,
+  customerName: string | undefined,
+  customerPhone: string | undefined,
+  customerEmail: string | undefined,
+): { resolvedCustomerName: string | undefined; resolvedPhone: string | undefined; resolvedEmail: string | undefined } {
+  const lastNameSuffix = customerInfo?.lastName ? ` ${customerInfo.lastName}` : '';
+  const resolvedCustomerName = customerInfo?.firstName
+    ? `${customerInfo.firstName}${lastNameSuffix}`
+    : customerName;
+  const resolvedPhone = customerInfo?.phone || customerPhone;
+  const resolvedEmail = customerInfo?.email || customerEmail;
+  return { resolvedCustomerName, resolvedPhone, resolvedEmail };
+}
+
+async function resolveOrCreateCustomer(
+  restaurantId: string,
+  customerInfo: { firstName?: string; lastName?: string; phone?: string; email?: string } | undefined,
+  resolvedCustomerName: string | undefined,
+  resolvedPhone: string | undefined,
+  resolvedEmail: string | undefined,
+): Promise<string | null> {
+  let firstName = customerInfo?.firstName;
+  let lastName = customerInfo?.lastName;
+  if (!firstName && resolvedCustomerName) {
+    const nameParts = resolvedCustomerName.trim().split(' ');
+    firstName = nameParts[0];
+    lastName = nameParts.slice(1).join(' ') || null as unknown as string | undefined;
+  }
+
+  if (resolvedPhone) {
+    const customer = await prisma.customer.upsert({
+      where: {
+        restaurantId_phone: { restaurantId, phone: resolvedPhone },
+      },
+      update: {
+        firstName: firstName ?? undefined,
+        lastName: lastName ?? undefined,
+        email: resolvedEmail ?? undefined,
+      },
+      create: {
+        restaurantId,
+        firstName,
+        lastName,
+        email: resolvedEmail,
+        phone: resolvedPhone,
+      },
+    });
+    return customer.id;
+  }
+
+  if (resolvedEmail || resolvedCustomerName) {
+    const customer = await prisma.customer.create({
+      data: {
+        restaurantId,
+        firstName,
+        lastName,
+        email: resolvedEmail,
+        phone: resolvedPhone,
+      },
+    });
+    return customer.id;
+  }
+
+  return null;
+}
+
+function parseCourseMap(
+  courses: unknown[],
+): Map<string, { name?: string; sortOrder?: number }> {
+  const courseByGuid = new Map<string, { name?: string; sortOrder?: number }>();
+  if (!Array.isArray(courses)) return courseByGuid;
+
+  for (const course of courses) {
+    if (!course || typeof course !== 'object') continue;
+    const guid = (course as Record<string, unknown>).guid;
+    if (typeof guid !== 'string' || !guid) continue;
+    const name = (course as Record<string, unknown>).name;
+    const sortOrderRaw = (course as Record<string, unknown>).sortOrder;
+    const sortOrder = Number(sortOrderRaw);
+    courseByGuid.set(guid, {
+      name: typeof name === 'string' ? name : undefined,
+      sortOrder: Number.isFinite(sortOrder) ? sortOrder : undefined,
+    });
+  }
+  return courseByGuid;
+}
+
+function findFirstCourseSortOrder(
+  items: Array<{ course?: { guid?: string; sortOrder?: number } }>,
+  courseByGuid: Map<string, { name?: string; sortOrder?: number }>,
+): number | null {
+  let first: number | null = null;
+  if (!Array.isArray(items)) return null;
+
+  for (const item of items) {
+    if (!item?.course?.guid) continue;
+    const courseGuid = String(item.course.guid);
+    const fallbackSort = courseByGuid.get(courseGuid)?.sortOrder;
+    const sortOrderRaw = item.course.sortOrder ?? fallbackSort;
+    const sortOrder = Number(sortOrderRaw);
+    const normalizedSort = Number.isFinite(sortOrder) ? sortOrder : 0;
+    if (first === null || normalizedSort < first) {
+      first = normalizedSort;
+    }
+  }
+  return first;
+}
+
+async function resolveModifiers(
+  modifiers: Array<{ modifierId: string }> | undefined,
+): Promise<{ modifiersPrice: number; modifiersData: Array<{ modifier: { connect: { id: string } }; modifierName: string; priceAdjustment: unknown }> }> {
+  let modifiersPrice = 0;
+  const modifiersData: Array<{ modifier: { connect: { id: string } }; modifierName: string; priceAdjustment: unknown }> = [];
+
+  if (!modifiers || modifiers.length === 0) {
+    return { modifiersPrice, modifiersData };
+  }
+
+  for (const mod of modifiers) {
+    const modifier = await prisma.modifier.findUnique({
+      where: { id: mod.modifierId },
+    });
+    if (modifier) {
+      modifiersPrice += Number(modifier.priceAdjustment);
+      modifiersData.push({
+        modifier: { connect: { id: modifier.id } },
+        modifierName: modifier.name,
+        priceAdjustment: modifier.priceAdjustment,
+      });
+    }
+  }
+
+  return { modifiersPrice, modifiersData };
+}
+
+function buildCourseFields(
+  item: Record<string, unknown>,
+  courseByGuid: Map<string, { name?: string; sortOrder?: number }>,
+  firstCourseSortOrder: number | null,
+): {
+  courseGuid: string | undefined;
+  courseName: string | undefined;
+  normalizedCourseSortOrder: number;
+  fulfillmentStatus: string;
+  courseFireStatus: string | null;
+  courseFiredAt: Date | null;
+  sentToKitchenAt: Date | null;
+} {
+  const rawCourse = item.course as Record<string, unknown> | undefined;
+  const courseGuid = typeof rawCourse?.guid === 'string' ? rawCourse.guid : undefined;
+  const fallbackCourse = courseGuid ? courseByGuid.get(courseGuid) : undefined;
+  const rawCourseName = rawCourse?.name;
+  const courseName = typeof rawCourseName === 'string'
+    ? rawCourseName
+    : fallbackCourse?.name;
+  const rawSortOrder = rawCourse?.sortOrder ?? fallbackCourse?.sortOrder;
+  const courseSortOrder = Number(rawSortOrder);
+  const normalizedCourseSortOrder = Number.isFinite(courseSortOrder) ? courseSortOrder : 0;
+
+  const isFirstCourseItem = courseGuid
+    ? (firstCourseSortOrder === null || normalizedCourseSortOrder === firstCourseSortOrder)
+    : false;
+  const courseFulfillment = isFirstCourseItem ? 'SENT' : 'HOLD';
+  const fulfillmentStatus = courseGuid ? courseFulfillment : 'SENT';
+  const courseFireValue = isFirstCourseItem ? 'FIRED' : 'PENDING';
+  const courseFireStatus = courseGuid ? courseFireValue : null;
+  const courseFiredAt = courseGuid && isFirstCourseItem ? new Date() : null;
+  const sentToKitchenAt = fulfillmentStatus === 'HOLD' ? null : new Date();
+
+  return { courseGuid, courseName, normalizedCourseSortOrder, fulfillmentStatus, courseFireStatus, courseFiredAt, sentToKitchenAt };
+}
+
+async function handleLoyaltyForNewOrder(
+  customerId: string,
+  restaurantId: string,
+  orderId: string,
+  subtotal: number,
+  reqLoyaltyPointsRedeemed: number,
+): Promise<void> {
+  const loyaltyConfig = await loyaltyService.getConfig(restaurantId);
+  if (!loyaltyConfig.enabled) return;
+
+  const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+  if (!customer) return;
+
+  const tier = loyaltyService.calculateTier(customer.totalPointsEarned, loyaltyConfig);
+  const pointsEarned = loyaltyService.calculatePointsEarned(subtotal, loyaltyConfig, tier);
+
+  let discountFromRedemption = 0;
+  const loyaltyPointsRedeemedInt = Number.parseInt(String(reqLoyaltyPointsRedeemed), 10) || 0;
+  if (loyaltyPointsRedeemedInt > 0) {
+    await loyaltyService.redeemPoints(customerId, orderId, loyaltyPointsRedeemedInt, restaurantId);
+    discountFromRedemption = loyaltyService.calculateDiscount(loyaltyPointsRedeemedInt, loyaltyConfig);
+  }
+
+  if (pointsEarned > 0) {
+    await loyaltyService.awardPoints(customerId, orderId, pointsEarned, restaurantId);
+  }
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      loyaltyPointsEarned: pointsEarned,
+      loyaltyPointsRedeemed: loyaltyPointsRedeemedInt,
+      discount: discountFromRedemption,
+    },
+  });
 }
 
 // ============ Staff PIN Validation ============
@@ -140,7 +380,7 @@ router.post('/', async (req: Request, res: Response) => {
     if (zip && (taxRate === undefined || taxRate === null)) {
       const taxInfo = await taxService.getTaxRateByZip(zip, state);
       finalTaxRate = taxInfo.rate;
-      console.log(`[Restaurant] Auto-set tax rate for ${zip}: ${finalTaxRate} (source: ${taxInfo.source})`);
+      console.log('[Restaurant] Auto-set tax rate', { zip, finalTaxRate, source: taxInfo.source });
     }
 
     const restaurant = await prisma.restaurant.create({
@@ -227,6 +467,28 @@ router.patch('/:merchantId', async (req: Request, res: Response) => {
 
 // ============ Full Menu (with modifiers) ============
 
+function mapModifier(mod: any, lang: string | undefined) {
+  return {
+    id: mod.id,
+    name: lang === 'en' && mod.nameEn ? mod.nameEn : mod.name,
+    priceAdjustment: mod.priceAdjustment,
+    isDefault: mod.isDefault,
+  };
+}
+
+function mapModifierGroup(mg: any, lang: string | undefined) {
+  return {
+    id: mg.modifierGroup.id,
+    name: lang === 'en' && mg.modifierGroup.nameEn ? mg.modifierGroup.nameEn : mg.modifierGroup.name,
+    description: mg.modifierGroup.description,
+    required: mg.modifierGroup.required,
+    multiSelect: mg.modifierGroup.multiSelect,
+    minSelections: mg.modifierGroup.minSelections,
+    maxSelections: mg.modifierGroup.maxSelections,
+    modifiers: mg.modifierGroup.modifiers.map((mod: any) => mapModifier(mod, lang)),
+  };
+}
+
 router.get('/:merchantId/menu', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
@@ -281,21 +543,7 @@ router.get('/:merchantId/menu', async (req: Request, res: Response) => {
         cateringPricing: item.cateringPricing ?? [],
         menuType: item.menuType ?? 'standard',
         cateringPricingModel: item.cateringPricingModel ?? null,
-        modifierGroups: item.modifierGroups.map(mg => ({
-          id: mg.modifierGroup.id,
-          name: lang === 'en' && mg.modifierGroup.nameEn ? mg.modifierGroup.nameEn : mg.modifierGroup.name,
-          description: mg.modifierGroup.description,
-          required: mg.modifierGroup.required,
-          multiSelect: mg.modifierGroup.multiSelect,
-          minSelections: mg.modifierGroup.minSelections,
-          maxSelections: mg.modifierGroup.maxSelections,
-          modifiers: mg.modifierGroup.modifiers.map(mod => ({
-            id: mod.id,
-            name: lang === 'en' && mod.nameEn ? mod.nameEn : mod.name,
-            priceAdjustment: mod.priceAdjustment,
-            isDefault: mod.isDefault
-          }))
-        }))
+        modifierGroups: item.modifierGroups.map(mg => mapModifierGroup(mg, lang as string | undefined))
       }))
     }));
 
@@ -472,6 +720,62 @@ router.get('/:merchantId/menu/items/:itemId', async (req: Request, res: Response
   }
 });
 
+// --- Helpers for menu item create/update ---
+
+const VALID_MENU_TYPES = ['standard', 'catering'];
+const VALID_PRICING_MODELS = ['per_person', 'per_tray', 'flat'];
+
+function validateMenuTypeFields(
+  menuType: string | undefined,
+  cateringPricingModel: string | undefined | null,
+): string | null {
+  if (menuType !== undefined && !VALID_MENU_TYPES.includes(menuType)) {
+    return `menuType must be one of: ${VALID_MENU_TYPES.join(', ')}`;
+  }
+  if (cateringPricingModel !== undefined && cateringPricingModel !== null && !VALID_PRICING_MODELS.includes(cateringPricingModel)) {
+    return `cateringPricingModel must be one of: ${VALID_PRICING_MODELS.join(', ')}`;
+  }
+  return null;
+}
+
+async function generateAiDescription(
+  restaurantId: string,
+  name: string,
+  description: string,
+  cuisineType: string | undefined,
+): Promise<string | undefined> {
+  try {
+    return await aiCostService.generateEnglishDescription(restaurantId, name, description, cuisineType);
+  } catch {
+    // AI description generation failed — continue without it
+    return undefined;
+  }
+}
+
+async function estimateAiCost(
+  restaurantId: string,
+  name: string,
+  description: string,
+  price: number,
+  cuisineType: string | undefined,
+): Promise<Record<string, unknown>> {
+  try {
+    const estimation = await aiCostService.estimateCost(restaurantId, name, description, price, cuisineType);
+    if (estimation) {
+      return {
+        aiEstimatedCost: estimation.estimatedCost,
+        aiSuggestedPrice: estimation.suggestedPrice,
+        aiProfitMargin: estimation.profitMargin,
+        aiConfidence: estimation.confidence,
+        aiLastUpdated: new Date(),
+      };
+    }
+  } catch {
+    // AI cost estimation failed — continue without it
+  }
+  return {};
+}
+
 router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
@@ -482,14 +786,9 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
       menuType = 'standard', cateringPricingModel
     } = req.body;
 
-    const validMenuTypes = ['standard', 'catering'];
-    const validPricingModels = ['per_person', 'per_tray', 'flat'];
-    if (!validMenuTypes.includes(menuType)) {
-      res.status(400).json({ error: `menuType must be one of: ${validMenuTypes.join(', ')}` });
-      return;
-    }
-    if (cateringPricingModel !== undefined && cateringPricingModel !== null && !validPricingModels.includes(cateringPricingModel)) {
-      res.status(400).json({ error: `cateringPricingModel must be one of: ${validPricingModels.join(', ')}` });
+    const typeError = validateMenuTypeFields(menuType, cateringPricingModel);
+    if (typeError) {
+      res.status(400).json({ error: typeError });
       return;
     }
 
@@ -498,46 +797,20 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
       return;
     }
 
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId }
-    });
+    const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId } });
+    const cuisineType = restaurant?.cuisineType || undefined;
 
-    // Auto-generate English description if not provided
-    let generatedDescEn = descriptionEn;
-    if (!descriptionEn && description) {
-      try {
-        generatedDescEn = await aiCostService.generateEnglishDescription(
-          restaurantId, name, description, restaurant?.cuisineType || undefined
-        );
-      } catch {
-        // AI description generation failed — continue without it
-      }
-    }
+    const generatedDescEn = !descriptionEn && description
+      ? await generateAiDescription(restaurantId, name, description, cuisineType)
+      : descriptionEn;
 
-    // Auto-estimate cost if not provided
-    let aiData: any = {};
-    if (!cost) {
-      try {
-        const estimation = await aiCostService.estimateCost(
-          restaurantId, name, description, Number(price), restaurant?.cuisineType || undefined
-        );
-        if (estimation) {
-          aiData = {
-            aiEstimatedCost: estimation.estimatedCost,
-            aiSuggestedPrice: estimation.suggestedPrice,
-            aiProfitMargin: estimation.profitMargin,
-            aiConfidence: estimation.confidence,
-            aiLastUpdated: new Date()
-          };
-        }
-      } catch {
-        // AI cost estimation failed — continue without it
-      }
-    }
+    const aiData = !cost
+      ? await estimateAiCost(restaurantId, name, description, Number(price), cuisineType)
+      : {};
 
     const maxOrder = await prisma.menuItem.aggregate({
       where: { restaurantId, categoryId },
-      _max: { displayOrder: true }
+      _max: { displayOrder: true },
     });
 
     const item = await prisma.menuItem.create({
@@ -553,15 +826,11 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
         modifierGroups: {
           create: modifierGroupIds.map((groupId: string, index: number) => ({
             modifierGroupId: groupId,
-            displayOrder: index
-          }))
-        }
+            displayOrder: index,
+          })),
+        },
       },
-      include: {
-        modifierGroups: {
-          include: { modifierGroup: true }
-        }
-      }
+      include: { modifierGroups: { include: { modifierGroup: true } } },
     });
     res.status(201).json(item);
   } catch (error) {
@@ -580,67 +849,46 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
       menuType, cateringPricingModel
     } = req.body;
 
-    const validMenuTypes = ['standard', 'catering'];
-    const validPricingModels = ['per_person', 'per_tray', 'flat'];
-    if (menuType !== undefined && !validMenuTypes.includes(menuType)) {
-      res.status(400).json({ error: `menuType must be one of: ${validMenuTypes.join(', ')}` });
+    const typeError = validateMenuTypeFields(menuType, cateringPricingModel);
+    if (typeError) {
+      res.status(400).json({ error: typeError });
       return;
     }
-    if (cateringPricingModel !== undefined && cateringPricingModel !== null && !validPricingModels.includes(cateringPricingModel)) {
-      res.status(400).json({ error: `cateringPricingModel must be one of: ${validPricingModels.join(', ')}` });
-      return;
-    }
-
-    let generatedDescEn: string | null | undefined = descriptionEn;
-    let aiData: any = {};
 
     const [currentItem, restaurant] = await Promise.all([
       prisma.menuItem.findUnique({ where: { id: itemId } }),
-      prisma.restaurant.findUnique({ where: { id: restaurantId } })
+      prisma.restaurant.findUnique({ where: { id: restaurantId } }),
     ]);
 
-    // Regenerate English description if changed
-    if ((name !== undefined || description !== undefined) && descriptionEn === undefined) {
-      generatedDescEn = await aiCostService.generateEnglishDescription(
-        restaurantId,
-        name || currentItem?.name || '',
-        description || currentItem?.description || '',
-        restaurant?.cuisineType || undefined
-      );
-    }
+    const cuisineType = restaurant?.cuisineType || undefined;
 
-    // Re-estimate cost if price changed
-    if (price !== undefined && !cost && !currentItem?.cost) {
-      const estimation = await aiCostService.estimateCost(
-        restaurantId,
-        name || currentItem?.name || '',
-        description || currentItem?.description || '',
-        Number(price),
-        restaurant?.cuisineType || undefined
-      );
-      if (estimation) {
-        aiData = {
-          aiEstimatedCost: estimation.estimatedCost,
-          aiSuggestedPrice: estimation.suggestedPrice,
-          aiProfitMargin: estimation.profitMargin,
-          aiConfidence: estimation.confidence,
-          aiLastUpdated: new Date()
-        };
-      }
-    }
+    const generatedDescEn: string | null | undefined =
+      (name !== undefined || description !== undefined) && descriptionEn === undefined
+        ? await generateAiDescription(
+            restaurantId,
+            name || currentItem?.name || '',
+            description || currentItem?.description || '',
+            cuisineType,
+          )
+        : descriptionEn;
 
-    // Update modifier group links if provided
+    const aiData = price !== undefined && !cost && !currentItem?.cost
+      ? await estimateAiCost(
+          restaurantId,
+          name || currentItem?.name || '',
+          description || currentItem?.description || '',
+          Number(price),
+          cuisineType,
+        )
+      : {};
+
     if (modifierGroupIds !== undefined) {
-      await prisma.menuItemModifierGroup.deleteMany({
-        where: { menuItemId: itemId }
-      });
+      await prisma.menuItemModifierGroup.deleteMany({ where: { menuItemId: itemId } });
       if (modifierGroupIds.length > 0) {
         await prisma.menuItemModifierGroup.createMany({
           data: modifierGroupIds.map((groupId: string, index: number) => ({
-            menuItemId: itemId,
-            modifierGroupId: groupId,
-            displayOrder: index
-          }))
+            menuItemId: itemId, modifierGroupId: groupId, displayOrder: index,
+          })),
         });
       }
     }
@@ -666,13 +914,9 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
         ...(menuType !== undefined && { menuType }),
         ...(cateringPricingModel !== undefined && { cateringPricingModel }),
         ...(cateringPricing !== undefined && { cateringPricing }),
-        ...aiData
+        ...aiData,
       },
-      include: {
-        modifierGroups: {
-          include: { modifierGroup: true }
-        }
-      }
+      include: { modifierGroups: { include: { modifierGroup: true } } },
     });
     res.json(item);
   } catch (error) {
@@ -1296,209 +1540,59 @@ router.post('/:merchantId/orders', async (req: Request, res: Response) => {
       loyaltyPointsRedeemed: reqLoyaltyPointsRedeemed = 0,
     } = req.body;
 
-    // Require sourceDeviceId for all POS orders
     if (orderSource === 'pos' && !sourceDeviceId) {
       res.status(400).json({ error: 'sourceDeviceId is required for POS orders' });
       return;
     }
 
-    // Get restaurant for tax rate
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId }
-    });
-
+    const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId } });
     if (!restaurant) {
       res.status(404).json({ error: 'Restaurant not found' });
       return;
     }
 
-    // Resolve table ID from tableNumber if provided
-    let resolvedTableId = tableId;
-    if (!tableId && tableNumber) {
-      const table = await prisma.restaurantTable.findFirst({
-        where: {
-          restaurantId,
-          tableNumber: String(tableNumber)
-        }
-      });
-      if (table) {
-        resolvedTableId = table.id;
-      }
-    }
+    const resolvedTableId = await resolveTableId(restaurantId, tableId, tableNumber);
+    const customerData = buildCustomerData(customerInfo, customerName, customerPhone, customerEmail);
 
-    // Build customer info object for validation
-    const customerData = customerInfo ?? (customerName ? {
-      firstName: customerName.split(' ')[0],
-      lastName: customerName.split(' ').slice(1).join(' '),
-      phone: customerPhone,
-      email: customerEmail,
-    } : undefined);
-
-    // Validate dining requirements
     const validation = validateDiningData(orderType, {
       customerInfo: customerData,
-      deliveryInfo,
-      curbsideInfo,
-      cateringInfo,
-      tableId: resolvedTableId,
-      tableNumber,
-      orderSource,
+      deliveryInfo, curbsideInfo, cateringInfo,
+      tableId: resolvedTableId, tableNumber, orderSource,
     });
-
     if (!validation.valid) {
-      res.status(400).json({
-        error: 'Invalid dining option data',
-        details: validation.errors,
-      });
+      res.status(400).json({ error: 'Invalid dining option data', details: validation.errors });
       return;
     }
 
-    // Handle customer info - support both formats
-    let customerId = null;
-    const resolvedCustomerName = customerInfo?.firstName 
-      ? `${customerInfo.firstName}${customerInfo.lastName ? ' ' + customerInfo.lastName : ''}`
-      : customerName;
-    const resolvedPhone = customerInfo?.phone || customerPhone;
-    const resolvedEmail = customerInfo?.email || customerEmail;
+    const { resolvedCustomerName, resolvedPhone, resolvedEmail } =
+      resolveCustomerFields(customerInfo, customerName, customerPhone, customerEmail);
 
-    {
-      let firstName = customerInfo?.firstName;
-      let lastName = customerInfo?.lastName;
-      if (!firstName && resolvedCustomerName) {
-        const nameParts = resolvedCustomerName.trim().split(' ');
-        firstName = nameParts[0];
-        lastName = nameParts.slice(1).join(' ') || null;
-      }
+    const customerId = await resolveOrCreateCustomer(
+      restaurantId, customerInfo, resolvedCustomerName, resolvedPhone, resolvedEmail,
+    );
 
-      // Dedup by phone when available (loyalty requires stable customer identity)
-      if (resolvedPhone) {
-        const customer = await prisma.customer.upsert({
-          where: {
-            restaurantId_phone: { restaurantId, phone: resolvedPhone }
-          },
-          update: {
-            firstName: firstName ?? undefined,
-            lastName: lastName ?? undefined,
-            email: resolvedEmail ?? undefined,
-          },
-          create: {
-            restaurantId,
-            firstName,
-            lastName,
-            email: resolvedEmail,
-            phone: resolvedPhone,
-          },
-        });
-        customerId = customer.id;
-      } else if (resolvedEmail || resolvedCustomerName) {
-        // No phone — can't dedup, create fresh (guest orders)
-        const customer = await prisma.customer.create({
-          data: {
-            restaurantId,
-            firstName,
-            lastName,
-            email: resolvedEmail,
-            phone: resolvedPhone,
-          }
-        });
-        customerId = customer.id;
-      }
-    }
+    const courseByGuid = parseCourseMap(courses);
+    const firstCourseSortOrder = findFirstCourseSortOrder(items, courseByGuid);
 
     let subtotal = 0;
     const orderItemsData = [];
 
-    const courseByGuid = new Map<string, { name?: string; sortOrder?: number }>();
-    if (Array.isArray(courses)) {
-      for (const course of courses) {
-        if (!course || typeof course !== 'object') continue;
-        const guid = (course as Record<string, unknown>).guid;
-        if (typeof guid !== 'string' || !guid) continue;
-        const name = (course as Record<string, unknown>).name;
-        const sortOrderRaw = (course as Record<string, unknown>).sortOrder;
-        const sortOrder = Number(sortOrderRaw);
-        courseByGuid.set(guid, {
-          name: typeof name === 'string' ? name : undefined,
-          sortOrder: Number.isFinite(sortOrder) ? sortOrder : undefined,
-        });
-      }
-    }
-
-    let firstCourseSortOrder: number | null = null;
-    if (Array.isArray(items)) {
-      for (const item of items) {
-        if (!item?.course?.guid) continue;
-        const courseGuid = String(item.course.guid);
-        const fallbackSort = courseByGuid.get(courseGuid)?.sortOrder;
-        const sortOrderRaw = item.course.sortOrder ?? fallbackSort;
-        const sortOrder = Number(sortOrderRaw);
-        const normalizedSort = Number.isFinite(sortOrder) ? sortOrder : 0;
-        if (firstCourseSortOrder === null || normalizedSort < firstCourseSortOrder) {
-          firstCourseSortOrder = normalizedSort;
-        }
-      }
-    }
-
     for (const item of items) {
-      const menuItem = await prisma.menuItem.findUnique({
-        where: { id: item.menuItemId }
-      });
-
+      const menuItem = await prisma.menuItem.findUnique({ where: { id: item.menuItemId } });
       if (!menuItem) {
         res.status(400).json({ error: `Menu item ${item.menuItemId} not found` });
         return;
       }
-
       if (menuItem.eightySixed) {
         res.status(400).json({ error: `${menuItem.name} is currently unavailable` });
         return;
       }
 
-      // Calculate modifier prices
-      let modifiersPrice = 0;
-      const modifiersData = [];
-
-      if (item.modifiers && item.modifiers.length > 0) {
-        for (const mod of item.modifiers) {
-          const modifier = await prisma.modifier.findUnique({
-            where: { id: mod.modifierId }
-          });
-          if (modifier) {
-            modifiersPrice += Number(modifier.priceAdjustment);
-            modifiersData.push({
-              modifier: { connect: { id: modifier.id } },
-              modifierName: modifier.name,
-              priceAdjustment: modifier.priceAdjustment
-            });
-          }
-        }
-      }
-
+      const { modifiersPrice, modifiersData } = await resolveModifiers(item.modifiers);
       const itemTotal = (Number(menuItem.price) + modifiersPrice) * item.quantity;
       subtotal += itemTotal;
 
-      const rawCourse = item.course as Record<string, unknown> | undefined;
-      const courseGuid = typeof rawCourse?.guid === 'string' ? rawCourse.guid : undefined;
-      const fallbackCourse = courseGuid ? courseByGuid.get(courseGuid) : undefined;
-      const rawCourseName = rawCourse?.name;
-      const courseName = typeof rawCourseName === 'string'
-        ? rawCourseName
-        : fallbackCourse?.name;
-      const rawSortOrder = rawCourse?.sortOrder ?? fallbackCourse?.sortOrder;
-      const courseSortOrder = Number(rawSortOrder);
-      const normalizedCourseSortOrder = Number.isFinite(courseSortOrder) ? courseSortOrder : 0;
-
-      const isFirstCourseItem = courseGuid
-        ? (firstCourseSortOrder === null || normalizedCourseSortOrder === firstCourseSortOrder)
-        : false;
-      const fulfillmentStatus = courseGuid
-        ? (isFirstCourseItem ? 'SENT' : 'HOLD')
-        : 'SENT';
-      const courseFireStatus = courseGuid
-        ? (isFirstCourseItem ? 'FIRED' : 'PENDING')
-        : null;
-      const courseFiredAt = courseGuid && isFirstCourseItem ? new Date() : null;
-      const sentToKitchenAt = fulfillmentStatus === 'HOLD' ? null : new Date();
+      const cf = buildCourseFields(item, courseByGuid, firstCourseSortOrder);
 
       orderItemsData.push({
         menuItem: { connect: { id: menuItem.id } },
@@ -1508,39 +1602,27 @@ router.post('/:merchantId/orders', async (req: Request, res: Response) => {
         modifiersPrice,
         totalPrice: itemTotal,
         specialInstructions: item.specialInstructions,
-        fulfillmentStatus,
-        courseGuid: courseGuid ?? null,
-        courseName: courseGuid ? (courseName ?? courseGuid) : null,
-        courseSortOrder: courseGuid ? normalizedCourseSortOrder : null,
-        courseFireStatus,
-        courseFiredAt,
-        sentToKitchenAt,
-        modifiers: { create: modifiersData }
+        fulfillmentStatus: cf.fulfillmentStatus,
+        courseGuid: cf.courseGuid ?? null,
+        courseName: cf.courseGuid ? (cf.courseName ?? cf.courseGuid) : null,
+        courseSortOrder: cf.courseGuid ? cf.normalizedCourseSortOrder : null,
+        courseFireStatus: cf.courseFireStatus,
+        courseFiredAt: cf.courseFiredAt,
+        sentToKitchenAt: cf.sentToKitchenAt,
+        modifiers: { create: modifiersData },
       });
     }
 
-    // Calculate tax (Florida: simple rate, future: category-based per state)
     const tax = Math.round(subtotal * Number(restaurant.taxRate || 0.07) * 100) / 100;
     const total = subtotal + tax;
 
     const order = await prisma.order.create({
       data: {
-        restaurantId,
-        customerId,
-        tableId: resolvedTableId,
-        serverId,
-        sourceDeviceId,
-        orderNumber: generateOrderNumber(),
-        orderType,
-        orderSource,
-        status: 'pending',
-        subtotal,
-        tax,
-        total,
-        specialInstructions,
+        restaurantId, customerId, tableId: resolvedTableId, serverId, sourceDeviceId,
+        orderNumber: generateOrderNumber(), orderType, orderSource, status: 'pending',
+        subtotal, tax, total, specialInstructions,
         deliveryAddress: deliveryInfo?.address ?? deliveryAddress,
-        deliveryLat,
-        deliveryLng,
+        deliveryLat, deliveryLng,
         deliveryAddress2: deliveryInfo?.address2,
         deliveryCity: deliveryInfo?.city,
         deliveryStateUs: deliveryInfo?.state,
@@ -1559,59 +1641,24 @@ router.post('/:merchantId/orders', async (req: Request, res: Response) => {
         cateringInstructions: cateringInfo?.specialInstructions,
         approvalStatus: orderType === 'catering' ? 'NEEDS_APPROVAL' : null,
         scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
-        orderItems: { create: orderItemsData }
+        orderItems: { create: orderItemsData },
       },
       include: {
         orderItems: { include: { modifiers: true } },
-        customer: true,
-        table: true,
-        marketplaceOrder: true,
-      }
+        customer: true, table: true, marketplaceOrder: true,
+      },
     });
 
     if (customerId) {
       await prisma.customer.update({
         where: { id: customerId },
-        data: {
-          totalOrders: { increment: 1 },
-          totalSpent: { increment: total },
-          lastOrderDate: new Date()
-        }
+        data: { totalOrders: { increment: 1 }, totalSpent: { increment: total }, lastOrderDate: new Date() },
       });
-
-      // Award and redeem loyalty points
-      const loyaltyConfig = await loyaltyService.getConfig(restaurantId);
-      if (loyaltyConfig.enabled) {
-        const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-        if (customer) {
-          const tier = loyaltyService.calculateTier(customer.totalPointsEarned, loyaltyConfig);
-          const pointsEarned = loyaltyService.calculatePointsEarned(subtotal, loyaltyConfig, tier);
-
-          let discountFromRedemption = 0;
-          const loyaltyPointsRedeemedInt = Number.parseInt(String(reqLoyaltyPointsRedeemed), 10) || 0;
-          if (loyaltyPointsRedeemedInt > 0) {
-            await loyaltyService.redeemPoints(customerId, order.id, loyaltyPointsRedeemedInt, restaurantId);
-            discountFromRedemption = loyaltyService.calculateDiscount(loyaltyPointsRedeemedInt, loyaltyConfig);
-          }
-
-          if (pointsEarned > 0) {
-            await loyaltyService.awardPoints(customerId, order.id, pointsEarned, restaurantId);
-          }
-
-          await prisma.order.update({
-            where: { id: order.id },
-            data: {
-              loyaltyPointsEarned: pointsEarned,
-              loyaltyPointsRedeemed: loyaltyPointsRedeemedInt,
-              discount: discountFromRedemption,
-            },
-          });
-        }
-      }
+      await handleLoyaltyForNewOrder(customerId, restaurantId, order.id, subtotal, reqLoyaltyPointsRedeemed);
     }
 
     const isRushOrder = Boolean((req.body as Record<string, unknown>)['isRush'])
-      || /(^|\W)rush(\W|$)/i.test(String(specialInstructions ?? ''));
+      || /(^|\W)rush(\W|$)/i.exec(String(specialInstructions ?? '')) !== null;
     await orderThrottlingService.applyAutoThrottleForNewOrder(restaurantId, order.id, { isRush: isRushOrder });
 
     const throttlingEvaluation = await orderThrottlingService.evaluateAndRelease(restaurantId);
@@ -1620,14 +1667,10 @@ router.post('/:merchantId/orders', async (req: Request, res: Response) => {
     }
 
     const latestOrder = await loadOrderWithRelations(order.id);
-
-    // Log sourceDeviceId for debugging
     console.log(`[Order Create] Order ${order.orderNumber} created with sourceDeviceId: ${order.sourceDeviceId || 'NONE'}`);
 
-    // Broadcast new order to KDS devices + source POS only (not other POS devices)
     const enrichedOrder = enrichOrderResponse(latestOrder ?? order);
     broadcastToSourceAndKDS(restaurantId, order.sourceDeviceId, 'order:new', enrichedOrder);
-
     res.status(201).json(enrichedOrder);
   } catch (error) {
     console.error('Error creating order:', error);

@@ -4,7 +4,7 @@
  * Mix of statuses, order types, sources, payment states, and special instructions
  */
 
-import { PrismaClient, MenuItem, RestaurantTable, Customer } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -60,56 +60,184 @@ interface OrderPlan {
   tipPercent: number;
 }
 
-function generateOrderPlans(count: number): OrderPlan[] {
-  const plans: OrderPlan[] = [];
+function randomTip(): number {
+  return Math.random() < 0.7 ? Math.floor(Math.random() * 21) : 0;
+}
 
-  // Status distribution: 30 completed, 5 preparing, 3 pending, 2 cancelled
+function randomOrderType(): string {
+  const roll = Math.random();
+  if (roll < 0.6) return 'dine_in';
+  return roll < 0.85 ? 'pickup' : 'delivery';
+}
+
+function randomOrderSource(): string {
+  const roll = Math.random();
+  if (roll < 0.7) return 'pos';
+  return roll < 0.9 ? 'online' : 'kds';
+}
+
+function paymentStatusForOrder(status: string): string {
+  if (status === 'pending' || status === 'preparing') return 'pending';
+  if (status === 'cancelled') return Math.random() < 0.5 ? 'refunded' : 'cancelled';
+  return 'paid';
+}
+
+function daysAgoForStatus(status: string): number {
+  if (status === 'pending' || status === 'preparing') return 0;
+  if (status === 'cancelled') return Math.floor(Math.random() * 7) + 1;
+  return Math.floor(Math.random() * 14);
+}
+
+function generateOrderPlans(count: number): OrderPlan[] {
   const statuses: string[] = [
-    ...Array(30).fill('completed'),
-    ...Array(5).fill('preparing'),
-    ...Array(3).fill('pending'),
-    ...Array(2).fill('cancelled'),
+    ...new Array(30).fill('completed'),
+    ...new Array(5).fill('preparing'),
+    ...new Array(3).fill('pending'),
+    ...new Array(2).fill('cancelled'),
   ];
 
-  for (let i = 0; i < count; i++) {
+  return Array.from({ length: count }, (_, i) => {
     const status = statuses[i] ?? 'completed';
-
-    // Order type: 60% dine-in, 25% pickup, 15% delivery
-    const typeRoll = Math.random();
-    const orderType = typeRoll < 0.60 ? 'dine_in' : typeRoll < 0.85 ? 'pickup' : 'delivery';
-
-    // Order source: 70% pos, 20% online, 10% kds
-    const sourceRoll = Math.random();
-    const orderSource = sourceRoll < 0.70 ? 'pos' : sourceRoll < 0.90 ? 'online' : 'kds';
-
-    // Payment status — mostly paid for completed, pending for in-progress
-    let paymentStatus = 'paid';
-    if (status === 'pending' || status === 'preparing') paymentStatus = 'pending';
-    if (status === 'cancelled') paymentStatus = Math.random() < 0.5 ? 'refunded' : 'cancelled';
-
-    // Spread over 14 days — more recent orders have active statuses
-    let orderDaysAgo: number;
-    if (status === 'pending' || status === 'preparing') {
-      orderDaysAgo = 0; // Active orders are today
-    } else if (status === 'cancelled') {
-      orderDaysAgo = Math.floor(Math.random() * 7) + 1;
-    } else {
-      orderDaysAgo = Math.floor(Math.random() * 14);
-    }
-
-    plans.push({
+    return {
       status,
-      orderType,
-      orderSource,
-      paymentStatus,
-      daysAgo: orderDaysAgo,
-      itemCount: 2 + Math.floor(Math.random() * 4), // 2-5 items
-      hasSpecialInstructions: Math.random() < 0.20, // ~20%
-      tipPercent: status === 'cancelled' ? 0 : Math.random() < 0.7 ? Math.floor(Math.random() * 21) : 0, // 0-20%
+      orderType: randomOrderType(),
+      orderSource: randomOrderSource(),
+      paymentStatus: paymentStatusForOrder(status),
+      daysAgo: daysAgoForStatus(status),
+      itemCount: 2 + Math.floor(Math.random() * 4),
+      hasSpecialInstructions: Math.random() < 0.2,
+      tipPercent: status === 'cancelled' ? 0 : randomTip(),
+    };
+  });
+}
+
+interface OrderItemData {
+  menuItemId: string;
+  menuItemName: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  specialInstructions: string | null;
+  status: string;
+}
+
+function buildOrderItems(selectedItems: Array<{ id: string; name: string; price: any }>, status: string): { items: OrderItemData[]; subtotal: number } {
+  let subtotal = 0;
+  const items: OrderItemData[] = [];
+
+  for (const item of selectedItems) {
+    const qty = Math.random() < 0.3 ? 2 : 1;
+    const unitPrice = Number(item.price);
+    const totalPrice = unitPrice * qty;
+    subtotal += totalPrice;
+    items.push({
+      menuItemId: item.id,
+      menuItemName: item.name,
+      quantity: qty,
+      unitPrice,
+      totalPrice,
+      specialInstructions: null,
+      status,
     });
   }
 
-  return plans;
+  return { items, subtotal };
+}
+
+interface OrderTimestamps {
+  confirmedAt: Date | null;
+  preparingAt: Date | null;
+  readyAt: Date | null;
+  completedAt: Date | null;
+  cancelledAt: Date | null;
+}
+
+function computeTimestamps(status: string, createdAt: Date): OrderTimestamps {
+  const ts: OrderTimestamps = { confirmedAt: null, preparingAt: null, readyAt: null, completedAt: null, cancelledAt: null };
+
+  if (status !== 'pending') {
+    ts.confirmedAt = new Date(createdAt.getTime() + 2 * 60000);
+  }
+  if (status === 'preparing' || status === 'completed') {
+    ts.preparingAt = new Date(createdAt.getTime() + 5 * 60000);
+  }
+  if (status === 'completed') {
+    ts.readyAt = new Date(createdAt.getTime() + 18 * 60000);
+    ts.completedAt = new Date(createdAt.getTime() + 25 * 60000);
+  }
+  if (status === 'cancelled') {
+    ts.cancelledAt = new Date(createdAt.getTime() + 3 * 60000);
+  }
+
+  return ts;
+}
+
+function computeTotals(subtotal: number, plan: OrderPlan) {
+  const tax = Math.round(subtotal * 0.075 * 100) / 100;
+  const tip = plan.tipPercent > 0 ? Math.round(subtotal * (plan.tipPercent / 100) * 100) / 100 : 0;
+  const deliveryFee = plan.orderType === 'delivery' ? 5.99 : 0;
+  const total = Math.round((subtotal + tax + tip + deliveryFee) * 100) / 100;
+  return { tax, tip, deliveryFee, total };
+}
+
+async function seedRestaurantOrders(
+  restaurantId: string,
+  rIdx: number,
+  menuItems: Array<{ id: string; name: string; price: any }>,
+  tables: Array<{ id: string }>,
+  customerList: Array<{ id: string }>,
+): Promise<void> {
+  const plans = generateOrderPlans(40);
+
+  for (let i = 0; i < plans.length; i++) {
+    const plan = plans[i];
+    const createdAt = daysAgo(plan.daysAgo);
+    const { items: itemsData, subtotal } = buildOrderItems(pickN(menuItems, plan.itemCount), plan.status);
+    const { tax, tip, deliveryFee, total } = computeTotals(subtotal, plan);
+    const timestamps = computeTimestamps(plan.status, createdAt);
+
+    const tableId = plan.orderType === 'dine_in' && tables.length > 0 ? pick(tables).id : null;
+    const customerId = customerList.length > 0 && Math.random() < 0.8 ? pick(customerList).id : null;
+
+    await prisma.order.create({
+      data: {
+        restaurantId,
+        customerId,
+        tableId,
+        orderNumber: generateOrderNumber(i, rIdx),
+        orderType: plan.orderType,
+        orderSource: plan.orderSource,
+        status: plan.status,
+        subtotal,
+        tax,
+        tip,
+        discount: 0,
+        deliveryFee,
+        total,
+        paymentMethod: plan.paymentStatus === 'paid' ? 'card' : null,
+        paymentStatus: plan.paymentStatus,
+        specialInstructions: plan.hasSpecialInstructions ? pick(specialInstructions) : null,
+        deliveryAddress: plan.orderType === 'delivery' ? '123 Sample St, Miami, FL 33155' : null,
+        ...timestamps,
+        cancellationReason: plan.status === 'cancelled' ? 'Customer requested cancellation' : null,
+        createdAt,
+        orderItems: {
+          create: itemsData.map(item => ({
+            menuItemId: item.menuItemId,
+            menuItemName: item.menuItemName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            modifiersPrice: 0,
+            totalPrice: item.totalPrice,
+            specialInstructions: item.specialInstructions,
+            status: item.status,
+          })),
+        },
+      },
+    });
+  }
+
+  console.log(`   ✅ Created 40 orders with items for restaurant ${restaurantId}`);
 }
 
 export async function seedOrders(restaurantIds: string[]) {
@@ -124,142 +252,16 @@ export async function seedOrders(restaurantIds: string[]) {
       continue;
     }
 
-    // Load menu items, tables, and customers for this restaurant
-    const menuItems = await prisma.menuItem.findMany({
-      where: { restaurantId, available: true },
-    });
-    const tables = await prisma.restaurantTable.findMany({
-      where: { restaurantId },
-    });
-    const customerList = await prisma.customer.findMany({
-      where: { restaurantId },
-    });
+    const menuItems = await prisma.menuItem.findMany({ where: { restaurantId, available: true } });
+    const tables = await prisma.restaurantTable.findMany({ where: { restaurantId } });
+    const customerList = await prisma.customer.findMany({ where: { restaurantId } });
 
     if (menuItems.length === 0) {
       console.log(`   ⚠️  No menu items for restaurant ${restaurantId}, skipping orders...`);
       continue;
     }
 
-    const plans = generateOrderPlans(40);
-
-    for (let i = 0; i < plans.length; i++) {
-      const plan = plans[i];
-      const orderNumber = generateOrderNumber(i, rIdx);
-      const orderDate = daysAgo(plan.daysAgo);
-
-      // Pick random items
-      const selectedItems = pickN(menuItems, plan.itemCount);
-      let subtotal = 0;
-      const itemsData: Array<{
-        menuItemId: string;
-        menuItemName: string;
-        quantity: number;
-        unitPrice: number;
-        totalPrice: number;
-        specialInstructions: string | null;
-        status: string;
-      }> = [];
-
-      for (const item of selectedItems) {
-        const qty = Math.random() < 0.3 ? 2 : 1; // 30% chance of quantity 2
-        const unitPrice = Number(item.price);
-        const totalPrice = unitPrice * qty;
-        subtotal += totalPrice;
-
-        itemsData.push({
-          menuItemId: item.id,
-          menuItemName: item.name,
-          quantity: qty,
-          unitPrice,
-          totalPrice,
-          specialInstructions: null,
-          status: plan.status === 'cancelled' ? 'cancelled' : plan.status === 'completed' ? 'completed' : plan.status,
-        });
-      }
-
-      const tax = Math.round(subtotal * 0.075 * 100) / 100; // 7.5%
-      const tip = plan.tipPercent > 0 ? Math.round(subtotal * (plan.tipPercent / 100) * 100) / 100 : 0;
-      const deliveryFee = plan.orderType === 'delivery' ? 5.99 : 0;
-      const total = Math.round((subtotal + tax + tip + deliveryFee) * 100) / 100;
-
-      // Assign table for dine-in orders
-      const tableId = plan.orderType === 'dine_in' && tables.length > 0
-        ? pick(tables).id
-        : null;
-
-      // Assign customer (80% of orders have a customer)
-      const customerId = customerList.length > 0 && Math.random() < 0.8
-        ? pick(customerList).id
-        : null;
-
-      // Special instructions on the order itself
-      const orderInstructions = plan.hasSpecialInstructions ? pick(specialInstructions) : null;
-
-      // Timestamps based on status
-      const createdAt = orderDate;
-      let confirmedAt: Date | null = null;
-      let preparingAt: Date | null = null;
-      let readyAt: Date | null = null;
-      let completedAt: Date | null = null;
-      let cancelledAt: Date | null = null;
-
-      if (plan.status !== 'pending') {
-        confirmedAt = new Date(createdAt.getTime() + 2 * 60000); // +2 min
-      }
-      if (plan.status === 'preparing' || plan.status === 'completed') {
-        preparingAt = new Date(createdAt.getTime() + 5 * 60000); // +5 min
-      }
-      if (plan.status === 'completed') {
-        readyAt = new Date(createdAt.getTime() + 18 * 60000); // +18 min
-        completedAt = new Date(createdAt.getTime() + 25 * 60000); // +25 min
-      }
-      if (plan.status === 'cancelled') {
-        cancelledAt = new Date(createdAt.getTime() + 3 * 60000); // +3 min
-      }
-
-      await prisma.order.create({
-        data: {
-          restaurantId,
-          customerId,
-          tableId,
-          orderNumber,
-          orderType: plan.orderType,
-          orderSource: plan.orderSource,
-          status: plan.status,
-          subtotal,
-          tax,
-          tip,
-          discount: 0,
-          deliveryFee,
-          total,
-          paymentMethod: plan.paymentStatus === 'paid' ? 'card' : null,
-          paymentStatus: plan.paymentStatus,
-          specialInstructions: orderInstructions,
-          deliveryAddress: plan.orderType === 'delivery' ? '123 Sample St, Miami, FL 33155' : null,
-          confirmedAt,
-          preparingAt,
-          readyAt,
-          completedAt,
-          cancelledAt,
-          cancellationReason: plan.status === 'cancelled' ? 'Customer requested cancellation' : null,
-          createdAt,
-          orderItems: {
-            create: itemsData.map(item => ({
-              menuItemId: item.menuItemId,
-              menuItemName: item.menuItemName,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              modifiersPrice: 0,
-              totalPrice: item.totalPrice,
-              specialInstructions: item.specialInstructions,
-              status: item.status,
-            })),
-          },
-        },
-      });
-    }
-
-    console.log(`   ✅ Created 40 orders with items for restaurant ${restaurantId}`);
+    await seedRestaurantOrders(restaurantId, rIdx, menuItems, tables, customerList);
   }
 
   const totalOrders = await prisma.order.count();
@@ -269,14 +271,17 @@ export async function seedOrders(restaurantIds: string[]) {
 
 // Allow standalone execution
 if (require.main === module) {
-  (async () => {
+  try {
     const restaurants = await prisma.restaurant.findMany({
       where: { slug: { in: ['taipa-kendall', 'taipa-coral-gables'] } },
       select: { id: true, slug: true },
     });
     console.log(`Found ${restaurants.length} Taipa restaurants`);
     await seedOrders(restaurants.map(r => r.id));
-  })()
-    .catch(console.error)
-    .finally(() => prisma.$disconnect());
+  } catch (error: unknown) {
+    console.error('Script failed:', error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
+  }
 }

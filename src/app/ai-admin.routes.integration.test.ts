@@ -48,7 +48,7 @@ vi.mock('../services/ai-config.service', () => ({
 vi.mock('../services/ai-usage.service', () => ({
   aiUsageService: {
     getCurrentMonthUsage: vi.fn().mockResolvedValue({ totalRequests: 0, totalCost: 0 }),
-    getUsageSummary: vi.fn().mockResolvedValue({ totalRequests: 10, totalCost: 0.50 }),
+    getUsageSummary: vi.fn().mockResolvedValue({ totalRequests: 10, totalCost: 0.5 }),
   },
 }));
 

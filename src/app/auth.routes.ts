@@ -154,7 +154,7 @@ router.post('/reset-password', authRateLimiter, async (req: Request, res: Respon
 router.post('/logout', async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       res.status(401).json({ error: 'No token provided' });
       return;
     }
@@ -183,7 +183,7 @@ router.post('/logout', async (req: Request, res: Response) => {
 router.get('/me', async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       res.status(401).json({ error: 'No token provided' });
       return;
     }
@@ -217,7 +217,7 @@ router.get('/me', async (req: Request, res: Response) => {
       }
     });
 
-    if (!member || !member.isActive) {
+    if (!member?.isActive) {
       res.status(401).json({ error: 'User not found or disabled' });
       return;
     }

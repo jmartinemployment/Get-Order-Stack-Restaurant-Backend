@@ -24,7 +24,7 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
   try {
     const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
@@ -58,7 +58,7 @@ export const optionalAuth = async (req: Request, res: Response, next: NextFuncti
   try {
     const authHeader = req.headers.authorization;
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
+    if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       const payload = authService.verifyToken(token);
 
@@ -234,7 +234,7 @@ export const requireDeviceAuth = async (req: Request, res: Response, next: NextF
       include: { restaurant: true }
     });
 
-    if (!device || device.status !== 'active') {
+    if (device?.status !== 'active') {
       res.status(401).json({ error: 'Invalid or inactive device' });
       return;
     }
@@ -254,7 +254,7 @@ export const requireAuthOrDevice = async (req: Request, res: Response, next: Nex
   const deviceId = req.headers['x-device-id'] as string;
 
   // Try user auth first
-  if (authHeader && authHeader.startsWith('Bearer ')) {
+  if (authHeader?.startsWith('Bearer ')) {
     return requireAuth(req, res, next);
   }
 

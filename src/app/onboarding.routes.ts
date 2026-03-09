@@ -288,6 +288,60 @@ interface BusinessHoursDay {
 
 const DAYS_OF_WEEK = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
+function findNextOpenSlot(
+  hours: BusinessHoursDay[],
+  currentDayIndex: number,
+  currentDay: string,
+  currentTime: string,
+  todayHours: BusinessHoursDay | undefined,
+): { nextOpenDay: string | null; nextOpenTime: string | null } {
+  if (todayHours && !todayHours.closed && currentTime < todayHours.open) {
+    return { nextOpenDay: currentDay, nextOpenTime: todayHours.open };
+  }
+
+  for (let offset = 1; offset <= 7; offset++) {
+    const checkDayIndex = (currentDayIndex + offset) % 7;
+    const checkDay = DAYS_OF_WEEK[checkDayIndex];
+    const dayHours = hours.find(h => h.day === checkDay);
+
+    if (dayHours && !dayHours.closed) {
+      return { nextOpenDay: checkDay, nextOpenTime: dayHours.open };
+    }
+  }
+
+  return { nextOpenDay: null, nextOpenTime: null };
+}
+
+function computeBusinessHoursStatus(
+  hours: BusinessHoursDay[] | null,
+): Record<string, unknown> {
+  const now = new Date();
+  const currentDayIndex = now.getDay();
+  const currentDay = DAYS_OF_WEEK[currentDayIndex];
+  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  if (!hours || !Array.isArray(hours) || hours.length === 0) {
+    return { isOpen: true, currentDay, openTime: null, closeTime: null, nextOpenDay: null, nextOpenTime: null, specialHoursReason: null };
+  }
+
+  const todayHours = hours.find(h => h.day === currentDay);
+  let isOpen = false;
+  let openTime: string | null = null;
+  let closeTime: string | null = null;
+
+  if (todayHours && !todayHours.closed) {
+    openTime = todayHours.open;
+    closeTime = todayHours.close;
+    isOpen = currentTime >= todayHours.open && currentTime < todayHours.close;
+  }
+
+  const { nextOpenDay, nextOpenTime } = isOpen
+    ? { nextOpenDay: null, nextOpenTime: null }
+    : findNextOpenSlot(hours, currentDayIndex, currentDay, currentTime, todayHours);
+
+  return { isOpen, currentDay, openTime, closeTime, nextOpenDay, nextOpenTime, specialHoursReason: null };
+}
+
 router.get('/:merchantId/business-hours/check', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
@@ -302,71 +356,7 @@ router.get('/:merchantId/business-hours/check', async (req: Request, res: Respon
       return;
     }
 
-    const hours = restaurant.businessHours as unknown as BusinessHoursDay[] | null;
-    const now = new Date();
-    const currentDayIndex = now.getDay(); // 0 = Sunday
-    const currentDay = DAYS_OF_WEEK[currentDayIndex];
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    // No business hours configured — assume open
-    if (!hours || !Array.isArray(hours) || hours.length === 0) {
-      res.json({
-        isOpen: true,
-        currentDay,
-        openTime: null,
-        closeTime: null,
-        nextOpenDay: null,
-        nextOpenTime: null,
-        specialHoursReason: null,
-      });
-      return;
-    }
-
-    const todayHours = hours.find(h => h.day === currentDay);
-    let isOpen = false;
-    let openTime: string | null = null;
-    let closeTime: string | null = null;
-
-    if (todayHours && !todayHours.closed) {
-      openTime = todayHours.open;
-      closeTime = todayHours.close;
-      isOpen = currentTime >= todayHours.open && currentTime < todayHours.close;
-    }
-
-    // Find next open day/time if currently closed
-    let nextOpenDay: string | null = null;
-    let nextOpenTime: string | null = null;
-
-    if (!isOpen) {
-      // Check remaining time today first (if today has hours and we're before open)
-      if (todayHours && !todayHours.closed && currentTime < todayHours.open) {
-        nextOpenDay = currentDay;
-        nextOpenTime = todayHours.open;
-      } else {
-        // Check subsequent days (up to 7 to loop back around)
-        for (let offset = 1; offset <= 7; offset++) {
-          const checkDayIndex = (currentDayIndex + offset) % 7;
-          const checkDay = DAYS_OF_WEEK[checkDayIndex];
-          const dayHours = hours.find(h => h.day === checkDay);
-
-          if (dayHours && !dayHours.closed) {
-            nextOpenDay = checkDay;
-            nextOpenTime = dayHours.open;
-            break;
-          }
-        }
-      }
-    }
-
-    res.json({
-      isOpen,
-      currentDay,
-      openTime,
-      closeTime,
-      nextOpenDay,
-      nextOpenTime,
-      specialHoursReason: null,
-    });
+    res.json(computeBusinessHoursStatus(restaurant.businessHours as unknown as BusinessHoursDay[] | null));
   } catch (error) {
     console.error('Failed to check business hours:', error);
     res.status(500).json({ error: 'Failed to check business hours' });
@@ -375,6 +365,212 @@ router.get('/:merchantId/business-hours/check', async (req: Request, res: Respon
 
 // ============ Onboarding Create ============
 
+type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+async function seedDefaultPermissionSets(
+  tx: TxClient,
+  restaurantId: string,
+): Promise<{ id: string; name: string }[]> {
+  const createdPermSets: { id: string; name: string }[] = [];
+  for (const def of DEFAULT_PERMISSION_SETS) {
+    const ps = await tx.permissionSet.create({
+      data: {
+        restaurantId,
+        name: def.name,
+        permissions: def.permissions,
+        isDefault: true,
+      },
+    });
+    createdPermSets.push({ id: ps.id, name: ps.name });
+  }
+  return createdPermSets;
+}
+
+async function applyMenuTemplate(
+  tx: TxClient,
+  restaurantId: string,
+  menuTemplateId: string,
+): Promise<void> {
+  const template: MenuTemplate | undefined = MENU_TEMPLATES.find(t => t.id === menuTemplateId);
+  if (!template) return;
+
+  const createdItemsByName = new Map<string, string>();
+
+  for (const cat of template.categories) {
+    const category = await tx.menuCategory.create({
+      data: {
+        restaurantId,
+        name: cat.name,
+        displayOrder: cat.sortOrder,
+        active: true,
+      },
+    });
+
+    for (const item of cat.items) {
+      const createdItem = await tx.menuItem.create({
+        data: {
+          restaurantId,
+          categoryId: category.id,
+          name: item.name,
+          description: item.description ?? '',
+          price: item.price,
+          displayOrder: item.sortOrder,
+          prepTimeMinutes: item.prepTimeMinutes,
+          available: true,
+        },
+      });
+      createdItemsByName.set(item.name, createdItem.id);
+    }
+  }
+
+  for (const mg of template.modifierGroups) {
+    const modifierGroup = await tx.modifierGroup.create({
+      data: {
+        restaurantId,
+        name: mg.name,
+        required: mg.required,
+        multiSelect: mg.multiSelect,
+        minSelections: mg.minSelections,
+        maxSelections: mg.maxSelections,
+        displayOrder: mg.sortOrder,
+        active: true,
+      },
+    });
+
+    for (const mod of mg.modifiers) {
+      await tx.modifier.create({
+        data: {
+          modifierGroupId: modifierGroup.id,
+          name: mod.name,
+          priceAdjustment: mod.priceAdjustment,
+          isDefault: mod.isDefault,
+          displayOrder: mod.sortOrder,
+          available: true,
+        },
+      });
+    }
+
+    const targetItemNames = mg.applyTo === 'all'
+      ? [...createdItemsByName.keys()]
+      : mg.applyTo;
+
+    let linkOrder = 1;
+    for (const itemName of targetItemNames) {
+      const itemId = createdItemsByName.get(itemName);
+      if (itemId) {
+        await tx.menuItemModifierGroup.create({
+          data: {
+            menuItemId: itemId,
+            modifierGroupId: modifierGroup.id,
+            displayOrder: linkOrder++,
+          },
+        });
+      }
+    }
+  }
+}
+
+async function createOwnerPin(
+  tx: TxClient,
+  restaurantId: string,
+  teamMemberId: string,
+  ownerPin: { pin: string; displayName?: string },
+  fullAccessSetId: string | null,
+): Promise<void> {
+  await tx.teamMember.update({
+    where: { id: teamMemberId },
+    data: { permissionSetId: fullAccessSetId },
+  });
+
+  await tx.teamMemberJob.create({
+    data: {
+      teamMemberId,
+      jobTitle: 'Owner',
+      hourlyRate: 0,
+      isTipEligible: false,
+      isPrimary: true,
+      overtimeEligible: false,
+    },
+  });
+
+  await tx.staffPin.create({
+    data: {
+      restaurantId,
+      teamMemberId,
+      pin: ownerPin.pin,
+      name: ownerPin.displayName ?? 'Owner',
+      role: 'team_member',
+    },
+  });
+}
+
+// --- Helpers for POST /create ---
+
+function buildMerchantProfile(body: Record<string, unknown>): Record<string, unknown> {
+  const { businessName, address, verticals, primaryVertical, complexity, defaultDeviceMode, taxLocale, businessHours, businessCategory } = body;
+  return {
+    id: crypto.randomUUID(),
+    businessName,
+    address: address ?? null,
+    verticals: verticals ?? ['food_and_drink'],
+    primaryVertical: primaryVertical ?? 'food_and_drink',
+    complexity: complexity ?? 'full',
+    enabledModules: VERTICAL_MODULES[(primaryVertical as string) ?? 'food_and_drink'] ?? [],
+    defaultDeviceMode: defaultDeviceMode ?? 'full_service',
+    taxLocale: taxLocale ?? { taxRate: 0, taxInclusive: false, currency: 'USD', defaultLanguage: 'en' },
+    businessHours: businessHours ?? [],
+    businessCategory: businessCategory ?? null,
+    onboardingComplete: true,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+async function createOrReuseTeamMember(
+  tx: TxClient,
+  restaurantId: string,
+  existingMember: { id: string } | null,
+  ownerEmail: string,
+  ownerPassword: string,
+  ownerPin: { displayName?: string } | undefined,
+): Promise<string> {
+  if (existingMember) {
+    await tx.teamMember.update({
+      where: { id: existingMember.id },
+      data: { restaurantId },
+    });
+    return existingMember.id;
+  }
+
+  const hashedPassword = await authService.hashPassword(ownerPassword);
+  const ownerDisplayName = ownerPin?.displayName ?? 'Owner';
+  const member = await tx.teamMember.create({
+    data: {
+      email: ownerEmail,
+      passwordHash: hashedPassword,
+      firstName: ownerPin?.displayName?.split(' ')[0] ?? 'Owner',
+      lastName: ownerPin?.displayName?.split(' ').slice(1).join(' ') ?? '',
+      displayName: ownerDisplayName,
+      role: 'owner',
+      isActive: true,
+      restaurantId,
+    },
+  });
+  return member.id;
+}
+
+function buildOnboardingResponse(
+  restaurant: { id: string; name: string; slug: string },
+  deviceId: string,
+  token: string | null,
+): Record<string, unknown> {
+  return {
+    restaurantId: restaurant.id,
+    deviceId,
+    token,
+    restaurant: { id: restaurant.id, name: restaurant.name, slug: restaurant.slug },
+  };
+}
+
 // POST /api/onboarding/create
 // Supports two flows:
 // 1. Authenticated (JWT present from /signup) — uses existing TeamMember, creates restaurant + links
@@ -382,20 +578,8 @@ router.get('/:merchantId/business-hours/check', async (req: Request, res: Respon
 router.post('/create', optionalAuth, async (req: Request, res: Response) => {
   try {
     const {
-      businessName,
-      address,
-      verticals,
-      primaryVertical,
-      complexity,
-      defaultDeviceMode,
-      taxLocale,
-      businessHours,
-      paymentProcessor,
-      menuTemplateId,
-      businessCategory,
-      ownerPin,
-      ownerEmail,
-      ownerPassword,
+      businessName, address, defaultDeviceMode, taxLocale, businessHours,
+      menuTemplateId, ownerPin, ownerEmail, ownerPassword,
     } = req.body;
 
     if (!businessName) {
@@ -403,7 +587,6 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    // Determine user source: authenticated JWT or inline creation
     const isAuthenticated = !!req.user;
 
     if (!isAuthenticated && (!ownerEmail || !ownerPassword)) {
@@ -411,7 +594,6 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate required Restaurant fields — address info must be provided
     const street = address?.street?.trim() ?? '';
     const addrCity = address?.city?.trim() ?? '';
     const addrState = address?.state?.trim() ?? '';
@@ -422,7 +604,6 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    // Look up authenticated team member if present
     let existingMember: { id: string; email: string | null; firstName: string | null; lastName: string | null } | null = null;
     if (isAuthenticated) {
       existingMember = await prisma.teamMember.findUnique({
@@ -441,269 +622,63 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
       .replaceAll(/^-|-$/g, '');
 
     const result = await prisma.$transaction(async (tx) => {
-      // Create restaurant — include owner email for account lookup and notifications
       const ownerEmailForRestaurant = existingMember?.email ?? ownerEmail ?? '';
       if (!ownerEmailForRestaurant) {
         throw new Error('Owner email is required to create a restaurant');
       }
+
       const restaurant = await tx.restaurant.create({
         data: {
           name: businessName,
-          slug: slug + '-' + Date.now().toString(36),
+          slug: `${slug}-${Date.now().toString(36)}`,
           email: ownerEmailForRestaurant,
-          address: street,
-          city: addrCity,
-          state: addrState,
-          zip: addrZip,
+          address: street, city: addrCity, state: addrState, zip: addrZip,
           phone: address?.phone ?? '',
           taxRate: (taxLocale?.taxRate ?? 0) / 100,
-          merchantProfile: {
-            id: crypto.randomUUID(),
-            businessName,
-            address: address ?? null,
-            verticals: verticals ?? ['food_and_drink'],
-            primaryVertical: primaryVertical ?? 'food_and_drink',
-            complexity: complexity ?? 'full',
-            enabledModules: VERTICAL_MODULES[primaryVertical ?? 'food_and_drink'] ?? [],
-            defaultDeviceMode: defaultDeviceMode ?? 'full_service',
-            taxLocale: taxLocale ?? { taxRate: 0, taxInclusive: false, currency: 'USD', defaultLanguage: 'en' },
-            businessHours: businessHours ?? [],
-            businessCategory: businessCategory ?? null,
-            onboardingComplete: true,
-            createdAt: new Date().toISOString(),
-          },
+          merchantProfile: buildMerchantProfile(req.body) as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- Prisma Json field
           businessHours: businessHours ?? null,
           active: true,
         },
       });
 
-      // Create or reuse team member
-      let teamMemberId: string;
-      if (existingMember) {
-        // Authenticated flow — update existing TeamMember's restaurantId
-        teamMemberId = existingMember.id;
-        await tx.teamMember.update({
-          where: { id: existingMember.id },
-          data: { restaurantId: restaurant.id },
-        });
-      } else {
-        // Legacy flow — create TeamMember with passwordHash inline
-        const hashedPassword = await authService.hashPassword(ownerPassword);
-        const ownerDisplayName = ownerPin?.displayName ?? 'Owner';
-        const member = await tx.teamMember.create({
-          data: {
-            email: ownerEmail,
-            passwordHash: hashedPassword,
-            firstName: ownerPin?.displayName?.split(' ')[0] ?? 'Owner',
-            lastName: ownerPin?.displayName?.split(' ').slice(1).join(' ') ?? '',
-            displayName: ownerDisplayName,
-            role: 'owner',
-            isActive: true,
-            restaurantId: restaurant.id,
-          },
-        });
-        teamMemberId = member.id;
-      }
+      const teamMemberId = await createOrReuseTeamMember(
+        tx, restaurant.id, existingMember, ownerEmail, ownerPassword, ownerPin,
+      );
 
-      // Create user-restaurant access
       await tx.userRestaurantAccess.create({
-        data: {
-          teamMemberId,
-          restaurantId: restaurant.id,
-          role: 'owner',
-        },
+        data: { teamMemberId, restaurantId: restaurant.id, role: 'owner' },
       });
 
-      // Seed default permission sets
-      const createdPermSets: { id: string; name: string }[] = [];
-      for (const def of DEFAULT_PERMISSION_SETS) {
-        const ps = await tx.permissionSet.create({
-          data: {
-            restaurantId: restaurant.id,
-            name: def.name,
-            permissions: def.permissions,
-            isDefault: true,
-          },
-        });
-        createdPermSets.push({ id: ps.id, name: ps.name });
-      }
+      const createdPermSets = await seedDefaultPermissionSets(tx, restaurant.id);
       const fullAccessSetId = createdPermSets.find(s => s.name === 'Full Access')?.id ?? null;
 
-      // Create owner PIN + link to the TeamMember with Full Access permission set
       if (ownerPin?.pin) {
-        // Update the TeamMember with the Full Access permission set
-        await tx.teamMember.update({
-          where: { id: teamMemberId },
-          data: {
-            permissionSetId: fullAccessSetId,
-          },
-        });
-
-        // Create a job for the owner
-        await tx.teamMemberJob.create({
-          data: {
-            teamMemberId,
-            jobTitle: 'Owner',
-            hourlyRate: 0,
-            isTipEligible: false,
-            isPrimary: true,
-            overtimeEligible: false,
-          },
-        });
-
-        await tx.staffPin.create({
-          data: {
-            restaurantId: restaurant.id,
-            teamMemberId,
-            pin: ownerPin.pin,
-            name: ownerPin.displayName ?? 'Owner',
-            role: 'team_member',
-          },
-        });
+        await createOwnerPin(tx, restaurant.id, teamMemberId, ownerPin, fullAccessSetId);
       }
 
-      // Create browser device for the onboarding user
       const device = await tx.device.create({
         data: {
-          restaurantId: restaurant.id,
-          deviceName: 'Browser',
-          deviceType: 'terminal',
-          posMode: defaultDeviceMode ?? 'full_service',
-          status: 'active',
-          pairedAt: new Date(),
-          hardwareInfo: { platform: 'Browser' },
+          restaurantId: restaurant.id, deviceName: 'Browser', deviceType: 'terminal',
+          posMode: defaultDeviceMode ?? 'full_service', status: 'active',
+          pairedAt: new Date(), hardwareInfo: { platform: 'Browser' },
         },
       });
 
-      // Apply menu template if selected
       if (menuTemplateId) {
-        const template: MenuTemplate | undefined = MENU_TEMPLATES.find(t => t.id === menuTemplateId);
-        if (template) {
-          // Track created items by name for modifier group assignment
-          const createdItemsByName = new Map<string, string>();
-
-          for (const cat of template.categories) {
-            const category = await tx.menuCategory.create({
-              data: {
-                restaurantId: restaurant.id,
-                name: cat.name,
-                displayOrder: cat.sortOrder,
-                active: true,
-              },
-            });
-
-            for (const item of cat.items) {
-              const createdItem = await tx.menuItem.create({
-                data: {
-                  restaurantId: restaurant.id,
-                  categoryId: category.id,
-                  name: item.name,
-                  description: item.description ?? '',
-                  price: item.price,
-                  displayOrder: item.sortOrder,
-                  prepTimeMinutes: item.prepTimeMinutes,
-                  available: true,
-                },
-              });
-              createdItemsByName.set(item.name, createdItem.id);
-            }
-          }
-
-          // Create modifier groups and link to items
-          for (const mg of template.modifierGroups) {
-            const modifierGroup = await tx.modifierGroup.create({
-              data: {
-                restaurantId: restaurant.id,
-                name: mg.name,
-                required: mg.required,
-                multiSelect: mg.multiSelect,
-                minSelections: mg.minSelections,
-                maxSelections: mg.maxSelections,
-                displayOrder: mg.sortOrder,
-                active: true,
-              },
-            });
-
-            for (const mod of mg.modifiers) {
-              await tx.modifier.create({
-                data: {
-                  modifierGroupId: modifierGroup.id,
-                  name: mod.name,
-                  priceAdjustment: mod.priceAdjustment,
-                  isDefault: mod.isDefault,
-                  displayOrder: mod.sortOrder,
-                  available: true,
-                },
-              });
-            }
-
-            // Link modifier group to applicable menu items
-            const targetItemNames = mg.applyTo === 'all'
-              ? [...createdItemsByName.keys()]
-              : mg.applyTo;
-
-            let linkOrder = 1;
-            for (const itemName of targetItemNames) {
-              const itemId = createdItemsByName.get(itemName);
-              if (itemId) {
-                await tx.menuItemModifierGroup.create({
-                  data: {
-                    menuItemId: itemId,
-                    modifierGroupId: modifierGroup.id,
-                    displayOrder: linkOrder++,
-                  },
-                });
-              }
-            }
-          }
-        }
+        await applyMenuTemplate(tx, restaurant.id, menuTemplateId);
       }
 
       return { restaurant, teamMemberId, device };
     });
 
-    // For authenticated flow, return existing token info (no re-login needed)
     if (isAuthenticated) {
-      res.status(201).json({
-        restaurantId: result.restaurant.id,
-        deviceId: result.device.id,
-        token: null, // Frontend already has a valid token
-        restaurant: {
-          id: result.restaurant.id,
-          name: result.restaurant.name,
-          slug: result.restaurant.slug,
-        },
-      });
+      res.status(201).json(buildOnboardingResponse(result.restaurant, result.device.id, null));
       return;
     }
 
-    // Legacy flow: create session + JWT
     const loginResult = await authService.loginUser(ownerEmail, ownerPassword, 'Onboarding Wizard');
-
-    if (!loginResult.success) {
-      res.status(201).json({
-        restaurantId: result.restaurant.id,
-        deviceId: result.device.id,
-        token: null,
-        restaurant: {
-          id: result.restaurant.id,
-          name: result.restaurant.name,
-          slug: result.restaurant.slug,
-        },
-      });
-      return;
-    }
-
-    res.status(201).json({
-      restaurantId: result.restaurant.id,
-      deviceId: result.device.id,
-      token: loginResult.token,
-      restaurant: {
-        id: result.restaurant.id,
-        name: result.restaurant.name,
-        slug: result.restaurant.slug,
-      },
-    });
+    const token = loginResult.success ? loginResult.token : null;
+    res.status(201).json(buildOnboardingResponse(result.restaurant, result.device.id, token));
   } catch (error) {
     console.error('Onboarding create error:', error);
     if (error instanceof Error && error.message.includes('Unique constraint')) {

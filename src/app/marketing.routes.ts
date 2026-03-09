@@ -46,7 +46,7 @@ function buildSegmentCondition(segment: string): string | undefined {
     at_risk: { minOrders: 3, daysSinceOrder: 30 },
     dormant: { daysSinceOrder: 90 },
   };
-  return thresholds[segment] !== undefined ? segment : undefined;
+  return thresholds[segment] === undefined ? undefined : segment;
 }
 
 // --- Routes ---

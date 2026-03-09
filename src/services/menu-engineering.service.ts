@@ -66,6 +66,68 @@ export interface UpsellRecommendation {
   suggestedScript: string;
 }
 
+function upsellPriority(margin: number): 'high' | 'medium' | 'low' {
+  if (margin >= 60) return 'high';
+  if (margin >= 45) return 'medium';
+  return 'low';
+}
+
+interface QuadrantResult {
+  stars: MenuItemAnalysis[];
+  cashCows: MenuItemAnalysis[];
+  puzzles: MenuItemAnalysis[];
+  dogs: MenuItemAnalysis[];
+}
+
+/**
+ * Assign sales and profit ranks to each item in place.
+ */
+function assignRanks(items: MenuItemAnalysis[]): void {
+  const bySales = [...items].sort((a, b) => b.totalSold - a.totalSold);
+  const byProfit = [...items].sort((a, b) => b.profitMargin - a.profitMargin);
+
+  for (let i = 0; i < bySales.length; i++) {
+    const original = items.find(it => it.id === bySales[i].id);
+    if (original) original.salesRank = i + 1;
+  }
+  for (let i = 0; i < byProfit.length; i++) {
+    const original = items.find(it => it.id === byProfit[i].id);
+    if (original) original.profitRank = i + 1;
+  }
+}
+
+/**
+ * Classify items into four quadrants based on median sales and profit margin.
+ */
+function classifyQuadrants(items: MenuItemAnalysis[], medianSales: number, medianProfitMargin: number): QuadrantResult {
+  const quadrants: QuadrantResult = { stars: [], cashCows: [], puzzles: [], dogs: [] };
+
+  for (const item of items) {
+    const highSales = item.totalSold >= medianSales;
+    const highProfit = item.profitMargin >= medianProfitMargin;
+
+    if (highSales && highProfit) {
+      item.quadrant = 'star';
+      item.recommendation = 'Promote heavily. This is a winner - high profit and popular.';
+      quadrants.stars.push(item);
+    } else if (!highSales && highProfit) {
+      item.quadrant = 'cashCow';
+      item.recommendation = 'Train staff to upsell. High profit but underordered.';
+      quadrants.cashCows.push(item);
+    } else if (highSales && !highProfit) {
+      item.quadrant = 'puzzle';
+      item.recommendation = 'Raise price or reduce portion/ingredient cost. Popular but not profitable.';
+      quadrants.puzzles.push(item);
+    } else {
+      item.quadrant = 'dog';
+      item.recommendation = 'Consider removing or repositioning. Low sales and low profit.';
+      quadrants.dogs.push(item);
+    }
+  }
+
+  return quadrants;
+}
+
 export class MenuEngineeringService {
 
   /**
@@ -159,55 +221,11 @@ export class MenuEngineeringService {
         });
       }
 
-      // Calculate median values for quadrant classification
-      const sortedBySales = [...itemAnalyses].sort((a, b) => b.totalSold - a.totalSold);
-      const sortedByProfit = [...itemAnalyses].sort((a, b) => b.profitMargin - a.profitMargin);
-
-      // Assign ranks
-      sortedBySales.forEach((item, index) => {
-        const original = itemAnalyses.find(i => i.id === item.id);
-        if (original) original.salesRank = index + 1;
-      });
-
-      sortedByProfit.forEach((item, index) => {
-        const original = itemAnalyses.find(i => i.id === item.id);
-        if (original) original.profitRank = index + 1;
-      });
-
-      // Calculate medians
+      // Assign ranks and classify into quadrants
+      assignRanks(itemAnalyses);
       const medianSales = this.calculateMedian(itemAnalyses.map(i => i.totalSold));
       const medianProfitMargin = this.calculateMedian(itemAnalyses.map(i => i.profitMargin));
-
-      // Classify into quadrants
-      const quadrants = {
-        stars: [] as MenuItemAnalysis[],
-        cashCows: [] as MenuItemAnalysis[],
-        puzzles: [] as MenuItemAnalysis[],
-        dogs: [] as MenuItemAnalysis[]
-      };
-
-      for (const item of itemAnalyses) {
-        const highSales = item.totalSold >= medianSales;
-        const highProfit = item.profitMargin >= medianProfitMargin;
-
-        if (highSales && highProfit) {
-          item.quadrant = 'star';
-          item.recommendation = 'Promote heavily. This is a winner - high profit and popular.';
-          quadrants.stars.push(item);
-        } else if (!highSales && highProfit) {
-          item.quadrant = 'cashCow';
-          item.recommendation = 'Train staff to upsell. High profit but underordered.';
-          quadrants.cashCows.push(item);
-        } else if (highSales && !highProfit) {
-          item.quadrant = 'puzzle';
-          item.recommendation = 'Raise price or reduce portion/ingredient cost. Popular but not profitable.';
-          quadrants.puzzles.push(item);
-        } else {
-          item.quadrant = 'dog';
-          item.recommendation = 'Consider removing or repositioning. Low sales and low profit.';
-          quadrants.dogs.push(item);
-        }
-      }
+      const quadrants = classifyQuadrants(itemAnalyses, medianSales, medianProfitMargin);
 
       // Generate upsell recommendations (Cash Cows and Stars)
       const upsellRecommendations = this.generateUpsellRecommendations(quadrants);
@@ -233,7 +251,7 @@ export class MenuEngineeringService {
           puzzles: quadrants.puzzles.length,
           dogs: quadrants.dogs.length
         },
-        items: itemAnalyses.sort((a, b) => b.totalProfit - a.totalProfit),
+        items: [...itemAnalyses].sort((a, b) => b.totalProfit - a.totalProfit),
         quadrants,
         aiInsights,
         upsellRecommendations
@@ -282,7 +300,7 @@ export class MenuEngineeringService {
           menuItemId: item.id,
           menuItemName: item.nameEn || item.name,
           reason: `${margin.toFixed(0)}% margin ($${profitPerItem.toFixed(2)} profit)`,
-          priority: margin >= 60 ? 'high' : margin >= 45 ? 'medium' : 'low',
+          priority: upsellPriority(margin),
           suggestedScript: `"Would you like to add our ${item.nameEn || item.name}? It's one of our most popular items!"`
         });
       }
@@ -298,9 +316,9 @@ export class MenuEngineeringService {
     if (values.length === 0) return 0;
     const sorted = [...values].sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 !== 0 
-      ? sorted[mid] 
-      : (sorted[mid - 1] + sorted[mid]) / 2;
+    return sorted.length % 2 === 0
+      ? (sorted[mid - 1] + sorted[mid]) / 2
+      : sorted[mid];
   }
 
   private generateUpsellRecommendations(quadrants: MenuEngineeringReport['quadrants']): UpsellRecommendation[] {

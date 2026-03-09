@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { deliveryService } from '../services/delivery.service';
 import { deliveryCredentialsService } from '../services/delivery-credentials.service';
 import { requireAuth, requireMerchantManager } from '../middleware/auth.middleware';
+import { toErrorMessage } from '../utils/errors';
 
 const router = Router({ mergeParams: true });
 
@@ -294,7 +295,7 @@ router.get('/assignments', async (req: Request, res: Response) => {
     res.json(assignments);
   } catch (error: unknown) {
     // Service may not implement this yet — return empty array
-    console.error('[Delivery] Assignments error:', error instanceof Error ? error.message : String(error));
+    console.error('[Delivery] Assignments error:', toErrorMessage(error));
     res.json([]);
   }
 });
@@ -312,7 +313,7 @@ router.get('/drivers', async (req: Request, res: Response) => {
     res.json(drivers);
   } catch (error: unknown) {
     // Service may not implement this yet — return empty array
-    console.error('[Delivery] Drivers error:', error instanceof Error ? error.message : String(error));
+    console.error('[Delivery] Drivers error:', toErrorMessage(error));
     res.json([]);
   }
 });

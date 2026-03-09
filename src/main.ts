@@ -1,4 +1,4 @@
-import { createServer } from 'http';
+import { createServer } from 'node:http';
 import app from './app/app';
 import { config } from './app/app.config';
 import { initializeSocketServer } from './services/socket.service';

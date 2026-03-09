@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Prisma, PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
 import { sendProposal } from '../services/email.service';
+import { toErrorMessage } from '../utils/errors';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
@@ -109,6 +110,73 @@ const updateEventSchema = createEventSchema.partial().extend({
   invoiceId: z.string().nullable().optional(),
 });
 
+type UpdateEventInput = z.infer<typeof updateEventSchema>;
+
+interface ExistingEvent {
+  subtotalCents: number;
+  serviceChargePercent: unknown;
+  taxPercent: unknown;
+  gratuityPercent: unknown;
+}
+
+function mapSimpleFields(parsed: UpdateEventInput, data: Record<string, unknown>): void {
+  if (parsed.title !== undefined) data.title = parsed.title;
+  if (parsed.eventType !== undefined) data.eventType = parsed.eventType;
+  if (parsed.status !== undefined) data.status = parsed.status;
+  if (parsed.fulfillmentDate !== undefined) data.fulfillmentDate = new Date(parsed.fulfillmentDate);
+  if (parsed.bookingDate !== undefined) data.bookingDate = new Date(parsed.bookingDate);
+  if (parsed.startTime !== undefined) data.startTime = parsed.startTime;
+  if (parsed.endTime !== undefined) data.endTime = parsed.endTime;
+  if (parsed.headcount !== undefined) data.headcount = parsed.headcount;
+  if (parsed.locationType !== undefined) data.locationType = parsed.locationType;
+  if (parsed.locationAddress !== undefined) data.locationAddress = parsed.locationAddress ?? null;
+  if (parsed.clientName !== undefined) data.clientName = parsed.clientName;
+  if (parsed.clientPhone !== undefined) data.clientPhone = parsed.clientPhone ?? null;
+  if (parsed.clientEmail !== undefined) data.clientEmail = parsed.clientEmail ?? null;
+  if (parsed.companyName !== undefined) data.companyName = parsed.companyName ?? null;
+  if (parsed.notes !== undefined) data.notes = parsed.notes ?? null;
+}
+
+function mapFinancialFields(parsed: UpdateEventInput, existing: ExistingEvent, data: Record<string, unknown>): void {
+  if (parsed.subtotalCents !== undefined) data.subtotalCents = parsed.subtotalCents;
+  if (parsed.serviceChargePercent !== undefined) data.serviceChargePercent = parsed.serviceChargePercent ?? null;
+  if (parsed.taxPercent !== undefined) data.taxPercent = parsed.taxPercent ?? null;
+  if (parsed.gratuityPercent !== undefined) data.gratuityPercent = parsed.gratuityPercent ?? null;
+  if (parsed.paidCents !== undefined) data.paidCents = parsed.paidCents;
+
+  if (parsed.subtotalCents !== undefined || parsed.serviceChargePercent !== undefined ||
+      parsed.taxPercent !== undefined || parsed.gratuityPercent !== undefined) {
+    const fees = calculateFees({
+      subtotalCents: parsed.subtotalCents ?? Number(existing.subtotalCents),
+      serviceChargePercent: parsed.serviceChargePercent ?? (existing.serviceChargePercent == null ? null : Number(existing.serviceChargePercent)),
+      taxPercent: parsed.taxPercent ?? (existing.taxPercent == null ? null : Number(existing.taxPercent)),
+      gratuityPercent: parsed.gratuityPercent ?? (existing.gratuityPercent == null ? null : Number(existing.gratuityPercent)),
+    });
+    data.serviceChargeCents = fees.serviceChargeCents;
+    data.taxCents = fees.taxCents;
+    data.gratuityCents = fees.gratuityCents;
+    data.totalCents = parsed.totalCents ?? fees.totalCents;
+  } else if (parsed.totalCents !== undefined) {
+    data.totalCents = parsed.totalCents;
+  }
+}
+
+function mapJsonFields(parsed: UpdateEventInput, data: Record<string, unknown>): void {
+  if (parsed.packages !== undefined) data.packages = parsed.packages;
+  if (parsed.selectedPackageId !== undefined) data.selectedPackageId = parsed.selectedPackageId ?? null;
+  if (parsed.milestones !== undefined) data.milestones = parsed.milestones;
+  if (parsed.dietaryRequirements !== undefined) data.dietaryRequirements = parsed.dietaryRequirements ?? null;
+  if (parsed.tastings !== undefined) data.tastings = parsed.tastings ?? null;
+  if (parsed.deliveryDetails !== undefined) data.deliveryDetails = parsed.deliveryDetails ?? null;
+  if (parsed.contractUrl !== undefined) data.contractUrl = parsed.contractUrl ?? null;
+  if (parsed.contractSignedAt !== undefined) data.contractSignedAt = parsed.contractSignedAt ? new Date(parsed.contractSignedAt) : null;
+  if (parsed.estimateId !== undefined) data.estimateId = parsed.estimateId ?? null;
+  if (parsed.invoiceId !== undefined) data.invoiceId = parsed.invoiceId ?? null;
+  if (parsed.brandingLogoUrl !== undefined) data.brandingLogoUrl = parsed.brandingLogoUrl ?? null;
+  if (parsed.brandingColor !== undefined) data.brandingColor = parsed.brandingColor ?? null;
+  if (parsed.invoiceNotes !== undefined) data.invoiceNotes = parsed.invoiceNotes ?? null;
+}
+
 const capacitySchema = z.object({
   maxEventsPerDay: z.number().int().min(1),
   maxHeadcountPerDay: z.number().int().min(1),
@@ -150,6 +218,50 @@ async function logActivity(
   });
 }
 
+// --- Helper: build create-event data from parsed input ---
+function buildCreateEventData(
+  merchantId: string,
+  parsed: z.infer<typeof createEventSchema>,
+  fees: { serviceChargeCents: number; taxCents: number; gratuityCents: number; totalCents: number },
+): Record<string, unknown> {
+  return {
+    restaurantId: merchantId,
+    title: parsed.title,
+    eventType: parsed.eventType,
+    status: parsed.status ?? 'inquiry',
+    fulfillmentDate: new Date(parsed.fulfillmentDate),
+    bookingDate: parsed.bookingDate ? new Date(parsed.bookingDate) : new Date(),
+    startTime: parsed.startTime,
+    endTime: parsed.endTime,
+    headcount: parsed.headcount,
+    locationType: parsed.locationType ?? 'on_site',
+    locationAddress: parsed.locationAddress ?? null,
+    clientName: parsed.clientName,
+    clientPhone: parsed.clientPhone ?? null,
+    clientEmail: parsed.clientEmail ?? null,
+    companyName: parsed.companyName ?? null,
+    notes: parsed.notes ?? null,
+    subtotalCents: parsed.subtotalCents ?? 0,
+    serviceChargePercent: parsed.serviceChargePercent ?? null,
+    serviceChargeCents: fees.serviceChargeCents,
+    taxPercent: parsed.taxPercent ?? null,
+    taxCents: fees.taxCents,
+    gratuityPercent: parsed.gratuityPercent ?? null,
+    gratuityCents: fees.gratuityCents,
+    totalCents: parsed.totalCents ?? fees.totalCents,
+    paidCents: parsed.paidCents ?? 0,
+    packages: parsed.packages ?? [],
+    selectedPackageId: parsed.selectedPackageId ?? null,
+    milestones: parsed.milestones ?? [],
+    dietaryRequirements: parsed.dietaryRequirements ?? null,
+    tastings: parsed.tastings ?? null,
+    deliveryDetails: parsed.deliveryDetails ?? null,
+    brandingLogoUrl: parsed.brandingLogoUrl ?? null,
+    brandingColor: parsed.brandingColor ?? null,
+    invoiceNotes: parsed.invoiceNotes ?? null,
+  };
+}
+
 // --- Event CRUD Routes ---
 
 // GET /api/merchant/:merchantId/catering/events
@@ -162,7 +274,7 @@ router.get('/:merchantId/catering/events', async (req: Request, res: Response) =
     });
     res.json(events);
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = toErrorMessage(error);
     console.error('[catering] GET events error:', msg);
     res.status(500).json({ error: 'Failed to fetch catering events', detail: msg });
   }
@@ -177,42 +289,7 @@ router.post('/:merchantId/catering/events', async (req: Request, res: Response) 
     const fees = calculateFees(parsed);
 
     const event = await prisma.cateringEvent.create({
-      data: {
-        restaurantId: merchantId,
-        title: parsed.title,
-        eventType: parsed.eventType,
-        status: parsed.status ?? 'inquiry',
-        fulfillmentDate: new Date(parsed.fulfillmentDate),
-        bookingDate: parsed.bookingDate ? new Date(parsed.bookingDate) : new Date(),
-        startTime: parsed.startTime,
-        endTime: parsed.endTime,
-        headcount: parsed.headcount,
-        locationType: parsed.locationType ?? 'on_site',
-        locationAddress: parsed.locationAddress ?? null,
-        clientName: parsed.clientName,
-        clientPhone: parsed.clientPhone ?? null,
-        clientEmail: parsed.clientEmail ?? null,
-        companyName: parsed.companyName ?? null,
-        notes: parsed.notes ?? null,
-        subtotalCents: parsed.subtotalCents ?? 0,
-        serviceChargePercent: parsed.serviceChargePercent ?? null,
-        serviceChargeCents: fees.serviceChargeCents,
-        taxPercent: parsed.taxPercent ?? null,
-        taxCents: fees.taxCents,
-        gratuityPercent: parsed.gratuityPercent ?? null,
-        gratuityCents: fees.gratuityCents,
-        totalCents: parsed.totalCents ?? fees.totalCents,
-        paidCents: parsed.paidCents ?? 0,
-        packages: parsed.packages ?? [],
-        selectedPackageId: parsed.selectedPackageId ?? null,
-        milestones: parsed.milestones ?? [],
-        dietaryRequirements: parsed.dietaryRequirements ?? null,
-        tastings: parsed.tastings ?? null,
-        deliveryDetails: parsed.deliveryDetails ?? null,
-        brandingLogoUrl: parsed.brandingLogoUrl ?? null,
-        brandingColor: parsed.brandingColor ?? null,
-        invoiceNotes: parsed.invoiceNotes ?? null,
-      },
+      data: buildCreateEventData(merchantId, parsed, fees) as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- fields mapped dynamically
     });
 
     await logActivity(event.id, 'created', `Job "${event.title}" created`, 'operator');
@@ -223,6 +300,7 @@ router.post('/:merchantId/catering/events', async (req: Request, res: Response) 
       res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
+    console.error('[catering] POST event error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to create catering event' });
   }
 });
@@ -240,6 +318,7 @@ router.get('/:merchantId/catering/events/:id', async (req: Request, res: Respons
     }
     res.json(event);
   } catch (error: unknown) {
+    console.error('[catering] GET event error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to fetch catering event' });
   }
 });
@@ -260,65 +339,9 @@ router.patch('/:merchantId/catering/events/:id', async (req: Request, res: Respo
 
     const data: Record<string, unknown> = { updatedAt: new Date() };
 
-    // Map simple fields
-    if (parsed.title !== undefined) data.title = parsed.title;
-    if (parsed.eventType !== undefined) data.eventType = parsed.eventType;
-    if (parsed.status !== undefined) data.status = parsed.status;
-    if (parsed.fulfillmentDate !== undefined) data.fulfillmentDate = new Date(parsed.fulfillmentDate);
-    if (parsed.bookingDate !== undefined) data.bookingDate = new Date(parsed.bookingDate);
-    if (parsed.startTime !== undefined) data.startTime = parsed.startTime;
-    if (parsed.endTime !== undefined) data.endTime = parsed.endTime;
-    if (parsed.headcount !== undefined) data.headcount = parsed.headcount;
-    if (parsed.locationType !== undefined) data.locationType = parsed.locationType;
-    if (parsed.locationAddress !== undefined) data.locationAddress = parsed.locationAddress ?? null;
-    if (parsed.clientName !== undefined) data.clientName = parsed.clientName;
-    if (parsed.clientPhone !== undefined) data.clientPhone = parsed.clientPhone ?? null;
-    if (parsed.clientEmail !== undefined) data.clientEmail = parsed.clientEmail ?? null;
-    if (parsed.companyName !== undefined) data.companyName = parsed.companyName ?? null;
-    if (parsed.notes !== undefined) data.notes = parsed.notes ?? null;
-
-    // Financial
-    if (parsed.subtotalCents !== undefined) data.subtotalCents = parsed.subtotalCents;
-    if (parsed.serviceChargePercent !== undefined) data.serviceChargePercent = parsed.serviceChargePercent ?? null;
-    if (parsed.taxPercent !== undefined) data.taxPercent = parsed.taxPercent ?? null;
-    if (parsed.gratuityPercent !== undefined) data.gratuityPercent = parsed.gratuityPercent ?? null;
-    if (parsed.paidCents !== undefined) data.paidCents = parsed.paidCents;
-
-    // Recalculate fees if any financial field changed
-    if (parsed.subtotalCents !== undefined || parsed.serviceChargePercent !== undefined ||
-        parsed.taxPercent !== undefined || parsed.gratuityPercent !== undefined) {
-      const fees = calculateFees({
-        subtotalCents: parsed.subtotalCents ?? Number(existing.subtotalCents),
-        serviceChargePercent: parsed.serviceChargePercent ?? (existing.serviceChargePercent != null ? Number(existing.serviceChargePercent) : null),
-        taxPercent: parsed.taxPercent ?? (existing.taxPercent != null ? Number(existing.taxPercent) : null),
-        gratuityPercent: parsed.gratuityPercent ?? (existing.gratuityPercent != null ? Number(existing.gratuityPercent) : null),
-      });
-      data.serviceChargeCents = fees.serviceChargeCents;
-      data.taxCents = fees.taxCents;
-      data.gratuityCents = fees.gratuityCents;
-      data.totalCents = parsed.totalCents ?? fees.totalCents;
-    } else if (parsed.totalCents !== undefined) {
-      data.totalCents = parsed.totalCents;
-    }
-
-    // JSON fields
-    if (parsed.packages !== undefined) data.packages = parsed.packages;
-    if (parsed.selectedPackageId !== undefined) data.selectedPackageId = parsed.selectedPackageId ?? null;
-    if (parsed.milestones !== undefined) data.milestones = parsed.milestones;
-    if (parsed.dietaryRequirements !== undefined) data.dietaryRequirements = parsed.dietaryRequirements ?? null;
-    if (parsed.tastings !== undefined) data.tastings = parsed.tastings ?? null;
-    if (parsed.deliveryDetails !== undefined) data.deliveryDetails = parsed.deliveryDetails ?? null;
-
-    // Documents
-    if (parsed.contractUrl !== undefined) data.contractUrl = parsed.contractUrl ?? null;
-    if (parsed.contractSignedAt !== undefined) data.contractSignedAt = parsed.contractSignedAt ? new Date(parsed.contractSignedAt) : null;
-    if (parsed.estimateId !== undefined) data.estimateId = parsed.estimateId ?? null;
-    if (parsed.invoiceId !== undefined) data.invoiceId = parsed.invoiceId ?? null;
-
-    // Branding
-    if (parsed.brandingLogoUrl !== undefined) data.brandingLogoUrl = parsed.brandingLogoUrl ?? null;
-    if (parsed.brandingColor !== undefined) data.brandingColor = parsed.brandingColor ?? null;
-    if (parsed.invoiceNotes !== undefined) data.invoiceNotes = parsed.invoiceNotes ?? null;
+    mapSimpleFields(parsed, data);
+    mapFinancialFields(parsed, existing, data);
+    mapJsonFields(parsed, data);
 
     const updated = await prisma.cateringEvent.update({
       where: { id },
@@ -339,6 +362,7 @@ router.patch('/:merchantId/catering/events/:id', async (req: Request, res: Respo
       res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
+    console.error('[catering] PATCH event error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to update catering event' });
   }
 });
@@ -359,6 +383,7 @@ router.delete('/:merchantId/catering/events/:id', async (req: Request, res: Resp
     await prisma.cateringEvent.delete({ where: { id } });
     res.status(204).send();
   } catch (error: unknown) {
+    console.error('[catering] DELETE event error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to delete catering event' });
   }
 });
@@ -402,6 +427,7 @@ router.patch('/:merchantId/catering/events/:id/milestones/:milestoneId/pay', asy
 
     res.json(updated);
   } catch (error: unknown) {
+    console.error('[catering] milestone pay error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to mark milestone paid' });
   }
 });
@@ -471,6 +497,7 @@ router.post('/:merchantId/catering/events/:id/clone', async (req: Request, res: 
 
     res.status(201).json(clone);
   } catch (error: unknown) {
+    console.error('[catering] clone event error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to clone catering event' });
   }
 });
@@ -528,12 +555,13 @@ router.post('/:merchantId/catering/events/:id/proposal', async (req: Request, re
           restaurant?.defaultBrandingColor ?? null,
         );
       } catch (emailError: unknown) {
-        console.error('[Catering] Failed to send proposal email:', emailError);
+        console.error('[Catering] Failed to send proposal email:', toErrorMessage(emailError));
       }
     }
 
     res.status(201).json({ token, url: `/catering/proposal/${token}`, expiresAt: proposalToken.expiresAt });
   } catch (error: unknown) {
+    console.error('[catering] generate proposal error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to generate proposal' });
   }
 });
@@ -571,6 +599,7 @@ publicRouter.get('/catering/proposal/:token', async (req: Request, res: Response
 
     res.json(proposalToken.job);
   } catch (error: unknown) {
+    console.error('[catering] GET proposal error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to fetch proposal' });
   }
 });
@@ -621,9 +650,9 @@ publicRouter.post('/catering/proposal/:token/approve', async (req: Request, res:
 
     const fees = calculateFees({
       subtotalCents,
-      serviceChargePercent: job.serviceChargePercent != null ? Number(job.serviceChargePercent) : null,
-      taxPercent: job.taxPercent != null ? Number(job.taxPercent) : null,
-      gratuityPercent: job.gratuityPercent != null ? Number(job.gratuityPercent) : null,
+      serviceChargePercent: job.serviceChargePercent == null ? null : Number(job.serviceChargePercent),
+      taxPercent: job.taxPercent == null ? null : Number(job.taxPercent),
+      gratuityPercent: job.gratuityPercent == null ? null : Number(job.gratuityPercent),
     });
 
     // Update milestones with calculated amounts
@@ -661,6 +690,7 @@ publicRouter.post('/catering/proposal/:token/approve', async (req: Request, res:
 
     res.json({ success: true, packageName: selectedPkg.name, totalCents: fees.totalCents });
   } catch (error: unknown) {
+    console.error('[catering] approve proposal error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to approve proposal' });
   }
 });
@@ -696,6 +726,7 @@ publicRouter.get('/catering/portal/:token', async (req: Request, res: Response) 
 
     res.json(proposalToken.job);
   } catch (error: unknown) {
+    console.error('[catering] GET portal error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to fetch portal data' });
   }
 });
@@ -722,6 +753,7 @@ router.get('/:merchantId/catering/events/:id/activity', async (req: Request, res
 
     res.json(activities);
   } catch (error: unknown) {
+    console.error('[catering] GET activity timeline error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to fetch activity timeline' });
   }
 });
@@ -756,6 +788,7 @@ router.post('/:merchantId/catering/events/:id/contract', async (req: Request, re
 
     res.json(updated);
   } catch (error: unknown) {
+    console.error('[catering] contract upload error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to upload contract' });
   }
 });
@@ -815,6 +848,7 @@ router.get('/:merchantId/catering/clients', async (req: Request, res: Response) 
 
     res.json([...clientMap.values()].sort((a, b) => b.totalRevenueCents - a.totalRevenueCents));
   } catch (error: unknown) {
+    console.error('[catering] GET clients error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to fetch client history' });
   }
 });
@@ -857,6 +891,7 @@ router.get('/:merchantId/catering/prep-list', async (req: Request, res: Response
       })),
     });
   } catch (error: unknown) {
+    console.error('[catering] GET prep list error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to generate prep list' });
   }
 });
@@ -901,6 +936,7 @@ router.get('/:merchantId/reports/catering/deferred', async (req: Request, res: R
 
     res.json(entries);
   } catch (error: unknown) {
+    console.error('[catering] deferred revenue report error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to generate deferred revenue report' });
   }
 });
@@ -958,6 +994,7 @@ router.get('/:merchantId/reports/catering/performance', async (req: Request, res
       revenueByMonth,
     });
   } catch (error: unknown) {
+    console.error('[catering] performance report error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to generate performance report' });
   }
 });
@@ -1018,6 +1055,7 @@ publicRouter.post('/catering/lead/:merchantSlug', async (req: Request, res: Resp
       res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
+    console.error('[catering] lead capture error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to submit inquiry' });
   }
 });
@@ -1037,6 +1075,7 @@ router.get('/:merchantId/catering/capacity', async (req: Request, res: Response)
       conflictAlertsEnabled: true,
     });
   } catch (error: unknown) {
+    console.error('[catering] GET capacity settings error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to fetch capacity settings' });
   }
 });
@@ -1066,6 +1105,7 @@ router.put('/:merchantId/catering/capacity', async (req: Request, res: Response)
       res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
+    console.error('[catering] PUT capacity settings error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to save capacity settings' });
   }
 });
@@ -1090,7 +1130,8 @@ router.get('/:merchantId/catering/packages', async (req, res) => {
       orderBy: { createdAt: 'desc' },
     });
     res.json(templates);
-  } catch {
+  } catch (error: unknown) {
+    console.error('[catering] GET package templates error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to load package templates' });
   }
 });
@@ -1117,6 +1158,7 @@ router.post('/:merchantId/catering/packages', async (req, res) => {
       res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
+    console.error('[catering] POST package template error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to create package template' });
   }
 });
@@ -1135,6 +1177,7 @@ router.patch('/:merchantId/catering/packages/:templateId', async (req, res) => {
       res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
+    console.error('[catering] PATCH package template error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to update package template' });
   }
 });
@@ -1147,7 +1190,8 @@ router.delete('/:merchantId/catering/packages/:templateId', async (req, res) => 
       data: { isActive: false },
     });
     res.status(204).send();
-  } catch {
+  } catch (error: unknown) {
+    console.error('[catering] DELETE package template error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to delete package template' });
   }
 });

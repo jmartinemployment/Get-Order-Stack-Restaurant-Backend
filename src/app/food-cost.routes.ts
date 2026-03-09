@@ -298,7 +298,7 @@ If you cannot extract a field, use reasonable defaults. invoiceDate defaults to 
     });
 
     const textBlock = response.content.find((b) => b.type === 'text');
-    if (!textBlock || textBlock.type !== 'text') {
+    if (textBlock?.type !== 'text') {
       res.status(500).json({ error: 'AI returned no text response' });
       return;
     }
@@ -616,6 +616,107 @@ router.delete('/:merchantId/recipes/:id', async (req: Request, res: Response) =>
 // FOOD COST REPORT
 // =====================
 
+interface ItemCostEntry {
+  name: string;
+  qtySold: number;
+  unitCost: number;
+  totalCost: number;
+}
+
+interface PriceAlert {
+  ingredientName: string;
+  previousCost: number;
+  currentCost: number;
+  changePercent: number;
+}
+
+function computeTheoreticalCogs(
+  orderItems: Array<{ menuItemId: string | null; menuItemName: string; quantity: number }>,
+  recipeCostByMenuItem: Map<string, number>,
+): { theoreticalCogs: number; itemCosts: ItemCostEntry[] } {
+  const itemAgg = new Map<string, { name: string; qty: number }>();
+  for (const oi of orderItems) {
+    if (!oi.menuItemId) continue;
+    const existing = itemAgg.get(oi.menuItemId);
+    if (existing) {
+      existing.qty += oi.quantity;
+    } else {
+      itemAgg.set(oi.menuItemId, { name: oi.menuItemName, qty: oi.quantity });
+    }
+  }
+
+  let theoreticalCogs = 0;
+  const itemCosts: ItemCostEntry[] = [];
+
+  for (const [menuItemId, { name, qty }] of itemAgg) {
+    const unitCost = recipeCostByMenuItem.get(menuItemId);
+    if (unitCost !== undefined) {
+      const cost = qty * unitCost;
+      theoreticalCogs += cost;
+      itemCosts.push({
+        name,
+        qtySold: qty,
+        unitCost: Math.round(unitCost * 100) / 100,
+        totalCost: Math.round(cost * 100) / 100,
+      });
+    }
+  }
+
+  return { theoreticalCogs, itemCosts };
+}
+
+function computePriceAlerts(
+  allLineItems: Array<{ ingredientName: string; unitCost: unknown }>,
+): PriceAlert[] {
+  const seen = new Map<string, { current: number; previous: number | null }>();
+
+  for (const li of allLineItems) {
+    const key = li.ingredientName.toLowerCase();
+    const cost = Number(li.unitCost);
+    const entry = seen.get(key);
+    if (!entry) {
+      seen.set(key, { current: cost, previous: null });
+    } else if (entry.previous === null) {
+      entry.previous = cost;
+    }
+  }
+
+  const alerts: PriceAlert[] = [];
+  for (const [name, { current, previous }] of seen) {
+    if (previous === null || previous <= 0) continue;
+    const changePercent = ((current - previous) / previous) * 100;
+    if (changePercent > 10) {
+      alerts.push({
+        ingredientName: name,
+        previousCost: Math.round(previous * 100) / 100,
+        currentCost: Math.round(current * 100) / 100,
+        changePercent: Math.round(changePercent * 10) / 10,
+      });
+    }
+  }
+
+  return alerts;
+}
+
+function buildRecipeCostMap(
+  recipes: Array<{ menuItemId: string; yieldQty: unknown; ingredients: Array<{ quantity: unknown; estimatedUnitCost: unknown }> }>,
+): Map<string, number> {
+  const costMap = new Map<string, number>();
+  for (const recipe of recipes) {
+    const totalCost = recipe.ingredients.reduce(
+      (sum, ing) => sum + Number(ing.quantity) * Number(ing.estimatedUnitCost),
+      0,
+    );
+    const costPerServing = totalCost / Math.max(Number(recipe.yieldQty), 1);
+    costMap.set(recipe.menuItemId, costPerServing);
+  }
+  return costMap;
+}
+
+function computeFoodCostPercent(cogs: number, revenue: number): number {
+  return revenue > 0 ? Math.round((cogs / revenue) * 1000) / 10 : 0;
+}
+
 // GET /:merchantId/food-cost-report
 router.get('/:merchantId/food-cost-report', async (req: Request, res: Response) => {
   const restaurantId = req.params.merchantId;
@@ -624,7 +725,6 @@ router.get('/:merchantId/food-cost-report', async (req: Request, res: Response) 
   since.setDate(since.getDate() - days);
 
   try {
-    // Revenue from orders in period
     const orders = await prisma.order.findMany({
       where: {
         restaurantId,
@@ -635,7 +735,6 @@ router.get('/:merchantId/food-cost-report', async (req: Request, res: Response) 
     });
     const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total), 0);
 
-    // Items sold in period (with menuItemId for recipe matching)
     const orderItems = await prisma.orderItem.findMany({
       where: {
         order: { restaurantId, createdAt: { gte: since }, status: { notIn: ['cancelled'] } },
@@ -644,54 +743,14 @@ router.get('/:merchantId/food-cost-report', async (req: Request, res: Response) 
       select: { menuItemId: true, menuItemName: true, quantity: true },
     });
 
-    // Recipes with ingredients
     const recipes = await prisma.foodCostRecipe.findMany({
       where: { restaurantId },
       include: { ingredients: true },
     });
 
-    // Build recipe cost lookup by menuItemId
-    const recipeCostByMenuItem = new Map<string, number>();
-    for (const recipe of recipes) {
-      const totalCost = recipe.ingredients.reduce(
-        (sum, ing) => sum + Number(ing.quantity) * Number(ing.estimatedUnitCost),
-        0,
-      );
-      const costPerServing = totalCost / Math.max(Number(recipe.yieldQty), 1);
-      recipeCostByMenuItem.set(recipe.menuItemId, costPerServing);
-    }
+    const recipeCostByMenuItem = buildRecipeCostMap(recipes);
+    const { theoreticalCogs, itemCosts } = computeTheoreticalCogs(orderItems, recipeCostByMenuItem);
 
-    // Theoretical COGS: sum(items sold × recipe cost per serving)
-    let theoreticalCogs = 0;
-    const itemCosts: Array<{ name: string; qtySold: number; unitCost: number; totalCost: number }> = [];
-
-    // Aggregate by menuItemId
-    const itemAgg = new Map<string, { name: string; qty: number }>();
-    for (const oi of orderItems) {
-      if (!oi.menuItemId) continue;
-      const existing = itemAgg.get(oi.menuItemId);
-      if (existing) {
-        existing.qty += oi.quantity;
-      } else {
-        itemAgg.set(oi.menuItemId, { name: oi.menuItemName, qty: oi.quantity });
-      }
-    }
-
-    for (const [menuItemId, { name, qty }] of itemAgg) {
-      const unitCost = recipeCostByMenuItem.get(menuItemId);
-      if (unitCost !== undefined) {
-        const cost = qty * unitCost;
-        theoreticalCogs += cost;
-        itemCosts.push({
-          name,
-          qtySold: qty,
-          unitCost: Math.round(unitCost * 100) / 100,
-          totalCost: Math.round(cost * 100) / 100,
-        });
-      }
-    }
-
-    // Actual COGS from purchase invoices in period
     const invoices = await prisma.purchaseInvoice.findMany({
       where: {
         restaurantId,
@@ -702,68 +761,30 @@ router.get('/:merchantId/food-cost-report', async (req: Request, res: Response) 
     });
     const actualCogs = invoices.reduce((sum, inv) => sum + Number(inv.totalAmount), 0);
 
-    // Price spike alerts (>10% increase in most recent vs previous purchase)
     const allLineItems = await prisma.purchaseLineItem.findMany({
       where: { invoice: { restaurantId } },
       include: { invoice: { select: { invoiceDate: true } } },
       orderBy: { invoice: { invoiceDate: 'desc' } },
     });
 
-    const priceAlerts: Array<{ ingredientName: string; previousCost: number; currentCost: number; changePercent: number }> = [];
-    const seen = new Map<string, { current: number; previous: number | null }>();
+    const priceAlerts = computePriceAlerts(allLineItems);
 
-    for (const li of allLineItems) {
-      const key = li.ingredientName.toLowerCase();
-      const cost = Number(li.unitCost);
-      const entry = seen.get(key);
-      if (!entry) {
-        seen.set(key, { current: cost, previous: null });
-      } else if (entry.previous === null) {
-        entry.previous = cost;
-      }
-    }
-
-    for (const [name, { current, previous }] of seen) {
-      if (previous !== null && previous > 0) {
-        const changePercent = ((current - previous) / previous) * 100;
-        if (changePercent > 10) {
-          priceAlerts.push({
-            ingredientName: name,
-            previousCost: Math.round(previous * 100) / 100,
-            currentCost: Math.round(current * 100) / 100,
-            changePercent: Math.round(changePercent * 10) / 10,
-          });
-        }
-      }
-    }
-
-    // Count menu items without recipes
     const menuItemCount = await prisma.menuItem.count({ where: { restaurantId, available: true } });
     const costedItemCount = recipes.length;
-    const uncostedItems = menuItemCount - costedItemCount;
 
-    // Top cost items sorted by total cost desc
     itemCosts.sort((a, b) => b.totalCost - a.totalCost);
-
-    const foodCostPercent = totalRevenue > 0
-      ? Math.round((theoreticalCogs / totalRevenue) * 1000) / 10
-      : 0;
-
-    const actualFoodCostPercent = totalRevenue > 0
-      ? Math.round((actualCogs / totalRevenue) * 1000) / 10
-      : 0;
 
     res.json({
       days,
       totalRevenue: Math.round(totalRevenue * 100) / 100,
       theoreticalCogs: Math.round(theoreticalCogs * 100) / 100,
       actualCogs: Math.round(actualCogs * 100) / 100,
-      foodCostPercent,
-      actualFoodCostPercent,
+      foodCostPercent: computeFoodCostPercent(theoreticalCogs, totalRevenue),
+      actualFoodCostPercent: computeFoodCostPercent(actualCogs, totalRevenue),
       variance: Math.round((actualCogs - theoreticalCogs) * 100) / 100,
       topCostItems: itemCosts.slice(0, 10),
       priceAlerts: priceAlerts.slice(0, 10),
-      uncostedItems,
+      uncostedItems: menuItemCount - costedItemCount,
       totalMenuItems: menuItemCount,
       costedItems: costedItemCount,
     });

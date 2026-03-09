@@ -25,7 +25,7 @@ export async function generateDeviceCode(prisma: PrismaClient): Promise<string> 
     });
 
     // Code is available if no device uses it, or the existing device is not pending
-    if (!existing || existing.status !== 'pending') {
+    if (existing?.status !== 'pending') {
       return code;
     }
   }

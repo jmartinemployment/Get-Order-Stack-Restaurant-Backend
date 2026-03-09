@@ -130,11 +130,10 @@ async function authenticate(): Promise<{ token: string; restaurantIds: string[] 
   const envRestaurantId = asString(process.env.MARKETPLACE_VERIFY_RESTAURANT_ID ?? process.env.RESTAURANT_ID);
 
   if (envToken) {
+    const fallbackIds = envRestaurantId ? [envRestaurantId] : [];
     const restaurantIds = RESTAURANT_IDS.length > 0
       ? RESTAURANT_IDS
-      : envRestaurantId
-        ? [envRestaurantId]
-        : [];
+      : fallbackIds;
 
     if (restaurantIds.length === 0) {
       throw new Error('No restaurant id provided. Set MARKETPLACE_PILOT_RESTAURANT_IDS or MARKETPLACE_VERIFY_RESTAURANT_ID.');
@@ -212,7 +211,7 @@ function printSummary(summary: PilotSummaryResponse): void {
   }
 }
 
-async function run(): Promise<void> {
+try {
   console.log(`[Marketplace Pilot] API base: ${API_BASE}`);
   console.log(`[Marketplace Pilot] Window hours: ${WINDOW_HOURS}`);
   if (PROVIDER) console.log(`[Marketplace Pilot] Provider filter: ${PROVIDER}`);
@@ -230,13 +229,10 @@ async function run(): Promise<void> {
   if (hasStop) {
     process.exitCode = 1;
     console.log('\n[Marketplace Pilot] STOP gate triggered for one or more restaurants.');
-    return;
+  } else {
+    console.log('\n[Marketplace Pilot] All restaurants passed GO gates.');
   }
-
-  console.log('\n[Marketplace Pilot] All restaurants passed GO gates.');
+} catch (error: unknown) {
+  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  process.exit(1);
 }
-
-run().catch((error: unknown) => {
-  console.error('[Marketplace Pilot] Failed:', error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});

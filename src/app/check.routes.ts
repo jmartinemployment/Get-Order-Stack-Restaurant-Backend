@@ -330,6 +330,100 @@ router.post('/:orderId/checks/:checkGuid/items', async (req: Request, res: Respo
   }
 });
 
+// --- Split mode handlers ---
+
+type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+async function splitByItem(
+  tx: TxClient,
+  orderId: string,
+  restaurantId: string,
+  checkGuid: string,
+  itemGuids: string[],
+  targetCheckGuid: string | undefined,
+): Promise<void> {
+  let targetCheckId = targetCheckGuid;
+
+  if (!targetCheckId) {
+    const checkCount = await tx.orderCheck.count({ where: { orderId } });
+    const newCheck = await tx.orderCheck.create({
+      data: { orderId, restaurantId, displayNumber: checkCount + 1 },
+    });
+    targetCheckId = newCheck.id;
+  }
+
+  await tx.checkItem.updateMany({
+    where: { id: { in: itemGuids }, checkId: checkGuid },
+    data: { checkId: targetCheckId },
+  });
+}
+
+async function splitByEqual(
+  tx: TxClient,
+  orderId: string,
+  restaurantId: string,
+  checkGuid: string,
+  items: Array<{ id: string }>,
+  numberOfWays: number,
+): Promise<void> {
+  const checkCount = await tx.orderCheck.count({ where: { orderId } });
+  const newCheckIds: string[] = [checkGuid];
+
+  for (let i = 1; i < numberOfWays; i++) {
+    const newCheck = await tx.orderCheck.create({
+      data: { orderId, restaurantId, displayNumber: checkCount + i },
+    });
+    newCheckIds.push(newCheck.id);
+  }
+
+  for (let i = 0; i < items.length; i++) {
+    const targetIdx = i % numberOfWays;
+    if (targetIdx !== 0) {
+      await tx.checkItem.update({
+        where: { id: items[i].id },
+        data: { checkId: newCheckIds[targetIdx] },
+      });
+    }
+  }
+}
+
+async function splitBySeat(
+  tx: TxClient,
+  orderId: string,
+  restaurantId: string,
+  items: Array<{ id: string; seatNumber: number | null }>,
+): Promise<void> {
+  const seatMap = new Map<number, string[]>();
+  for (const item of items) {
+    const seat = item.seatNumber ?? 0;
+    const existing = seatMap.get(seat);
+    if (existing) {
+      existing.push(item.id);
+    } else {
+      seatMap.set(seat, [item.id]);
+    }
+  }
+
+  if (seatMap.size <= 1) return;
+
+  const checkCount = await tx.orderCheck.count({ where: { orderId } });
+  let idx = 0;
+  for (const [, itemIds] of seatMap) {
+    if (idx === 0) {
+      idx++;
+      continue;
+    }
+    const newCheck = await tx.orderCheck.create({
+      data: { orderId, restaurantId, displayNumber: checkCount + idx },
+    });
+    await tx.checkItem.updateMany({
+      where: { id: { in: itemIds } },
+      data: { checkId: newCheck.id },
+    });
+    idx++;
+  }
+}
+
 // 3. PATCH /:orderId/checks/:checkGuid/split — Split check
 router.patch('/:orderId/checks/:checkGuid/split', async (req: Request, res: Response) => {
   try {
@@ -355,99 +449,14 @@ router.patch('/:orderId/checks/:checkGuid/split', async (req: Request, res: Resp
 
     await prisma.$transaction(async (tx) => {
       if (data.mode === 'by_item') {
-        // Move specified items to a new or existing check
-        let targetCheckId = data.targetCheckGuid;
-
-        if (!targetCheckId) {
-          const checkCount = await tx.orderCheck.count({ where: { orderId } });
-          const newCheck = await tx.orderCheck.create({
-            data: {
-              orderId,
-              restaurantId,
-              displayNumber: checkCount + 1,
-            },
-          });
-          targetCheckId = newCheck.id;
-        }
-
-        await tx.checkItem.updateMany({
-          where: { id: { in: data.itemGuids }, checkId: checkGuid },
-          data: { checkId: targetCheckId },
-        });
-
+        await splitByItem(tx, orderId, restaurantId, checkGuid, data.itemGuids, data.targetCheckGuid);
       } else if (data.mode === 'by_equal') {
-        // Round-robin items across N new checks
-        const items = sourceCheck.items;
-        const numberOfWays = data.numberOfWays;
-        const checkCount = await tx.orderCheck.count({ where: { orderId } });
-
-        // Create N-1 new checks (source check is check 1)
-        const newCheckIds: string[] = [checkGuid];
-        for (let i = 1; i < numberOfWays; i++) {
-          const newCheck = await tx.orderCheck.create({
-            data: {
-              orderId,
-              restaurantId,
-              displayNumber: checkCount + i,
-            },
-          });
-          newCheckIds.push(newCheck.id);
-        }
-
-        // Round-robin assign items
-        for (let i = 0; i < items.length; i++) {
-          const targetIdx = i % numberOfWays;
-          if (targetIdx !== 0) {
-            await tx.checkItem.update({
-              where: { id: items[i].id },
-              data: { checkId: newCheckIds[targetIdx] },
-            });
-          }
-        }
-
+        await splitByEqual(tx, orderId, restaurantId, checkGuid, sourceCheck.items, data.numberOfWays);
       } else if (data.mode === 'by_seat') {
-        // Group items by seat number into separate checks
-        const seatMap = new Map<number, string[]>();
-        for (const item of sourceCheck.items) {
-          const seat = item.seatNumber ?? 0;
-          const existing = seatMap.get(seat);
-          if (existing) {
-            existing.push(item.id);
-          } else {
-            seatMap.set(seat, [item.id]);
-          }
-        }
-
-        if (seatMap.size <= 1) {
-          // All items on same seat, nothing to split
-          return;
-        }
-
-        const checkCount = await tx.orderCheck.count({ where: { orderId } });
-        let idx = 0;
-        for (const [, itemIds] of seatMap) {
-          if (idx === 0) {
-            // Keep first seat group on source check
-            idx++;
-            continue;
-          }
-          const newCheck = await tx.orderCheck.create({
-            data: {
-              orderId,
-              restaurantId,
-              displayNumber: checkCount + idx,
-            },
-          });
-          await tx.checkItem.updateMany({
-            where: { id: { in: itemIds } },
-            data: { checkId: newCheck.id },
-          });
-          idx++;
-        }
+        await splitBySeat(tx, orderId, restaurantId, sourceCheck.items);
       }
     });
 
-    // Recalculate all checks for this order
     const allChecks = await prisma.orderCheck.findMany({ where: { orderId } });
     for (const c of allChecks) {
       await recalculateCheck(c.id, taxRate);

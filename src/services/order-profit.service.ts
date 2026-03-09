@@ -123,10 +123,13 @@ export class OrderProfitService {
     const profitStr = profit.toFixed(2);
     const marginStr = Math.round(margin);
 
+    const starSuffix = starItem ? ` ${starItem.name} is your star!` : '';
+    const wellSuffix = starItem ? ` ${starItem.name} performed well.` : '';
+
     if (margin >= 70) {
-      return `🌟 Excellent! Order ${orderNumber} has a ${marginStr}% margin ($${profitStr} profit).${starItem ? ` ${starItem.name} is your star!` : ''}`;
+      return `🌟 Excellent! Order ${orderNumber} has a ${marginStr}% margin ($${profitStr} profit).${starSuffix}`;
     } else if (margin >= 60) {
-      return `✅ Order ${orderNumber} placed - ${marginStr}% margin ($${profitStr} profit).${starItem ? ` ${starItem.name} performed well.` : ''}`;
+      return `✅ Order ${orderNumber} placed - ${marginStr}% margin ($${profitStr} profit).${wellSuffix}`;
     } else if (margin >= 50) {
       return `📊 Order ${orderNumber} has ${marginStr}% margin ($${profitStr} profit). Consider upselling higher-margin items next time.`;
     } else {

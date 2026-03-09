@@ -36,7 +36,7 @@ router.patch('/:orderId/delivery-status', async (req: Request, res: Response) =>
 
     const order = await prisma.order.findUnique({ where: { id: orderId } });
 
-    if (!order || order.orderType !== 'delivery') {
+    if (order?.orderType !== 'delivery') {
       res.status(404).json({ error: 'Delivery order not found' });
       return;
     }
@@ -139,7 +139,7 @@ router.patch('/:orderId/arrival', async (req: Request, res: Response) => {
 
     const order = await prisma.order.findUnique({ where: { id: orderId } });
 
-    if (!order || !order.vehicleDescription) {
+    if (!order?.vehicleDescription) {
       res.status(404).json({ error: 'Curbside order not found' });
       return;
     }

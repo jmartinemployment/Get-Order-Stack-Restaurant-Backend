@@ -70,14 +70,17 @@ export async function seedTables(restaurantIds: string[]) {
 
 // Allow standalone execution
 if (require.main === module) {
-  (async () => {
+  try {
     const restaurants = await prisma.restaurant.findMany({
       where: { slug: { in: ['taipa-kendall', 'taipa-coral-gables'] } },
       select: { id: true, slug: true },
     });
     console.log(`Found ${restaurants.length} Taipa restaurants`);
     await seedTables(restaurants.map(r => r.id));
-  })()
-    .catch(console.error)
-    .finally(() => prisma.$disconnect());
+  } catch (error: unknown) {
+    console.error('Script failed:', error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
+  }
 }

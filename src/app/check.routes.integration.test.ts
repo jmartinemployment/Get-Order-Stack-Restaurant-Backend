@@ -127,7 +127,7 @@ describe('POST /checks/:checkGuid/items', () => {
     const res = await api.owner.post(url).send({
       ...validItem,
       modifiers: [
-        { modifierName: 'Extra Cheese', priceAdjustment: 1.50 },
+        { modifierName: 'Extra Cheese', priceAdjustment: 1.5 },
       ],
     });
     expect(res.status).toBe(201);

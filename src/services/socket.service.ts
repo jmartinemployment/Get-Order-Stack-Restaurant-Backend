@@ -1,4 +1,4 @@
-import { Server as HttpServer } from 'http';
+import { Server as HttpServer } from 'node:http';
 import { Server, Socket } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
 
@@ -52,7 +52,7 @@ export function initializeSocketServer(httpServer: HttpServer, corsOrigins: any)
       if (!restaurantSockets.has(restaurantId)) {
         restaurantSockets.set(restaurantId, new Set());
       }
-      restaurantSockets.get(restaurantId)!.add(socket.id);
+      restaurantSockets.get(restaurantId)?.add(socket.id);
       socketInfo.set(socket.id, { restaurantId, deviceId, deviceType });
 
       // Update device status in database
@@ -111,8 +111,8 @@ export function initializeSocketServer(httpServer: HttpServer, corsOrigins: any)
           where: { id: data.deviceId },
           data: { lastSeenAt: new Date() }
         });
-      } catch (err) {
-        // Ignore heartbeat errors
+      } catch {
+        // Heartbeat update is best-effort; failure does not affect functionality
       }
     });
 
@@ -129,8 +129,8 @@ export function initializeSocketServer(httpServer: HttpServer, corsOrigins: any)
             where: { id: info.deviceId },
             data: { lastSeenAt: new Date() }
           });
-        } catch (err) {
-          // Ignore
+        } catch {
+          // Device lastSeenAt update on disconnect is best-effort; failure is non-critical
         }
 
         // Notify other devices
@@ -179,21 +179,21 @@ export function sendOrderEventToDevice(restaurantId: string, targetDeviceId: str
   // Find the socket ID for the target device
   const sockets = restaurantSockets.get(restaurantId);
   if (!sockets) {
-    console.log(`[Socket.io] No sockets found for restaurant ${restaurantId}`);
+    console.log('[Socket.io] No sockets found for restaurant', { restaurantId });
     return false;
   }
 
   let targetSocketId: string | null = null;
   for (const socketId of sockets) {
     const info = socketInfo.get(socketId);
-    if (info && info.deviceId === targetDeviceId) {
+    if (info?.deviceId === targetDeviceId) {
       targetSocketId = socketId;
       break;
     }
   }
 
   if (!targetSocketId) {
-    console.log(`[Socket.io] Device ${targetDeviceId} not found in restaurant ${restaurantId}`);
+    console.log('[Socket.io] Device not found in restaurant', { targetDeviceId, restaurantId });
     return false;
   }
 
@@ -252,11 +252,11 @@ export function broadcastToSourceAndKDS(restaurantId: string, sourceDeviceId: st
 
   const sockets = restaurantSockets.get(restaurantId);
   if (!sockets) {
-    console.log(`[Socket.io] No sockets for restaurant ${restaurantId}`);
+    console.log('[Socket.io] No sockets for restaurant', { restaurantId });
     return;
   }
 
-  console.log(`[Socket.io] broadcastToSourceAndKDS: restaurantId=${restaurantId}, sourceDeviceId=${sourceDeviceId}, event=${eventType}`);
+  console.log('[Socket.io] broadcastToSourceAndKDS', { restaurantId, sourceDeviceId, eventType });
   console.log(`[Socket.io] Connected sockets for restaurant: ${sockets.size}`);
 
   let sentCount = 0;
@@ -310,4 +310,6 @@ export function getConnectedDevices(restaurantId: string): Array<{ deviceId: str
     .map(({ deviceId, deviceType }) => ({ deviceId, deviceType }));
 }
 
-export { io };
+export function getIO(): Server | null {
+  return io;
+}

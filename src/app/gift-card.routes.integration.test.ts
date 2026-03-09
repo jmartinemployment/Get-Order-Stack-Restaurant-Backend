@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { api } from '../test/request-helper';
 import { getPrismaMock, resetPrismaMock } from '../test/prisma-mock';
-import { RESTAURANT_ID, GIFT_CARD } from '../test/fixtures';
+import { RESTAURANT_ID } from '../test/fixtures';
 
 vi.mock('../services/auth.service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../services/auth.service')>();

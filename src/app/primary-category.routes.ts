@@ -78,7 +78,7 @@ router.post('/:merchantId/primary-categories', async (req: Request, res: Respons
     const category = await prisma.primaryCategory.create({
       data: {
         restaurantId,
-        slug: slug.toLowerCase().replace(/\s+/g, '-'),
+        slug: slug.toLowerCase().replaceAll(/\s+/g, '-'),
         name,
         nameEn,
         icon,
@@ -109,7 +109,7 @@ router.patch('/:merchantId/primary-categories/:categoryId', async (req: Request,
     const category = await prisma.primaryCategory.update({
       where: { id: categoryId },
       data: {
-        ...(slug !== undefined && { slug: slug.toLowerCase().replace(/\s+/g, '-') }),
+        ...(slug !== undefined && { slug: slug.toLowerCase().replaceAll(/\s+/g, '-') }),
         ...(name !== undefined && { name }),
         ...(nameEn !== undefined && { nameEn }),
         ...(icon !== undefined && { icon }),

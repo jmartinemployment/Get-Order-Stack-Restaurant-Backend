@@ -57,10 +57,10 @@ export async function seedAuth() {
   // 2. Upsert team members (dashboard login accounts)
   console.log('   👤 Setting up team members...');
   const memberDefs = [
-    { email: 'admin@orderstack.com', password: 'admin123', firstName: 'Admin', lastName: 'User', role: 'super_admin', accessRole: 'owner' },
-    { email: 'owner@taipa.com', password: 'owner123', firstName: 'Carlos', lastName: 'Mendoza', role: 'owner', accessRole: 'owner' },
-    { email: 'manager@taipa.com', password: 'manager123', firstName: 'Maria', lastName: 'Garcia', role: 'manager', accessRole: 'manager' },
-    { email: 'staff@taipa.com', password: 'staff123', firstName: 'Luis', lastName: 'Rodriguez', role: 'staff', accessRole: 'staff' },
+    { email: 'admin@orderstack.com', password: 'admin123', firstName: 'Admin', lastName: 'User', role: 'super_admin', accessRole: 'owner' }, // NOSONAR - seed script credential
+    { email: 'owner@taipa.com', password: 'owner123', firstName: 'Carlos', lastName: 'Mendoza', role: 'owner', accessRole: 'owner' }, // NOSONAR - seed script credential
+    { email: 'manager@taipa.com', password: 'manager123', firstName: 'Maria', lastName: 'Garcia', role: 'manager', accessRole: 'manager' }, // NOSONAR - seed script credential
+    { email: 'staff@taipa.com', password: 'staff123', firstName: 'Luis', lastName: 'Rodriguez', role: 'staff', accessRole: 'staff' }, // NOSONAR - seed script credential
   ];
 
   const createdMembers: Array<{ id: string; email: string; accessRole: string }> = [];
@@ -218,10 +218,12 @@ export async function seedAuth() {
 
 // Allow standalone execution
 if (require.main === module) {
-  seedAuth()
-    .catch((error) => {
-      console.error('❌ Seed failed:', error);
-      process.exit(1);
-    })
-    .finally(() => prisma.$disconnect());
+  try {
+    await seedAuth();
+  } catch (error: unknown) {
+    console.error('Script failed:', error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
+  }
 }

@@ -307,7 +307,7 @@ router.get('/:groupId/cross-location-report', async (req: Request, res: Response
     }
 
     const locations = restaurants.map((r) => {
-      const data = locationMap.get(r.id)!;
+      const data = locationMap.get(r.id);
       return {
         restaurantId: r.id,
         name: r.name,
@@ -337,6 +337,60 @@ router.get('/:groupId/cross-location-report', async (req: Request, res: Response
 // MENU SYNC
 // =====================
 
+// --- Helper: diff source items against a target restaurant ---
+
+interface SyncPreviewDetail {
+  itemName: string;
+  action: string;
+  reason?: string;
+}
+
+interface SyncPreviewTarget {
+  restaurantId: string;
+  toAdd: number;
+  toUpdate: number;
+  toSkip: number;
+  conflicts: number;
+  details: SyncPreviewDetail[];
+}
+
+async function diffSourceItemsAgainstTarget(
+  targetId: string,
+  sourceItems: Array<{ name: string; price: unknown }>,
+): Promise<SyncPreviewTarget> {
+  const targetItems = await prisma.menuItem.findMany({
+    where: { restaurantId: targetId },
+    select: { name: true, price: true },
+  });
+
+  const targetNameSet = new Map(targetItems.map((ti) => [ti.name.toLowerCase(), ti]));
+
+  let toAdd = 0;
+  let toSkip = 0;
+  let conflicts = 0;
+  const details: SyncPreviewDetail[] = [];
+
+  for (const si of sourceItems) {
+    const existing = targetNameSet.get(si.name.toLowerCase());
+    if (!existing) {
+      toAdd++;
+      details.push({ itemName: si.name, action: 'add' });
+    } else if (Number(existing.price) !== Number(si.price)) {
+      conflicts++;
+      details.push({
+        itemName: si.name,
+        action: 'conflict',
+        reason: `Price differs: source $${si.price} vs target $${existing.price}`,
+      });
+    } else {
+      toSkip++;
+      details.push({ itemName: si.name, action: 'skip' });
+    }
+  }
+
+  return { restaurantId: targetId, toAdd, toUpdate: 0, toSkip, conflicts, details };
+}
+
 // POST /:groupId/sync-menu/preview
 router.post('/:groupId/sync-menu/preview', async (req: Request, res: Response) => {
   const parsed = syncMenuPreviewSchema.safeParse(req.body);
@@ -346,7 +400,6 @@ router.post('/:groupId/sync-menu/preview', async (req: Request, res: Response) =
   }
 
   try {
-    // Source menu items
     const sourceItems = await prisma.menuItem.findMany({
       where: { restaurantId: parsed.data.sourceRestaurantId },
       select: { id: true, name: true, price: true, categoryId: true, description: true },
@@ -357,51 +410,9 @@ router.post('/:groupId/sync-menu/preview', async (req: Request, res: Response) =
       select: { id: true, name: true },
     });
 
-    const sourceCatMap = new Map(sourceCategories.map((c) => [c.id, c.name]));
-
-    // Per-target diff
-    const targets: Array<{
-      restaurantId: string;
-      toAdd: number;
-      toUpdate: number;
-      toSkip: number;
-      conflicts: number;
-      details: Array<{ itemName: string; action: string; reason?: string }>;
-    }> = [];
-
+    const targets: SyncPreviewTarget[] = [];
     for (const targetId of parsed.data.targetRestaurantIds) {
-      const targetItems = await prisma.menuItem.findMany({
-        where: { restaurantId: targetId },
-        select: { name: true, price: true },
-      });
-
-      const targetNameSet = new Map(targetItems.map((ti) => [ti.name.toLowerCase(), ti]));
-
-      let toAdd = 0;
-      let toUpdate = 0;
-      let toSkip = 0;
-      let conflicts = 0;
-      const details: Array<{ itemName: string; action: string; reason?: string }> = [];
-
-      for (const si of sourceItems) {
-        const existing = targetNameSet.get(si.name.toLowerCase());
-        if (!existing) {
-          toAdd++;
-          details.push({ itemName: si.name, action: 'add' });
-        } else if (Number(existing.price) !== Number(si.price)) {
-          conflicts++;
-          details.push({
-            itemName: si.name,
-            action: 'conflict',
-            reason: `Price differs: source $${si.price} vs target $${existing.price}`,
-          });
-        } else {
-          toSkip++;
-          details.push({ itemName: si.name, action: 'skip' });
-        }
-      }
-
-      targets.push({ restaurantId: targetId, toAdd, toUpdate, toSkip, conflicts, details });
+      targets.push(await diffSourceItemsAgainstTarget(targetId, sourceItems));
     }
 
     res.json({
@@ -415,6 +426,105 @@ router.post('/:groupId/sync-menu/preview', async (req: Request, res: Response) =
     res.status(500).json({ error: 'Failed to generate sync preview' });
   }
 });
+
+type SourceCategory = Awaited<ReturnType<typeof prisma.menuCategory.findMany>>[number];
+
+async function ensureCategoriesOnTarget(
+  targetId: string,
+  sourceCategories: SourceCategory[],
+): Promise<Map<string, string>> {
+  const targetCategories = await prisma.menuCategory.findMany({
+    where: { restaurantId: targetId },
+  });
+  const targetCatByName = new Map(targetCategories.map((c) => [c.name.toLowerCase(), c]));
+  const catIdMap = new Map<string, string>();
+
+  for (const sc of sourceCategories) {
+    const existing = targetCatByName.get(sc.name.toLowerCase());
+    if (existing) {
+      catIdMap.set(sc.id, existing.id);
+    } else {
+      const newCat = await prisma.menuCategory.create({
+        data: {
+          restaurantId: targetId,
+          name: sc.name,
+          nameEn: sc.nameEn,
+          description: sc.description,
+          descriptionEn: sc.descriptionEn,
+          displayOrder: sc.displayOrder,
+          active: sc.active,
+        },
+      });
+      catIdMap.set(sc.id, newCat.id);
+    }
+  }
+
+  return catIdMap;
+}
+
+type SourceItem = Awaited<ReturnType<typeof prisma.menuItem.findMany>>[number];
+
+interface SyncItemCounts {
+  added: number;
+  skipped: number;
+  conflicts: number;
+}
+
+async function syncItemsToTarget(
+  targetId: string,
+  sourceItems: SourceItem[],
+  catIdMap: Map<string, string>,
+): Promise<SyncItemCounts> {
+  const targetItems = await prisma.menuItem.findMany({
+    where: { restaurantId: targetId },
+  });
+  const targetItemByName = new Map(targetItems.map((ti) => [ti.name.toLowerCase(), ti]));
+
+  let added = 0;
+  let skipped = 0;
+  let conflicts = 0;
+
+  for (const si of sourceItems) {
+    const existing = targetItemByName.get(si.name.toLowerCase());
+    const targetCatId = catIdMap.get(si.categoryId);
+
+    if (!targetCatId) {
+      skipped++;
+      continue;
+    }
+
+    if (existing) {
+      if (Number(existing.price) !== Number(si.price)) {
+        conflicts++;
+      } else {
+        skipped++;
+      }
+    } else {
+      await prisma.menuItem.create({
+        data: {
+          restaurantId: targetId,
+          categoryId: targetCatId,
+          name: si.name,
+          nameEn: si.nameEn,
+          description: si.description,
+          descriptionEn: si.descriptionEn,
+          price: si.price,
+          cost: si.cost,
+          image: si.image,
+          available: si.available,
+          popular: si.popular,
+          dietary: si.dietary,
+          displayOrder: si.displayOrder,
+          prepTimeMinutes: si.prepTimeMinutes,
+          taxCategory: si.taxCategory,
+        },
+      });
+      added++;
+    }
+  }
+
+  return { added, skipped, conflicts };
+}
 
 // POST /:groupId/sync-menu
 router.post('/:groupId/sync-menu', async (req: Request, res: Response) => {
@@ -441,79 +551,13 @@ router.post('/:groupId/sync-menu', async (req: Request, res: Response) => {
     let totalConflicts = 0;
 
     for (const targetId of parsed.data.targetRestaurantIds) {
-      // Ensure categories exist on target
-      const targetCategories = await prisma.menuCategory.findMany({
-        where: { restaurantId: targetId },
-      });
-      const targetCatByName = new Map(targetCategories.map((c) => [c.name.toLowerCase(), c]));
-
-      const catIdMap = new Map<string, string>(); // source cat ID -> target cat ID
-
-      for (const sc of sourceCategories) {
-        const existing = targetCatByName.get(sc.name.toLowerCase());
-        if (existing) {
-          catIdMap.set(sc.id, existing.id);
-        } else {
-          const newCat = await prisma.menuCategory.create({
-            data: {
-              restaurantId: targetId,
-              name: sc.name,
-              nameEn: sc.nameEn,
-              description: sc.description,
-              descriptionEn: sc.descriptionEn,
-              displayOrder: sc.displayOrder,
-              active: sc.active,
-            },
-          });
-          catIdMap.set(sc.id, newCat.id);
-        }
-      }
-
-      // Sync items
-      const targetItems = await prisma.menuItem.findMany({
-        where: { restaurantId: targetId },
-      });
-      const targetItemByName = new Map(targetItems.map((ti) => [ti.name.toLowerCase(), ti]));
-
-      for (const si of sourceItems) {
-        const existing = targetItemByName.get(si.name.toLowerCase());
-        const targetCatId = catIdMap.get(si.categoryId);
-
-        if (!targetCatId) {
-          totalSkipped++;
-          continue;
-        }
-
-        if (!existing) {
-          await prisma.menuItem.create({
-            data: {
-              restaurantId: targetId,
-              categoryId: targetCatId,
-              name: si.name,
-              nameEn: si.nameEn,
-              description: si.description,
-              descriptionEn: si.descriptionEn,
-              price: si.price,
-              cost: si.cost,
-              image: si.image,
-              available: si.available,
-              popular: si.popular,
-              dietary: si.dietary,
-              displayOrder: si.displayOrder,
-              prepTimeMinutes: si.prepTimeMinutes,
-              taxCategory: si.taxCategory,
-            },
-          });
-          totalAdded++;
-        } else if (Number(existing.price) !== Number(si.price)) {
-          totalConflicts++;
-        } else {
-          totalSkipped++;
-        }
-      }
+      const catIdMap = await ensureCategoriesOnTarget(targetId, sourceCategories);
+      const counts = await syncItemsToTarget(targetId, sourceItems, catIdMap);
+      totalAdded += counts.added;
+      totalSkipped += counts.skipped;
+      totalConflicts += counts.conflicts;
     }
 
-    // Log the sync
     await prisma.menuSyncLog.create({
       data: {
         restaurantGroupId: groupId,
@@ -559,7 +603,117 @@ router.get('/:groupId/sync-menu/history', async (req: Request, res: Response) =>
 // SETTINGS PROPAGATION
 // =====================
 
+async function propagateAiSettings(
+  targetId: string,
+  sourceAiSettings: unknown,
+  targetAiSettings: unknown,
+  overrideExisting: boolean,
+): Promise<boolean> {
+  if (!overrideExisting && targetAiSettings) return false;
+  await prisma.restaurant.update({
+    where: { id: targetId },
+    data: { aiSettings: sourceAiSettings },
+  });
+  return true;
+}
+
+async function propagateLoyaltySettings(
+  sourceRestaurantId: string,
+  targetId: string,
+  overrideExisting: boolean,
+): Promise<boolean> {
+  const sourceConfig = await prisma.restaurantLoyaltyConfig.findUnique({
+    where: { restaurantId: sourceRestaurantId },
+  });
+  if (!sourceConfig) return false;
+
+  const targetConfig = await prisma.restaurantLoyaltyConfig.findUnique({
+    where: { restaurantId: targetId },
+  });
+  if (!overrideExisting && targetConfig) return false;
+
+  const loyaltyData = {
+    enabled: sourceConfig.enabled,
+    pointsPerDollar: sourceConfig.pointsPerDollar,
+    pointsRedemptionRate: sourceConfig.pointsRedemptionRate,
+    tierSilverMin: sourceConfig.tierSilverMin,
+    tierGoldMin: sourceConfig.tierGoldMin,
+    tierPlatinumMin: sourceConfig.tierPlatinumMin,
+    silverMultiplier: sourceConfig.silverMultiplier,
+    goldMultiplier: sourceConfig.goldMultiplier,
+    platinumMultiplier: sourceConfig.platinumMultiplier,
+  };
+
+  await prisma.restaurantLoyaltyConfig.upsert({
+    where: { restaurantId: targetId },
+    create: { restaurantId: targetId, ...loyaltyData },
+    update: loyaltyData,
+  });
+  return true;
+}
+
+const JSON_SETTINGS_KEY_MAP: Record<string, string> = {
+  pricing: 'onlinePricing',
+  delivery: 'deliverySettings',
+  payment: 'paymentSettings',
+};
+
+async function propagateJsonSubkey(
+  targetId: string,
+  settingsType: string,
+  sourceAiSettings: unknown,
+  targetAiSettings: unknown,
+  overrideExisting: boolean,
+): Promise<boolean> {
+  const sourceSettings = (sourceAiSettings as Record<string, unknown>) ?? {};
+  const targetSettings = (targetAiSettings as Record<string, unknown>) ?? {};
+  const settingsKey = JSON_SETTINGS_KEY_MAP[settingsType];
+
+  if (!sourceSettings[settingsKey]) return false;
+  if (!overrideExisting && targetSettings[settingsKey]) return false;
+
+  const merged = {
+    ...targetSettings,
+    [settingsKey]: sourceSettings[settingsKey],
+  } as Record<string, unknown>;
+
+  await prisma.restaurant.update({
+    where: { id: targetId },
+    data: {
+      aiSettings: merged as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- Prisma Json field
+    },
+  });
+  return true;
+}
+
 // POST /:groupId/propagate-settings
+async function propagateToTarget(
+  targetId: string,
+  settingsType: string,
+  sourceRestaurantId: string,
+  sourceAiSettings: unknown,
+  overrideExisting: boolean,
+): Promise<boolean> {
+  const target = await prisma.restaurant.findUnique({
+    where: { id: targetId },
+    select: { aiSettings: true },
+  });
+  if (!target) return false;
+
+  switch (settingsType) {
+    case 'ai':
+      return propagateAiSettings(targetId, sourceAiSettings, target.aiSettings, overrideExisting);
+    case 'loyalty':
+      return propagateLoyaltySettings(sourceRestaurantId, targetId, overrideExisting);
+    case 'pricing':
+    case 'delivery':
+    case 'payment':
+      return propagateJsonSubkey(targetId, settingsType, sourceAiSettings, target.aiSettings, overrideExisting);
+    default:
+      return false;
+  }
+}
+
 router.post('/:groupId/propagate-settings', async (req: Request, res: Response) => {
   const parsed = propagateSettingsSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -579,99 +733,12 @@ router.post('/:groupId/propagate-settings', async (req: Request, res: Response) 
     }
 
     let updatedCount = 0;
-
     for (const targetId of parsed.data.targetRestaurantIds) {
-      const target = await prisma.restaurant.findUnique({
-        where: { id: targetId },
-        select: { aiSettings: true },
-      });
-
-      if (!target) continue;
-
-      switch (parsed.data.settingsType) {
-        case 'ai': {
-          if (!parsed.data.overrideExisting && target.aiSettings) continue;
-          await prisma.restaurant.update({
-            where: { id: targetId },
-            data: { aiSettings: source.aiSettings },
-          });
-          updatedCount++;
-          break;
-        }
-        case 'loyalty': {
-          const sourceConfig = await prisma.restaurantLoyaltyConfig.findUnique({
-            where: { restaurantId: parsed.data.sourceRestaurantId },
-          });
-          if (!sourceConfig) continue;
-
-          const targetConfig = await prisma.restaurantLoyaltyConfig.findUnique({
-            where: { restaurantId: targetId },
-          });
-
-          if (!parsed.data.overrideExisting && targetConfig) continue;
-
-          await prisma.restaurantLoyaltyConfig.upsert({
-            where: { restaurantId: targetId },
-            create: {
-              restaurantId: targetId,
-              enabled: sourceConfig.enabled,
-              pointsPerDollar: sourceConfig.pointsPerDollar,
-              pointsRedemptionRate: sourceConfig.pointsRedemptionRate,
-              tierSilverMin: sourceConfig.tierSilverMin,
-              tierGoldMin: sourceConfig.tierGoldMin,
-              tierPlatinumMin: sourceConfig.tierPlatinumMin,
-              silverMultiplier: sourceConfig.silverMultiplier,
-              goldMultiplier: sourceConfig.goldMultiplier,
-              platinumMultiplier: sourceConfig.platinumMultiplier,
-            },
-            update: {
-              enabled: sourceConfig.enabled,
-              pointsPerDollar: sourceConfig.pointsPerDollar,
-              pointsRedemptionRate: sourceConfig.pointsRedemptionRate,
-              tierSilverMin: sourceConfig.tierSilverMin,
-              tierGoldMin: sourceConfig.tierGoldMin,
-              tierPlatinumMin: sourceConfig.tierPlatinumMin,
-              silverMultiplier: sourceConfig.silverMultiplier,
-              goldMultiplier: sourceConfig.goldMultiplier,
-              platinumMultiplier: sourceConfig.platinumMultiplier,
-            },
-          });
-          updatedCount++;
-          break;
-        }
-        case 'pricing':
-        case 'delivery':
-        case 'payment': {
-          // These are stored in aiSettings JSON on the Restaurant model
-          // Propagate the relevant sub-key
-          const sourceSettings = (source.aiSettings as Record<string, unknown>) ?? {};
-          const targetSettings = (target?.aiSettings as Record<string, unknown>) ?? {};
-
-          const keyMap: Record<string, string> = {
-            pricing: 'onlinePricing',
-            delivery: 'deliverySettings',
-            payment: 'paymentSettings',
-          };
-
-          const settingsKey = keyMap[parsed.data.settingsType];
-          if (!sourceSettings[settingsKey]) continue;
-
-          if (!parsed.data.overrideExisting && targetSettings[settingsKey]) continue;
-
-          const merged = {
-            ...targetSettings,
-            [settingsKey]: sourceSettings[settingsKey],
-          } as Record<string, unknown>;
-          await prisma.restaurant.update({
-            where: { id: targetId },
-            data: {
-              aiSettings: merged as any, // eslint-disable-line @typescript-eslint/no-explicit-any -- Prisma Json field
-            },
-          });
-          updatedCount++;
-          break;
-        }
-      }
+      const didUpdate = await propagateToTarget(
+        targetId, parsed.data.settingsType, parsed.data.sourceRestaurantId,
+        source.aiSettings, parsed.data.overrideExisting,
+      );
+      if (didUpdate) updatedCount++;
     }
 
     res.json({

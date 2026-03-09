@@ -296,31 +296,35 @@ function firstArray(input: Record<string, unknown>, paths: string[]): unknown[] 
   return [];
 }
 
+function looksLikeCents(n: number): boolean {
+  return Number.isInteger(n) && Math.abs(n) >= 1000;
+}
+
+function toMoneyFromNumber(value: number): number | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  return looksLikeCents(value) ? value / 100 : value;
+}
+
+function toMoneyFromString(value: string): number | undefined {
+  const trimmed = value.trim();
+  const parsed = Number.parseFloat(trimmed);
+  if (!Number.isFinite(parsed)) return undefined;
+  return (/^-?\d+$/.exec(trimmed) !== null) && Math.abs(parsed) >= 1000
+    ? parsed / 100
+    : parsed;
+}
+
+function toMoneyFromObject(value: Record<string, unknown>): number | undefined {
+  if ('amount' in value) return toMoney(value.amount);
+  if ('value' in value) return toMoney(value.value);
+  return undefined;
+}
+
 function toMoney(value: unknown): number | undefined {
   if (value === null || value === undefined) return undefined;
-
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    if (Number.isInteger(value) && Math.abs(value) >= 1000) {
-      return value / 100;
-    }
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value.trim());
-    if (!Number.isFinite(parsed)) return undefined;
-    if (/^-?\d+$/.test(value.trim()) && Math.abs(parsed) >= 1000) {
-      return parsed / 100;
-    }
-    return parsed;
-  }
-
-  if (typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    if ('amount' in record) return toMoney(record.amount);
-    if ('value' in record) return toMoney(record.value);
-  }
-
+  if (typeof value === 'number') return toMoneyFromNumber(value);
+  if (typeof value === 'string') return toMoneyFromString(value);
+  if (typeof value === 'object') return toMoneyFromObject(value as Record<string, unknown>);
   return undefined;
 }
 
@@ -336,7 +340,8 @@ function normalizeItems(rawItems: unknown[]): MarketplaceInboundItem[] {
     const name = firstString(item, ['name', 'item_name', 'title', 'product_name'])
       ?? 'Marketplace item';
     const quantityRaw = getByPath(item, 'quantity') ?? getByPath(item, 'qty');
-    const quantityNumber = Number.parseInt(String(quantityRaw ?? '1'), 10);
+    const qtyStr = typeof quantityRaw === 'string' || typeof quantityRaw === 'number' ? String(quantityRaw) : '1';
+    const quantityNumber = Number.parseInt(qtyStr, 10);
     const quantity = Number.isFinite(quantityNumber) && quantityNumber > 0 ? quantityNumber : 1;
 
     normalized.push({
@@ -460,7 +465,7 @@ function deriveFallbackEventId(normalized: NormalizedMarketplaceEvent, payloadHa
 
 function normalizeEventStatus(normalized: NormalizedMarketplaceEvent): string {
   const raw = normalized.orderStatus || normalized.eventType || 'UNKNOWN';
-  return raw.trim().replace(/\s+/g, '_').toUpperCase();
+  return raw.trim().replaceAll(/\s+/g, '_').toUpperCase();
 }
 
 function providerToOrderSource(provider: MarketplaceProvider): string {
@@ -558,7 +563,7 @@ function makeSyncPayload(orderId: string, sourceStatus: string, targetStatus: st
 
 function buildDoorDashStatusUrl(externalOrderId: string): string {
   const template = process.env.DOORDASH_MARKETPLACE_STATUS_URL_TEMPLATE;
-  if (template && template.includes('{externalOrderId}')) {
+  if (template?.includes('{externalOrderId}')) {
     return template.replace('{externalOrderId}', encodeURIComponent(externalOrderId));
   }
   const base = process.env.DOORDASH_MARKETPLACE_BASE_URL || 'https://openapi.doordash.com';
@@ -567,7 +572,7 @@ function buildDoorDashStatusUrl(externalOrderId: string): string {
 
 function buildUberEatsStatusUrl(externalOrderId: string): string {
   const template = process.env.UBER_EATS_STATUS_URL_TEMPLATE;
-  if (template && template.includes('{externalOrderId}')) {
+  if (template?.includes('{externalOrderId}')) {
     return template.replace('{externalOrderId}', encodeURIComponent(externalOrderId));
   }
   const base = process.env.UBER_EATS_BASE_URL || 'https://api.uber.com/v1/eats';
@@ -683,6 +688,40 @@ function toPercent(value: number): number {
   return Number((value * 100).toFixed(2));
 }
 
+interface PilotMetrics {
+  syncDeadLetter: number;
+  webhookBadSignature: number;
+  webhookHoldForReview: number;
+  webhookFailed: number;
+  terminalCount: number;
+  successRatePercent: number | null;
+}
+
+function evaluatePilotThresholds(
+  thresholds: MarketplacePilotGateThresholds,
+  metrics: PilotMetrics,
+): string[] {
+  const reasons: string[] = [];
+  if (metrics.syncDeadLetter > thresholds.maxDeadLetterCount) {
+    reasons.push(`dead-letter sync jobs ${metrics.syncDeadLetter} exceeded ${thresholds.maxDeadLetterCount}`);
+  }
+  if (metrics.webhookBadSignature > thresholds.maxBadSignatureCount) {
+    reasons.push(`bad-signature webhooks ${metrics.webhookBadSignature} exceeded ${thresholds.maxBadSignatureCount}`);
+  }
+  if (metrics.webhookHoldForReview > thresholds.maxHoldForReviewCount) {
+    reasons.push(`hold-for-review webhooks ${metrics.webhookHoldForReview} exceeded ${thresholds.maxHoldForReviewCount}`);
+  }
+  if (metrics.webhookFailed > thresholds.maxWebhookFailedCount) {
+    reasons.push(`failed webhooks ${metrics.webhookFailed} exceeded ${thresholds.maxWebhookFailedCount}`);
+  }
+  if (metrics.terminalCount < thresholds.minTerminalSampleSize) {
+    reasons.push(`terminal sync sample ${metrics.terminalCount} is below minimum ${thresholds.minTerminalSampleSize}`);
+  } else if ((metrics.successRatePercent ?? 0) < thresholds.minSuccessRatePercent) {
+    reasons.push(`terminal sync success rate ${metrics.successRatePercent}% below ${thresholds.minSuccessRatePercent}%`);
+  }
+  return reasons;
+}
+
 interface ResolvedMenuItem {
   id: string;
   name: string;
@@ -711,7 +750,7 @@ async function resolveMenuItem(
       },
     });
 
-    if (explicit?.menuItem && explicit.menuItem.available && !explicit.menuItem.eightySixed) {
+    if (explicit?.menuItem?.available && !explicit.menuItem.eightySixed) {
       return {
         id: explicit.menuItem.id,
         name: explicit.menuItem.name,
@@ -729,7 +768,7 @@ async function resolveMenuItem(
       select: { id: true, name: true, price: true, available: true, eightySixed: true },
     });
 
-    if (byId && byId.available && !byId.eightySixed) {
+    if (byId?.available && !byId.eightySixed) {
       return {
         id: byId.id,
         name: byId.name,
@@ -747,7 +786,7 @@ async function resolveMenuItem(
     select: { id: true, name: true, price: true, available: true, eightySixed: true },
   });
 
-  if (!byName || !byName.available || byName.eightySixed) return null;
+  if (!byName?.available || byName.eightySixed) return null;
   return {
     id: byName.id,
     name: byName.name,
@@ -826,6 +865,277 @@ async function applyMarketplaceStatusToOrder(orderId: string, status: string): P
   });
 
   broadcastToSourceAndKDS(updated.restaurantId, updated.sourceDeviceId, 'order:updated', enrichOrderResponse(updated));
+}
+
+// --- Helpers extracted from handleWebhook to reduce cognitive complexity ---
+
+async function findWebhookIntegration(provider: string, externalStoreId: string | undefined) {
+  if (externalStoreId) {
+    return prisma.marketplaceIntegration.findFirst({
+      where: { provider, externalStoreId, enabled: true },
+    });
+  }
+  const candidates = await prisma.marketplaceIntegration.findMany({
+    where: { provider, enabled: true },
+    orderBy: { updatedAt: 'desc' },
+    take: 2,
+  });
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function getSignatureHeader(
+  provider: string,
+  headers: Record<string, unknown>,
+): string | undefined {
+  if (provider === 'doordash_marketplace') {
+    return getHeaderValue(headers, 'x-doordash-signature');
+  }
+  if (provider === 'ubereats') {
+    return getHeaderValue(headers, 'x-uber-signature') ?? getHeaderValue(headers, 'x-uber-eats-signature');
+  }
+  return getHeaderValue(headers, 'x-grubhub-signature');
+}
+
+async function verifyWebhookSignature(
+  provider: string,
+  rawBody: Buffer,
+  headers: Record<string, unknown>,
+  integration: { webhookSigningSecretEncrypted: string | null },
+  markOutcome: (outcome: string, errorMessage?: string) => Promise<void>,
+): Promise<void> {
+  if (!integration.webhookSigningSecretEncrypted) return;
+
+  const secret = decryptSecret(integration.webhookSigningSecretEncrypted);
+  const signatureHeader = getSignatureHeader(provider, headers);
+
+  if (!signatureHeader) {
+    await markOutcome('REJECTED_BAD_SIGNATURE', 'Missing signature header');
+    throw new Error('Missing signature header');
+  }
+
+  const valid = verifyHmacSha256(rawBody, signatureHeader, secret);
+  if (!valid) {
+    await markOutcome('REJECTED_BAD_SIGNATURE', 'Signature verification failed');
+    throw new Error('Signature verification failed');
+  }
+}
+
+async function resolveMarketplaceOrderItems(
+  restaurantId: string,
+  provider: MarketplaceProvider,
+  items: Array<{ externalItemId?: string | null; name: string; quantity: number; unitPrice?: number; specialInstructions?: string }>,
+): Promise<{
+  orderItemsData: Prisma.OrderItemCreateWithoutOrderInput[];
+  unknownItems: Array<{ externalItemId: string | null; name: string }>;
+  subtotal: number;
+}> {
+  const orderItemsData: Prisma.OrderItemCreateWithoutOrderInput[] = [];
+  const unknownItems: Array<{ externalItemId: string | null; name: string }> = [];
+  let subtotal = 0;
+
+  for (const inboundItem of items) {
+    const matchedMenuItem = await resolveMenuItem(restaurantId, provider, inboundItem);
+    if (!matchedMenuItem) {
+      unknownItems.push({ externalItemId: inboundItem.externalItemId ?? null, name: inboundItem.name });
+      continue;
+    }
+
+    const unitPrice = inboundItem.unitPrice ?? matchedMenuItem.price;
+    const totalPrice = toRoundedMoney(unitPrice * inboundItem.quantity);
+    subtotal += totalPrice;
+
+    orderItemsData.push({
+      menuItem: { connect: { id: matchedMenuItem.id } },
+      menuItemName: matchedMenuItem.name,
+      quantity: inboundItem.quantity,
+      unitPrice,
+      modifiersPrice: 0,
+      totalPrice,
+      specialInstructions: inboundItem.specialInstructions,
+      fulfillmentStatus: 'SENT',
+      sentToKitchenAt: new Date(),
+    });
+  }
+
+  return { orderItemsData, unknownItems, subtotal };
+}
+
+async function processWebhookOrder(
+  provider: MarketplaceProvider,
+  normalized: ReturnType<typeof normalizeMarketplaceEvent>,
+  integration: { id: string; restaurantId: string },
+  externalEventId: string,
+  jsonPayload: Prisma.InputJsonValue,
+  markOutcome: (outcome: string, errorMessage?: string) => Promise<void>,
+) {
+  const eventStatus = normalizeEventStatus(normalized);
+  const marketplaceOrder = await prisma.marketplaceOrder.upsert({
+    where: { provider_externalOrderId: { provider, externalOrderId: normalized.externalOrderId! } },
+    update: { integrationId: integration.id, status: eventStatus, rawPayload: jsonPayload, lastEventId: externalEventId, externalStoreId: normalized.externalStoreId ?? undefined },
+    create: { restaurantId: integration.restaurantId, integrationId: integration.id, provider, externalOrderId: normalized.externalOrderId!, externalStoreId: normalized.externalStoreId, externalCustomerId: normalized.customer.phone ?? normalized.customer.email ?? null, status: eventStatus, rawPayload: jsonPayload, lastEventId: externalEventId },
+  });
+
+  let linkedOrderId = marketplaceOrder.orderId;
+
+  if (!linkedOrderId && normalized.items.length > 0) {
+    const result = await createLinkedOrder(provider, normalized, integration, marketplaceOrder.id, externalEventId, jsonPayload, markOutcome);
+    if (result.holdForReview) return result.holdForReview;
+    linkedOrderId = result.orderId;
+  } else if (!linkedOrderId && normalized.items.length === 0) {
+    const reason = 'Marketplace payload contained no items';
+    await prisma.marketplaceOrder.update({
+      where: { id: marketplaceOrder.id },
+      data: { status: 'HOLD_FOR_REVIEW', lastEventId: externalEventId, rawPayload: jsonPayload },
+    });
+    await markOutcome('PROCESSED_HOLD_FOR_REVIEW', reason);
+    return { status: 'hold_for_review' as const, message: reason, orderId: undefined };
+  }
+
+  if (linkedOrderId && normalized.orderStatus) {
+    await applyMarketplaceStatusToOrder(linkedOrderId, normalized.orderStatus);
+  }
+
+  await markOutcome('PROCESSED');
+  return {
+    status: 'processed' as const,
+    message: linkedOrderId ? `Processed webhook and linked order ${linkedOrderId}` : 'Processed webhook event',
+    orderId: linkedOrderId ?? undefined,
+  };
+}
+
+async function createLinkedOrder(
+  provider: MarketplaceProvider,
+  normalized: ReturnType<typeof normalizeMarketplaceEvent>,
+  integration: { id: string; restaurantId: string },
+  marketplaceOrderId: string,
+  externalEventId: string,
+  jsonPayload: Prisma.InputJsonValue,
+  markOutcome: (outcome: string, errorMessage?: string) => Promise<void>,
+): Promise<{ orderId: string | null; holdForReview?: { status: 'hold_for_review'; message: string; orderId: undefined; unmappedItems?: Array<{ externalItemId: string | null; name: string }> } }> {
+  const customerId = await upsertCustomer(integration.restaurantId, normalized.customer);
+  const { orderItemsData, unknownItems, subtotal: rawSubtotal } = await resolveMarketplaceOrderItems(
+    integration.restaurantId, provider, normalized.items,
+  );
+
+  if (unknownItems.length > 0 || orderItemsData.length === 0) {
+    const reason = unknownItems.length > 0
+      ? `Unmapped marketplace items: ${unknownItems.map((item) => item.name).join(', ')}`
+      : 'Marketplace payload contained no mappable order items';
+    await prisma.marketplaceOrder.update({
+      where: { id: marketplaceOrderId },
+      data: { status: 'HOLD_FOR_REVIEW', lastEventId: externalEventId, rawPayload: jsonPayload },
+    });
+    await markOutcome('PROCESSED_HOLD_FOR_REVIEW', reason);
+    return { orderId: null, holdForReview: { status: 'hold_for_review', message: reason, orderId: undefined, unmappedItems: unknownItems } };
+  }
+
+  const subtotal = toRoundedMoney(rawSubtotal);
+  const tax = toRoundedMoney(normalized.tax ?? 0);
+  const tip = toRoundedMoney(normalized.tip ?? 0);
+  const deliveryFee = toRoundedMoney(normalized.deliveryFee ?? 0);
+  const total = toRoundedMoney(normalized.total ?? toRoundedMoney(subtotal + tax + tip + deliveryFee));
+
+  const createdOrder = await prisma.order.create({
+    data: {
+      restaurantId: integration.restaurantId, customerId,
+      orderNumber: generateOrderNumber(), orderType: 'delivery',
+      orderSource: providerToOrderSource(provider), status: 'pending',
+      subtotal, tax, tip, deliveryFee, total,
+      paymentMethod: 'marketplace', paymentStatus: 'paid',
+      specialInstructions: normalized.specialInstructions,
+      deliveryAddress: normalized.deliveryAddress.line1,
+      deliveryAddress2: normalized.deliveryAddress.line2,
+      deliveryCity: normalized.deliveryAddress.city,
+      deliveryStateUs: normalized.deliveryAddress.state,
+      deliveryZip: normalized.deliveryAddress.zip,
+      deliveryNotes: normalized.deliveryAddress.instructions,
+      deliveryStatus: 'PREPARING',
+      orderItems: { create: orderItemsData },
+    },
+    include: ORDER_INCLUDE,
+  });
+
+  await prisma.marketplaceOrder.update({ where: { id: marketplaceOrderId }, data: { orderId: createdOrder.id } });
+  broadcastToSourceAndKDS(createdOrder.restaurantId, createdOrder.sourceDeviceId, 'order:new', enrichOrderResponse(createdOrder));
+  return { orderId: createdOrder.id };
+}
+
+// --- Helper: process a single status sync job (extracted to reduce cognitive complexity) ---
+async function processSingleSyncJob(
+  candidate: {
+    id: string;
+    provider: string;
+    externalOrderId: string;
+    targetStatus: string;
+    payload: Prisma.InputJsonValue | null;
+    attemptCount: number;
+    marketplaceOrderId: string;
+    marketplaceOrder: { integration: { enabled: boolean } | null } | null;
+  },
+): Promise<'succeeded' | 'failed' | 'dead_lettered'> {
+  try {
+    if (!candidate.marketplaceOrder) {
+      throw new MarketplaceStatusSyncError('Marketplace order reference is missing', false);
+    }
+
+    const provider = normalizeProvider(candidate.provider);
+    if (!OUTBOUND_SUPPORTED_PROVIDERS.includes(provider)) {
+      throw new MarketplaceStatusSyncError(`Outbound sync unsupported for provider: ${provider}`, false);
+    }
+
+    if (!candidate.marketplaceOrder.integration?.enabled) {
+      throw new MarketplaceStatusSyncError('Marketplace integration is disabled or missing', false);
+    }
+
+    await pushMarketplaceOrderStatus(provider, {
+      externalOrderId: candidate.externalOrderId,
+      targetStatus: candidate.targetStatus,
+      payload: candidate.payload,
+    });
+
+    await prisma.$transaction([
+      prisma.marketplaceStatusSyncJob.update({
+        where: { id: candidate.id },
+        data: { status: 'SUCCESS', attemptCount: candidate.attemptCount + 1, completedAt: new Date(), lastError: null },
+      }),
+      prisma.marketplaceOrder.update({
+        where: { id: candidate.marketplaceOrderId },
+        data: { lastPushedStatus: candidate.targetStatus, lastPushAt: new Date(), lastPushResult: 'SUCCESS', lastPushError: null },
+      }),
+    ]);
+
+    return 'succeeded';
+  } catch (error: unknown) {
+    const syncError = toSyncError(error);
+    const nextAttemptCount = candidate.attemptCount + 1;
+    const canRetry = syncError.retryable && nextAttemptCount < maxSyncAttempts();
+
+    if (canRetry) {
+      await prisma.$transaction([
+        prisma.marketplaceStatusSyncJob.update({
+          where: { id: candidate.id },
+          data: { status: 'FAILED', attemptCount: nextAttemptCount, nextAttemptAt: new Date(Date.now() + backoffMsForAttempt(nextAttemptCount)), lastError: syncError.message },
+        }),
+        prisma.marketplaceOrder.update({
+          where: { id: candidate.marketplaceOrderId },
+          data: { lastPushAt: new Date(), lastPushResult: 'FAILED_RETRYING', lastPushError: syncError.message },
+        }),
+      ]);
+      return 'failed';
+    }
+
+    await prisma.$transaction([
+      prisma.marketplaceStatusSyncJob.update({
+        where: { id: candidate.id },
+        data: { status: 'DEAD_LETTER', attemptCount: nextAttemptCount, completedAt: new Date(), lastError: syncError.message },
+      }),
+      prisma.marketplaceOrder.update({
+        where: { id: candidate.marketplaceOrderId },
+        data: { lastPushAt: new Date(), lastPushResult: 'FAILED', lastPushError: syncError.message },
+      }),
+    ]);
+    return 'dead_lettered';
+  }
 }
 
 export const marketplaceService = {
@@ -1046,7 +1356,7 @@ export const marketplaceService = {
       },
     });
 
-    if (!order || !order.marketplaceOrder) {
+    if (!order?.marketplaceOrder) {
       return { queued: false, reason: 'Order is not linked to a marketplace order' };
     }
 
@@ -1180,24 +1490,14 @@ export const marketplaceService = {
           ? toPercent(syncSuccess / terminalCount)
           : null;
 
-        const reasons: string[] = [];
-        if (syncDeadLetter > thresholds.maxDeadLetterCount) {
-          reasons.push(`dead-letter sync jobs ${syncDeadLetter} exceeded ${thresholds.maxDeadLetterCount}`);
-        }
-        if (webhookBadSignature > thresholds.maxBadSignatureCount) {
-          reasons.push(`bad-signature webhooks ${webhookBadSignature} exceeded ${thresholds.maxBadSignatureCount}`);
-        }
-        if (webhookHoldForReview > thresholds.maxHoldForReviewCount) {
-          reasons.push(`hold-for-review webhooks ${webhookHoldForReview} exceeded ${thresholds.maxHoldForReviewCount}`);
-        }
-        if (webhookFailed > thresholds.maxWebhookFailedCount) {
-          reasons.push(`failed webhooks ${webhookFailed} exceeded ${thresholds.maxWebhookFailedCount}`);
-        }
-        if (terminalCount < thresholds.minTerminalSampleSize) {
-          reasons.push(`terminal sync sample ${terminalCount} is below minimum ${thresholds.minTerminalSampleSize}`);
-        } else if ((successRatePercent ?? 0) < thresholds.minSuccessRatePercent) {
-          reasons.push(`terminal sync success rate ${successRatePercent}% below ${thresholds.minSuccessRatePercent}%`);
-        }
+        const reasons = evaluatePilotThresholds(thresholds, {
+          syncDeadLetter,
+          webhookBadSignature,
+          webhookHoldForReview,
+          webhookFailed,
+          terminalCount,
+          successRatePercent,
+        });
 
         return {
           provider,
@@ -1310,97 +1610,10 @@ export const marketplaceService = {
       if (claimed.count === 0) continue;
       processed += 1;
 
-      try {
-        if (!candidate.marketplaceOrder) {
-          throw new MarketplaceStatusSyncError('Marketplace order reference is missing', false);
-        }
-
-        const provider = normalizeProvider(candidate.provider);
-        if (!OUTBOUND_SUPPORTED_PROVIDERS.includes(provider)) {
-          throw new MarketplaceStatusSyncError(`Outbound sync unsupported for provider: ${provider}`, false);
-        }
-
-        if (!candidate.marketplaceOrder.integration || !candidate.marketplaceOrder.integration.enabled) {
-          throw new MarketplaceStatusSyncError('Marketplace integration is disabled or missing', false);
-        }
-
-        await pushMarketplaceOrderStatus(provider, {
-          externalOrderId: candidate.externalOrderId,
-          targetStatus: candidate.targetStatus,
-          payload: candidate.payload as Prisma.InputJsonValue | null,
-        });
-
-        await prisma.$transaction([
-          prisma.marketplaceStatusSyncJob.update({
-            where: { id: candidate.id },
-            data: {
-              status: 'SUCCESS',
-              attemptCount: candidate.attemptCount + 1,
-              completedAt: new Date(),
-              lastError: null,
-            },
-          }),
-          prisma.marketplaceOrder.update({
-            where: { id: candidate.marketplaceOrderId },
-            data: {
-              lastPushedStatus: candidate.targetStatus,
-              lastPushAt: new Date(),
-              lastPushResult: 'SUCCESS',
-              lastPushError: null,
-            },
-          }),
-        ]);
-
-        succeeded += 1;
-      } catch (error: unknown) {
-        const syncError = toSyncError(error);
-        const nextAttemptCount = candidate.attemptCount + 1;
-        const canRetry = syncError.retryable && nextAttemptCount < maxSyncAttempts();
-
-        if (canRetry) {
-          await prisma.$transaction([
-            prisma.marketplaceStatusSyncJob.update({
-              where: { id: candidate.id },
-              data: {
-                status: 'FAILED',
-                attemptCount: nextAttemptCount,
-                nextAttemptAt: new Date(Date.now() + backoffMsForAttempt(nextAttemptCount)),
-                lastError: syncError.message,
-              },
-            }),
-            prisma.marketplaceOrder.update({
-              where: { id: candidate.marketplaceOrderId },
-              data: {
-                lastPushAt: new Date(),
-                lastPushResult: 'FAILED_RETRYING',
-                lastPushError: syncError.message,
-              },
-            }),
-          ]);
-          failed += 1;
-        } else {
-          await prisma.$transaction([
-            prisma.marketplaceStatusSyncJob.update({
-              where: { id: candidate.id },
-              data: {
-                status: 'DEAD_LETTER',
-                attemptCount: nextAttemptCount,
-                completedAt: new Date(),
-                lastError: syncError.message,
-              },
-            }),
-            prisma.marketplaceOrder.update({
-              where: { id: candidate.marketplaceOrderId },
-              data: {
-                lastPushAt: new Date(),
-                lastPushResult: 'FAILED',
-                lastPushError: syncError.message,
-              },
-            }),
-          ]);
-          deadLettered += 1;
-        }
-      }
+      const result = await processSingleSyncJob(candidate);
+      if (result === 'succeeded') succeeded += 1;
+      else if (result === 'failed') failed += 1;
+      else if (result === 'dead_lettered') deadLettered += 1;
     }
 
     return {
@@ -1429,35 +1642,14 @@ export const marketplaceService = {
       ? normalized.externalEventId
       : deriveFallbackEventId(normalized, payloadHash);
 
-    const integration = await (async () => {
-      if (normalized.externalStoreId) {
-        return prisma.marketplaceIntegration.findFirst({
-          where: {
-            provider,
-            externalStoreId: normalized.externalStoreId,
-            enabled: true,
-          },
-        });
-      }
-
-      const candidates = await prisma.marketplaceIntegration.findMany({
-        where: { provider, enabled: true },
-        orderBy: { updatedAt: 'desc' },
-        take: 2,
-      });
-
-      if (candidates.length === 1) return candidates[0];
-      return null;
-    })();
+    const integration = await findWebhookIntegration(provider, normalized.externalStoreId);
 
     try {
       await prisma.marketplaceWebhookEvent.create({
         data: {
-          provider,
-          externalEventId,
+          provider, externalEventId,
           externalOrderId: normalized.externalOrderId ?? null,
-          payloadHash,
-          payload: jsonPayload,
+          payloadHash, payload: jsonPayload,
           restaurantId: integration?.restaurantId ?? null,
           integrationId: integration?.id ?? null,
           outcome: 'RECEIVED',
@@ -1472,14 +1664,8 @@ export const marketplaceService = {
 
     const markOutcome = async (outcome: string, errorMessage?: string) => {
       await prisma.marketplaceWebhookEvent.update({
-        where: {
-          provider_externalEventId: { provider, externalEventId },
-        },
-        data: {
-          outcome,
-          errorMessage: errorMessage ?? null,
-          processedAt: new Date(),
-        },
+        where: { provider_externalEventId: { provider, externalEventId } },
+        data: { outcome, errorMessage: errorMessage ?? null, processedAt: new Date() },
       });
     };
 
@@ -1488,25 +1674,7 @@ export const marketplaceService = {
       return { status: 'ignored' as const, message: 'No enabled integration matched webhook store' };
     }
 
-    if (integration.webhookSigningSecretEncrypted) {
-      const secret = decryptSecret(integration.webhookSigningSecretEncrypted);
-      const signatureHeader = provider === 'doordash_marketplace'
-        ? getHeaderValue(headers, 'x-doordash-signature')
-        : provider === 'ubereats'
-          ? getHeaderValue(headers, 'x-uber-signature') ?? getHeaderValue(headers, 'x-uber-eats-signature')
-          : getHeaderValue(headers, 'x-grubhub-signature');
-
-      if (!signatureHeader) {
-        await markOutcome('REJECTED_BAD_SIGNATURE', 'Missing signature header');
-        throw new Error('Missing signature header');
-      }
-
-      const valid = verifyHmacSha256(rawBody, signatureHeader, secret);
-      if (!valid) {
-        await markOutcome('REJECTED_BAD_SIGNATURE', 'Signature verification failed');
-        throw new Error('Signature verification failed');
-      }
-    }
+    await verifyWebhookSignature(provider, rawBody, headers, integration, markOutcome);
 
     if (!normalized.externalOrderId) {
       await markOutcome('IGNORED_NO_ORDER_ID', 'No external order id in payload');
@@ -1514,170 +1682,9 @@ export const marketplaceService = {
     }
 
     try {
-      const eventStatus = normalizeEventStatus(normalized);
-
-      const marketplaceOrder = await prisma.marketplaceOrder.upsert({
-        where: {
-          provider_externalOrderId: {
-            provider,
-            externalOrderId: normalized.externalOrderId,
-          },
-        },
-        update: {
-          integrationId: integration.id,
-          status: eventStatus,
-          rawPayload: jsonPayload,
-          lastEventId: externalEventId,
-          externalStoreId: normalized.externalStoreId ?? undefined,
-        },
-        create: {
-          restaurantId: integration.restaurantId,
-          integrationId: integration.id,
-          provider,
-          externalOrderId: normalized.externalOrderId,
-          externalStoreId: normalized.externalStoreId,
-          externalCustomerId: normalized.customer.phone ?? normalized.customer.email ?? null,
-          status: eventStatus,
-          rawPayload: jsonPayload,
-          lastEventId: externalEventId,
-        },
-      });
-
-      let linkedOrderId = marketplaceOrder.orderId;
-
-      if (!linkedOrderId && normalized.items.length > 0) {
-        const customerId = await upsertCustomer(integration.restaurantId, normalized.customer);
-
-        const orderItemsData: Prisma.OrderItemCreateWithoutOrderInput[] = [];
-        const unknownItems: Array<{ externalItemId: string | null; name: string }> = [];
-        let subtotal = 0;
-
-        for (const inboundItem of normalized.items) {
-          const matchedMenuItem = await resolveMenuItem(integration.restaurantId, provider, inboundItem);
-          if (!matchedMenuItem) {
-            unknownItems.push({
-              externalItemId: inboundItem.externalItemId ?? null,
-              name: inboundItem.name,
-            });
-            continue;
-          }
-
-          const unitPrice = inboundItem.unitPrice ?? matchedMenuItem.price;
-          const totalPrice = toRoundedMoney(unitPrice * inboundItem.quantity);
-          subtotal += totalPrice;
-
-          orderItemsData.push({
-            menuItem: { connect: { id: matchedMenuItem.id } },
-            menuItemName: matchedMenuItem.name,
-            quantity: inboundItem.quantity,
-            unitPrice: unitPrice,
-            modifiersPrice: 0,
-            totalPrice,
-            specialInstructions: inboundItem.specialInstructions,
-            fulfillmentStatus: 'SENT',
-            sentToKitchenAt: new Date(),
-          });
-        }
-
-        if (unknownItems.length > 0 || orderItemsData.length === 0) {
-          const reason = unknownItems.length > 0
-            ? `Unmapped marketplace items: ${unknownItems.map((item) => item.name).join(', ')}`
-            : 'Marketplace payload contained no mappable order items';
-
-          await prisma.marketplaceOrder.update({
-            where: { id: marketplaceOrder.id },
-            data: {
-              status: 'HOLD_FOR_REVIEW',
-              lastEventId: externalEventId,
-              rawPayload: jsonPayload,
-            },
-          });
-
-          await markOutcome('PROCESSED_HOLD_FOR_REVIEW', reason);
-          return {
-            status: 'hold_for_review' as const,
-            message: reason,
-            orderId: undefined,
-            unmappedItems: unknownItems,
-          };
-        }
-
-        subtotal = toRoundedMoney(subtotal);
-        const tax = toRoundedMoney(normalized.tax ?? 0);
-        const tip = toRoundedMoney(normalized.tip ?? 0);
-        const deliveryFee = toRoundedMoney(normalized.deliveryFee ?? 0);
-
-        const fallbackTotal = toRoundedMoney(subtotal + tax + tip + deliveryFee);
-        const total = toRoundedMoney(normalized.total ?? fallbackTotal);
-
-        const createdOrder = await prisma.order.create({
-          data: {
-            restaurantId: integration.restaurantId,
-            customerId,
-            orderNumber: generateOrderNumber(),
-            orderType: 'delivery',
-            orderSource: providerToOrderSource(provider),
-            status: 'pending',
-            subtotal,
-            tax,
-            tip,
-            deliveryFee,
-            total,
-            paymentMethod: 'marketplace',
-            paymentStatus: 'paid',
-            specialInstructions: normalized.specialInstructions,
-            deliveryAddress: normalized.deliveryAddress.line1,
-            deliveryAddress2: normalized.deliveryAddress.line2,
-            deliveryCity: normalized.deliveryAddress.city,
-            deliveryStateUs: normalized.deliveryAddress.state,
-            deliveryZip: normalized.deliveryAddress.zip,
-            deliveryNotes: normalized.deliveryAddress.instructions,
-            deliveryStatus: 'PREPARING',
-            orderItems: { create: orderItemsData },
-          },
-          include: ORDER_INCLUDE,
-        });
-
-        await prisma.marketplaceOrder.update({
-          where: { id: marketplaceOrder.id },
-          data: {
-            orderId: createdOrder.id,
-          },
-        });
-
-        linkedOrderId = createdOrder.id;
-        broadcastToSourceAndKDS(createdOrder.restaurantId, createdOrder.sourceDeviceId, 'order:new', enrichOrderResponse(createdOrder));
-      } else if (!linkedOrderId && normalized.items.length === 0) {
-        const reason = 'Marketplace payload contained no items';
-        await prisma.marketplaceOrder.update({
-          where: { id: marketplaceOrder.id },
-          data: {
-            status: 'HOLD_FOR_REVIEW',
-            lastEventId: externalEventId,
-            rawPayload: jsonPayload,
-          },
-        });
-        await markOutcome('PROCESSED_HOLD_FOR_REVIEW', reason);
-        return {
-          status: 'hold_for_review' as const,
-          message: reason,
-          orderId: undefined,
-        };
-      }
-
-      if (linkedOrderId && normalized.orderStatus) {
-        await applyMarketplaceStatusToOrder(linkedOrderId, normalized.orderStatus);
-      }
-
-      await markOutcome('PROCESSED');
-
-      return {
-        status: 'processed' as const,
-        message: linkedOrderId
-          ? `Processed webhook and linked order ${linkedOrderId}`
-          : 'Processed webhook event',
-        orderId: linkedOrderId ?? undefined,
-      };
+      return await processWebhookOrder(
+        provider, normalized, integration, externalEventId, jsonPayload, markOutcome,
+      );
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Webhook processing failed';
       await markOutcome('FAILED', message);

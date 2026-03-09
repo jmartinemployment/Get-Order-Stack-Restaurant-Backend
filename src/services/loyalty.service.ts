@@ -152,7 +152,7 @@ export const loyaltyService = {
       where: { id: orderId },
     });
 
-    if (!order || !order.customerId) return;
+    if (!order?.customerId) return;
 
     const { loyaltyPointsEarned, loyaltyPointsRedeemed, customerId } = order;
 

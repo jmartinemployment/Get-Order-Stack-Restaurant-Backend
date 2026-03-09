@@ -1454,7 +1454,7 @@ router.post('/:merchantId/staff/validate-clock-in', async (req: Request, res: Re
     const enforcement = aiSettings.scheduleEnforcement as Record<string, unknown> | undefined;
 
     // If enforcement is not enabled, always allow
-    if (!enforcement || enforcement.enabled !== true) {
+    if (enforcement?.enabled !== true) {
       res.json({ allowed: true });
       return;
     }
@@ -1571,89 +1571,128 @@ router.post('/:merchantId/staff/clock-in-with-override', async (req: Request, re
 
 // ============ Auto Clock-Out (Step 13) ============
 
+interface ClockOutDecision {
+  shouldClose: boolean;
+  clockOutTime: Date;
+}
+
+async function evaluateAfterShiftEnd(
+  shiftId: string,
+  clockIn: Date,
+  now: Date,
+  delayMinutes: number,
+): Promise<ClockOutDecision> {
+  const shift = await prisma.shift.findUnique({ where: { id: shiftId } });
+  if (!shift) {
+    return { shouldClose: false, clockOutTime: now };
+  }
+
+  const [endH, endM] = shift.endTime.split(':').map(Number);
+  const shiftEnd = new Date(clockIn);
+  shiftEnd.setHours(endH, endM, 0, 0);
+
+  if (shiftEnd.getTime() < clockIn.getTime()) {
+    shiftEnd.setDate(shiftEnd.getDate() + 1);
+  }
+
+  const cutoff = new Date(shiftEnd.getTime() + delayMinutes * 60000);
+  if (now.getTime() >= cutoff.getTime()) {
+    return { shouldClose: true, clockOutTime: shiftEnd };
+  }
+
+  return { shouldClose: false, clockOutTime: now };
+}
+
+function evaluateBusinessDayCutoff(
+  clockIn: Date,
+  now: Date,
+  cutoffTime: string,
+): ClockOutDecision {
+  const [cutH, cutM] = cutoffTime.split(':').map(Number);
+  const todayCutoff = new Date(now);
+  todayCutoff.setHours(cutH, cutM, 0, 0);
+
+  if (now.getTime() >= todayCutoff.getTime() && clockIn.getTime() < todayCutoff.getTime()) {
+    return { shouldClose: true, clockOutTime: todayCutoff };
+  }
+
+  return { shouldClose: false, clockOutTime: now };
+}
+
+interface AutoClockOutConfig {
+  enabled: boolean;
+  mode: string;
+  delayMinutes: number;
+  cutoffTime: string;
+}
+
+function parseAutoClockOutConfig(aiSettings: unknown): AutoClockOutConfig | null {
+  const settings = (aiSettings as Record<string, unknown>) ?? {};
+  const autoClockOut = settings.autoClockOut as Record<string, unknown> | undefined;
+  if (!autoClockOut || autoClockOut.enabled !== true) return null;
+
+  return {
+    enabled: true,
+    mode: (autoClockOut.mode as string) ?? 'after_shift_end',
+    delayMinutes: (autoClockOut.delayMinutes as number) ?? 30,
+    cutoffTime: (autoClockOut.cutoffTime as string) ?? '04:00',
+  };
+}
+
+async function evaluateEntry(
+  entry: { shiftId: string | null; clockIn: Date },
+  config: AutoClockOutConfig,
+  now: Date,
+): Promise<ClockOutDecision> {
+  if (config.mode === 'after_shift_end' && entry.shiftId) {
+    return evaluateAfterShiftEnd(entry.shiftId, entry.clockIn, now, config.delayMinutes);
+  }
+  if (config.mode === 'business_day_cutoff') {
+    return evaluateBusinessDayCutoff(entry.clockIn, now, config.cutoffTime);
+  }
+  return { shouldClose: false, clockOutTime: now };
+}
+
+async function closeEntry(entryId: string, clockOutTime: Date, existingNotes: string | null): Promise<void> {
+  await prisma.timeEntry.update({
+    where: { id: entryId },
+    data: {
+      clockOut: clockOutTime,
+      notes: existingNotes
+        ? `${existingNotes} | auto_clock_out`
+        : 'auto_clock_out',
+    },
+  });
+}
+
 // POST /:merchantId/staff/auto-clock-out — close orphaned time entries
 router.post('/:merchantId/staff/auto-clock-out', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
 
-    // Load restaurant timeclock settings
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
       select: { aiSettings: true },
     });
 
-    const aiSettings = (restaurant?.aiSettings as Record<string, unknown>) ?? {};
-    const autoClockOut = aiSettings.autoClockOut as Record<string, unknown> | undefined;
-
-    if (!autoClockOut || autoClockOut.enabled !== true) {
+    const config = parseAutoClockOutConfig(restaurant?.aiSettings);
+    if (!config) {
       res.json({ closedEntries: 0, message: 'Auto clock-out is disabled' });
       return;
     }
 
-    const mode = (autoClockOut.mode as string) ?? 'after_shift_end';
-    const delayMinutes = (autoClockOut.delayMinutes as number) ?? 30;
-    const cutoffTime = (autoClockOut.cutoffTime as string) ?? '04:00';
-
-    // Find all open time entries for this restaurant
     const openEntries = await prisma.timeEntry.findMany({
-      where: {
-        restaurantId,
-        clockOut: null,
-      },
-      include: {
-        staffPin: { select: { name: true } },
-      },
+      where: { restaurantId, clockOut: null },
+      include: { staffPin: { select: { name: true } } },
     });
 
     const now = new Date();
     const closedIds: string[] = [];
 
     for (const entry of openEntries) {
-      let shouldClose = false;
-      let clockOutTime = now;
-
-      if (mode === 'after_shift_end' && entry.shiftId) {
-        // Check if shift has ended + delay has passed
-        const shift = await prisma.shift.findUnique({ where: { id: entry.shiftId } });
-        if (shift) {
-          const [endH, endM] = shift.endTime.split(':').map(Number);
-          const shiftEnd = new Date(entry.clockIn);
-          shiftEnd.setHours(endH, endM, 0, 0);
-
-          // If shift end is before clock-in (cross-midnight), add a day
-          if (shiftEnd.getTime() < entry.clockIn.getTime()) {
-            shiftEnd.setDate(shiftEnd.getDate() + 1);
-          }
-
-          const cutoff = new Date(shiftEnd.getTime() + delayMinutes * 60000);
-          if (now.getTime() >= cutoff.getTime()) {
-            shouldClose = true;
-            clockOutTime = shiftEnd; // Clock out at shift end time, not current time
-          }
-        }
-      } else if (mode === 'business_day_cutoff') {
-        // Check if current time has passed today's cutoff
-        const [cutH, cutM] = cutoffTime.split(':').map(Number);
-        const todayCutoff = new Date(now);
-        todayCutoff.setHours(cutH, cutM, 0, 0);
-
-        // If cutoff is early morning (e.g., 04:00) and entry was yesterday, check if we've passed it
-        if (now.getTime() >= todayCutoff.getTime() && entry.clockIn.getTime() < todayCutoff.getTime()) {
-          shouldClose = true;
-          clockOutTime = todayCutoff;
-        }
-      }
-
-      if (shouldClose) {
-        await prisma.timeEntry.update({
-          where: { id: entry.id },
-          data: {
-            clockOut: clockOutTime,
-            notes: entry.notes
-              ? `${entry.notes} | auto_clock_out`
-              : 'auto_clock_out',
-          },
-        });
+      const decision = await evaluateEntry(entry, config, now);
+      if (decision.shouldClose) {
+        await closeEntry(entry.id, decision.clockOutTime, entry.notes);
         closedIds.push(entry.id);
       }
     }

@@ -72,8 +72,9 @@ class CoursePacingService {
     const weightedBaseline = Math.round(p50 * 0.7 + p80 * 0.3);
 
     const sampleSize = durations.length;
+    const mediumOrLow = sampleSize >= 40 ? 'medium' : 'low';
     const confidence: 'low' | 'medium' | 'high' =
-      sampleSize >= 120 ? 'high' : sampleSize >= 40 ? 'medium' : 'low';
+      sampleSize >= 120 ? 'high' : mediumOrLow;
 
     return {
       lookbackDays: safeLookbackDays,

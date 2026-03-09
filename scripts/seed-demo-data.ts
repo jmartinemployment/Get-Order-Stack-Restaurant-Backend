@@ -15,9 +15,9 @@ import { seedReservations } from './seed-reservations';
 
 const prisma = new PrismaClient();
 
-async function seedDemoData() {
-  console.log('🌱 Starting demo data seed for Taipa restaurants...\n');
+console.log('🌱 Starting demo data seed for Taipa restaurants...\n');
 
+try {
   // Find existing Taipa restaurants
   const restaurants = await prisma.restaurant.findMany({
     where: { slug: { in: ['taipa-kendall', 'taipa-coral-gables'] } },
@@ -26,7 +26,8 @@ async function seedDemoData() {
 
   if (restaurants.length === 0) {
     console.error('❌ No Taipa restaurants found! Run seed-taipa.ts first.');
-    return;
+    await prisma.$disconnect();
+    process.exit(0);
   }
 
   console.log(`Found ${restaurants.length} Taipa restaurants:`);
@@ -85,11 +86,9 @@ async function seedDemoData() {
   }
 
   console.log('\n✅ All demo data seeded successfully!');
+} catch (error: unknown) {
+  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  process.exit(1);
+} finally {
+  await prisma.$disconnect();
 }
-
-seedDemoData()
-  .catch((error) => {
-    console.error('❌ Seed failed:', error);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());

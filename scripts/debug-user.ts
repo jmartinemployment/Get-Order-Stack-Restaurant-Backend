@@ -3,21 +3,18 @@ import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
-async function debugUser() {
-  const email = 'admin@orderstack.com';
-  const password = 'admin123';
+const email = 'admin@orderstack.com';
+const password = 'admin123'; // NOSONAR - seed script credential
 
-  try {
-    // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() }
-    });
+try {
+  // Check if user exists
+  const user = await prisma.user.findUnique({
+    where: { email: email.toLowerCase() }
+  });
 
-    if (!user) {
-      console.log('❌ User not found in database');
-      return;
-    }
-
+  if (!user) {
+    console.log('❌ User not found in database');
+  } else {
     console.log('✅ User found:');
     console.log('   ID:', user.id);
     console.log('   Email:', user.email);
@@ -28,12 +25,10 @@ async function debugUser() {
     // Test password verification
     const isValid = await bcrypt.compare(password, user.passwordHash);
     console.log('\n🔑 Password verification:', isValid ? '✅ VALID' : '❌ INVALID');
-
-  } catch (error) {
-    console.error('❌ Error:', error);
-  } finally {
-    await prisma.$disconnect();
   }
+} catch (error: unknown) {
+  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  process.exit(1);
+} finally {
+  await prisma.$disconnect();
 }
-
-debugUser();

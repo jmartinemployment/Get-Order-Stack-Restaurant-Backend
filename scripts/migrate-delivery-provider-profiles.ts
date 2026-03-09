@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
+import { toErrorMessage } from '../src/utils/errors';
 
 type ProviderKeyBackend = 'vault_oss' | 'managed_kms';
 
@@ -122,7 +123,7 @@ function decryptPayload(payload: string): string {
     }
   }
 
-  throw new Error(`Failed to decrypt payload: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
+  throw new Error(`Failed to decrypt payload: ${toErrorMessage(lastError)}`);
 }
 
 function getPrimaryKey(backend: ProviderKeyBackend): Buffer {
@@ -146,7 +147,7 @@ function modeToBackend(mode: string | null | undefined): ProviderKeyBackend {
   return mode === 'most_secure' ? 'managed_kms' : 'vault_oss';
 }
 
-async function run(): Promise<void> {
+try {
   const config = parseConfig();
   console.log(`[Migrate Profiles] dryRun=${config.dryRun} restaurantId=${config.restaurantId ?? 'ALL'}`);
 
@@ -168,7 +169,8 @@ async function run(): Promise<void> {
 
   if (credentialsRows.length === 0) {
     console.log('[Migrate Profiles] No rows found.');
-    return;
+    await prisma.$disconnect();
+    process.exit(0);
   }
 
   const securityProfiles = await prisma.restaurantProviderProfile.findMany({
@@ -357,13 +359,9 @@ async function run(): Promise<void> {
   if (failures > 0) {
     process.exitCode = 1;
   }
+} catch (error: unknown) {
+  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  process.exit(1);
+} finally {
+  await prisma.$disconnect();
 }
-
-run()
-  .catch((error: unknown) => {
-    console.error('[Migrate Profiles] Fatal error:', error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });

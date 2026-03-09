@@ -81,16 +81,16 @@ const subcategoryAssignments: Record<string, string> = {
   'Sides': 'sides',
 };
 
-async function seed() {
-  console.log('🌱 Starting Primary Categories seed...\n');
+console.log('🌱 Starting Primary Categories seed...\n');
 
-  try {
+try {
     // Get all restaurants
     const restaurants = await prisma.restaurant.findMany();
     
     if (restaurants.length === 0) {
       console.log('❌ No restaurants found. Run seed-taipa.ts first.');
-      return;
+      await prisma.$disconnect();
+      process.exit(0);
     }
 
     for (const restaurant of restaurants) {
@@ -179,12 +179,9 @@ async function seed() {
     console.log(`   Assigned Subcategories: ${assignedSubcategoryCount}`);
     console.log(`   Unassigned Subcategories: ${unassignedSubcategoryCount}`);
 
-  } catch (error) {
-    console.error('❌ Seed failed:', error);
-    throw error;
-  } finally {
-    await prisma.$disconnect();
-  }
+} catch (error: unknown) {
+  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  process.exit(1);
+} finally {
+  await prisma.$disconnect();
 }
-
-seed();

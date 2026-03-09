@@ -235,8 +235,8 @@ class AuthService {
         where: { restaurantId, isActive: true }
       });
 
-      console.log(`[verifyStaffPin] pin="${pin}" (type=${typeof pin}, length=${pin.length}, charCodes=${[...pin].map(c => c.charCodeAt(0)).join(',')})`);
-      console.log(`[verifyStaffPin] Found ${staffPins.length} pins for ${restaurantId}`);
+      console.log('[verifyStaffPin] pin check', { type: typeof pin, length: pin.length });
+      console.log('[verifyStaffPin] Found pins', { count: staffPins.length, restaurantId });
 
       // Check each PIN (we can't query by hash directly)
       for (const staffPin of staffPins) {
@@ -296,7 +296,7 @@ class AuthService {
         where: { id: sessionId }
       });
 
-      if (!session || !session.isActive) {
+      if (!session?.isActive) {
         return false;
       }
 
@@ -504,7 +504,7 @@ class AuthService {
   async changePassword(teamMemberId: string, oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
     try {
       const member = await prisma.teamMember.findUnique({ where: { id: teamMemberId } });
-      if (!member || !member.passwordHash) {
+      if (!member?.passwordHash) {
         return { success: false, error: 'User not found' };
       }
 
@@ -684,7 +684,7 @@ class AuthService {
       });
 
       if (!staffPin) {
-        console.log(`[posLogin] Staff PIN ${staffPinId} not found for restaurant ${restaurantId}`);
+        console.log('[posLogin] Staff PIN not found', { staffPinId, restaurantId });
         return null;
       }
 

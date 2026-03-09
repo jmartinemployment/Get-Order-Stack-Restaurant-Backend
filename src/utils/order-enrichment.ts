@@ -88,11 +88,8 @@ function buildCourseSummaries(orderItems: any[]): any[] {
       return fs === 'SENT' || fs === 'ON_THE_FLY';
     });
 
-    const fireStatus: CourseFireStatus = allCompleted
-      ? 'READY'
-      : anyFired
-        ? 'FIRED'
-        : 'PENDING';
+    const firedOrPending: CourseFireStatus = anyFired ? 'FIRED' : 'PENDING';
+    const fireStatus: CourseFireStatus = allCompleted ? 'READY' : firedOrPending;
 
     const readyDate = fireStatus === 'READY'
       ? items
@@ -269,7 +266,7 @@ export function enrichOrderResponse(order: any): any {
       deliveryTrackingUrl: order.deliveryTrackingUrl ?? undefined,
       dispatchStatus: order.dispatchStatus ?? undefined,
       estimatedDeliveryAt: order.deliveryEstimatedAt ?? undefined,
-      deliveryFee: order.deliveryFee != null ? Number(order.deliveryFee) : undefined,
+      deliveryFee: order.deliveryFee == null ? undefined : Number(order.deliveryFee),
     };
   }
 

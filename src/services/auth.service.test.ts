@@ -54,7 +54,7 @@ describe('AuthService — createUser includes email in Prisma create', () => {
 
     const result = await authService.createUser({
       email: 'Signup@Example.com',
-      password: 'BugTest2025!',
+      password: 'BugTest2025!', // NOSONAR - intentional test credential
       firstName: 'Bug',
       lastName: 'Test',
       role: 'owner',
@@ -78,7 +78,7 @@ describe('AuthService — createUser includes email in Prisma create', () => {
 
     const result = await authService.createUser({
       email: 'newuser@example.com',
-      password: 'password123',
+      password: 'password123', // NOSONAR - intentional test credential
       firstName: 'New',
       lastName: 'User',
       role: 'owner',
@@ -100,7 +100,7 @@ describe('AuthService — createUser includes email in Prisma create', () => {
 
     const result = await authService.createUser({
       email: 'Minimal@Example.com',
-      password: 'password123',
+      password: 'password123', // NOSONAR - intentional test credential
       role: 'owner',
     });
 

@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { api } from '../test/request-helper';
 import { getPrismaMock, resetPrismaMock } from '../test/prisma-mock';
 import { RESTAURANT_ID, COMBO } from '../test/fixtures';
-import { tokens } from '../test/auth-helper';
 
 // Mock authService.validateSession to return true for all test tokens
 vi.mock('../services/auth.service', async (importOriginal) => {

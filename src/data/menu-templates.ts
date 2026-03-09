@@ -52,18 +52,18 @@ const coffeeShopCategories: MenuTemplateCategory[] = [
   {
     name: 'Hot Drinks', sortOrder: 1,
     items: [
-      { name: 'Drip Coffee', description: 'Fresh brewed house blend', price: 3.50, sortOrder: 1, prepTimeMinutes: 2, sku: null, durationMinutes: null },
+      { name: 'Drip Coffee', description: 'Fresh brewed house blend', price: 3.5, sortOrder: 1, prepTimeMinutes: 2, sku: null, durationMinutes: null },
       { name: 'Americano', description: 'Espresso with hot water', price: 4, sortOrder: 2, prepTimeMinutes: 3, sku: null, durationMinutes: null },
-      { name: 'Latte', description: 'Espresso with steamed milk', price: 5.50, sortOrder: 3, prepTimeMinutes: 4, sku: null, durationMinutes: null },
-      { name: 'Cappuccino', description: 'Espresso with foam', price: 5.50, sortOrder: 4, prepTimeMinutes: 4, sku: null, durationMinutes: null },
+      { name: 'Latte', description: 'Espresso with steamed milk', price: 5.5, sortOrder: 3, prepTimeMinutes: 4, sku: null, durationMinutes: null },
+      { name: 'Cappuccino', description: 'Espresso with foam', price: 5.5, sortOrder: 4, prepTimeMinutes: 4, sku: null, durationMinutes: null },
       { name: 'Mocha', description: 'Espresso, chocolate, steamed milk', price: 6, sortOrder: 5, prepTimeMinutes: 5, sku: null, durationMinutes: null },
-      { name: 'Hot Tea', description: 'Selection of loose leaf teas', price: 3.50, sortOrder: 6, prepTimeMinutes: 2, sku: null, durationMinutes: null },
+      { name: 'Hot Tea', description: 'Selection of loose leaf teas', price: 3.5, sortOrder: 6, prepTimeMinutes: 2, sku: null, durationMinutes: null },
     ],
   },
   {
     name: 'Cold Drinks', sortOrder: 2,
     items: [
-      { name: 'Iced Coffee', description: 'Cold brewed over ice', price: 4.50, sortOrder: 1, prepTimeMinutes: 2, sku: null, durationMinutes: null },
+      { name: 'Iced Coffee', description: 'Cold brewed over ice', price: 4.5, sortOrder: 1, prepTimeMinutes: 2, sku: null, durationMinutes: null },
       { name: 'Iced Latte', description: 'Espresso over ice with milk', price: 6, sortOrder: 2, prepTimeMinutes: 3, sku: null, durationMinutes: null },
       { name: 'Cold Brew', description: '20-hour steeped cold brew', price: 5, sortOrder: 3, prepTimeMinutes: 1, sku: null, durationMinutes: null },
       { name: 'Smoothie', description: 'Blended fruit smoothie', price: 7, sortOrder: 4, prepTimeMinutes: 4, sku: null, durationMinutes: null },
@@ -72,10 +72,10 @@ const coffeeShopCategories: MenuTemplateCategory[] = [
   {
     name: 'Pastries', sortOrder: 3,
     items: [
-      { name: 'Croissant', description: 'Butter croissant', price: 3.50, sortOrder: 1, prepTimeMinutes: 1, sku: null, durationMinutes: null },
-      { name: 'Muffin', description: 'Blueberry or chocolate chip', price: 3.50, sortOrder: 2, prepTimeMinutes: 1, sku: null, durationMinutes: null },
-      { name: 'Bagel with Cream Cheese', description: 'Toasted with cream cheese', price: 4.50, sortOrder: 3, prepTimeMinutes: 3, sku: null, durationMinutes: null },
-      { name: 'Scone', description: 'Fresh baked daily', price: 3.50, sortOrder: 4, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+      { name: 'Croissant', description: 'Butter croissant', price: 3.5, sortOrder: 1, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+      { name: 'Muffin', description: 'Blueberry or chocolate chip', price: 3.5, sortOrder: 2, prepTimeMinutes: 1, sku: null, durationMinutes: null },
+      { name: 'Bagel with Cream Cheese', description: 'Toasted with cream cheese', price: 4.5, sortOrder: 3, prepTimeMinutes: 3, sku: null, durationMinutes: null },
+      { name: 'Scone', description: 'Fresh baked daily', price: 3.5, sortOrder: 4, prepTimeMinutes: 1, sku: null, durationMinutes: null },
     ],
   },
 ];
@@ -139,8 +139,8 @@ const tacoTruckCategories: MenuTemplateCategory[] = [
   {
     name: 'Tacos', sortOrder: 1,
     items: [
-      { name: 'Carne Asada Taco', description: 'Grilled steak, onion, cilantro', price: 4.50, sortOrder: 1, prepTimeMinutes: 5, sku: null, durationMinutes: null },
-      { name: 'Al Pastor Taco', description: 'Marinated pork, pineapple, onion', price: 4.50, sortOrder: 2, prepTimeMinutes: 5, sku: null, durationMinutes: null },
+      { name: 'Carne Asada Taco', description: 'Grilled steak, onion, cilantro', price: 4.5, sortOrder: 1, prepTimeMinutes: 5, sku: null, durationMinutes: null },
+      { name: 'Al Pastor Taco', description: 'Marinated pork, pineapple, onion', price: 4.5, sortOrder: 2, prepTimeMinutes: 5, sku: null, durationMinutes: null },
       { name: 'Chicken Taco', description: 'Grilled chicken, salsa verde', price: 4, sortOrder: 3, prepTimeMinutes: 5, sku: null, durationMinutes: null },
       { name: 'Fish Taco', description: 'Battered fish, cabbage slaw, chipotle', price: 5, sortOrder: 4, prepTimeMinutes: 6, sku: null, durationMinutes: null },
     ],
@@ -460,7 +460,7 @@ const coffeeShopModifiers: MenuTemplateModifierGroup[] = [
     modifiers: [
       { name: 'Small (12 oz)', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
       { name: 'Medium (16 oz)', priceAdjustment: 0.75, isDefault: false, sortOrder: 2 },
-      { name: 'Large (20 oz)', priceAdjustment: 1.50, isDefault: false, sortOrder: 3 },
+      { name: 'Large (20 oz)', priceAdjustment: 1.5, isDefault: false, sortOrder: 3 },
     ],
     applyTo: ['Drip Coffee', 'Americano', 'Latte', 'Cappuccino', 'Mocha', 'Hot Tea', 'Iced Coffee', 'Iced Latte', 'Cold Brew', 'Smoothie'],
   },
@@ -470,7 +470,7 @@ const coffeeShopModifiers: MenuTemplateModifierGroup[] = [
       { name: 'Whole Milk', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
       { name: 'Oat Milk', priceAdjustment: 0.75, isDefault: false, sortOrder: 2 },
       { name: 'Almond Milk', priceAdjustment: 0.75, isDefault: false, sortOrder: 3 },
-      { name: 'Soy Milk', priceAdjustment: 0.50, isDefault: false, sortOrder: 4 },
+      { name: 'Soy Milk', priceAdjustment: 0.5, isDefault: false, sortOrder: 4 },
     ],
     applyTo: ['Latte', 'Cappuccino', 'Mocha', 'Iced Latte', 'Smoothie'],
   },
@@ -478,9 +478,9 @@ const coffeeShopModifiers: MenuTemplateModifierGroup[] = [
     name: 'Extras', required: false, multiSelect: true, minSelections: 0, maxSelections: 3, sortOrder: 3,
     modifiers: [
       { name: 'Extra Shot', priceAdjustment: 1, isDefault: false, sortOrder: 1 },
-      { name: 'Vanilla Syrup', priceAdjustment: 0.50, isDefault: false, sortOrder: 2 },
-      { name: 'Caramel Syrup', priceAdjustment: 0.50, isDefault: false, sortOrder: 3 },
-      { name: 'Whipped Cream', priceAdjustment: 0.50, isDefault: false, sortOrder: 4 },
+      { name: 'Vanilla Syrup', priceAdjustment: 0.5, isDefault: false, sortOrder: 2 },
+      { name: 'Caramel Syrup', priceAdjustment: 0.5, isDefault: false, sortOrder: 3 },
+      { name: 'Whipped Cream', priceAdjustment: 0.5, isDefault: false, sortOrder: 4 },
     ],
     applyTo: ['Drip Coffee', 'Americano', 'Latte', 'Cappuccino', 'Mocha', 'Iced Coffee', 'Iced Latte', 'Cold Brew'],
   },
@@ -508,10 +508,10 @@ const pizzaModifiers: MenuTemplateModifierGroup[] = [
   {
     name: 'Extra Toppings', required: false, multiSelect: true, minSelections: 0, maxSelections: 5, sortOrder: 3,
     modifiers: [
-      { name: 'Extra Cheese', priceAdjustment: 1.50, isDefault: false, sortOrder: 1 },
+      { name: 'Extra Cheese', priceAdjustment: 1.5, isDefault: false, sortOrder: 1 },
       { name: 'Mushrooms', priceAdjustment: 1, isDefault: false, sortOrder: 2 },
       { name: 'Jalapeños', priceAdjustment: 1, isDefault: false, sortOrder: 3 },
-      { name: 'Bacon', priceAdjustment: 1.50, isDefault: false, sortOrder: 4 },
+      { name: 'Bacon', priceAdjustment: 1.5, isDefault: false, sortOrder: 4 },
     ],
     applyTo: ['Margherita', 'Pepperoni', 'Supreme', 'BBQ Chicken', 'Veggie'],
   },
@@ -551,8 +551,8 @@ const barAndGrillModifiers: MenuTemplateModifierGroup[] = [
     name: 'Add-Ons', required: false, multiSelect: true, minSelections: 0, maxSelections: 4, sortOrder: 3,
     modifiers: [
       { name: 'Extra Cheese', priceAdjustment: 1, isDefault: false, sortOrder: 1 },
-      { name: 'Avocado', priceAdjustment: 1.50, isDefault: false, sortOrder: 2 },
-      { name: 'Fried Egg', priceAdjustment: 1.50, isDefault: false, sortOrder: 3 },
+      { name: 'Avocado', priceAdjustment: 1.5, isDefault: false, sortOrder: 2 },
+      { name: 'Fried Egg', priceAdjustment: 1.5, isDefault: false, sortOrder: 3 },
     ],
     applyTo: ['Classic Burger', 'Bacon Cheeseburger', 'Mushroom Swiss'],
   },
@@ -582,7 +582,7 @@ const tacoTruckModifiers: MenuTemplateModifierGroup[] = [
     modifiers: [
       { name: 'Extra Meat', priceAdjustment: 2, isDefault: false, sortOrder: 1 },
       { name: 'Sour Cream', priceAdjustment: 0.75, isDefault: false, sortOrder: 2 },
-      { name: 'Guacamole', priceAdjustment: 1.50, isDefault: false, sortOrder: 3 },
+      { name: 'Guacamole', priceAdjustment: 1.5, isDefault: false, sortOrder: 3 },
       { name: 'Cheese', priceAdjustment: 1, isDefault: false, sortOrder: 4 },
     ],
     applyTo: ['Carne Asada Taco', 'Al Pastor Taco', 'Chicken Taco', 'Fish Taco', 'Carne Asada Burrito', 'Chicken Burrito'],
@@ -682,7 +682,7 @@ const asianKitchenModifiers: MenuTemplateModifierGroup[] = [
     name: 'Add Rice', required: false, multiSelect: false, minSelections: 0, maxSelections: 1, sortOrder: 3,
     modifiers: [
       { name: 'Steamed White Rice', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
-      { name: 'Brown Rice', priceAdjustment: 0.50, isDefault: false, sortOrder: 2 },
+      { name: 'Brown Rice', priceAdjustment: 0.5, isDefault: false, sortOrder: 2 },
       { name: 'Fried Rice', priceAdjustment: 2, isDefault: false, sortOrder: 3 },
     ],
     applyTo: ['General Tso\'s Chicken', 'Chicken Teriyaki'],
@@ -706,7 +706,7 @@ const indianModifiers: MenuTemplateModifierGroup[] = [
       { name: 'Naan', priceAdjustment: 0, isDefault: true, sortOrder: 1 },
       { name: 'Garlic Naan', priceAdjustment: 1, isDefault: false, sortOrder: 2 },
       { name: 'Roti', priceAdjustment: 0, isDefault: false, sortOrder: 3 },
-      { name: 'Paratha', priceAdjustment: 1.50, isDefault: false, sortOrder: 4 },
+      { name: 'Paratha', priceAdjustment: 1.5, isDefault: false, sortOrder: 4 },
     ],
     applyTo: ['Butter Chicken', 'Lamb Rogan Josh', 'Palak Paneer'],
   },
@@ -781,10 +781,10 @@ const iceCreamModifiers: MenuTemplateModifierGroup[] = [
     name: 'Toppings', required: false, multiSelect: true, minSelections: 0, maxSelections: 3, sortOrder: 2,
     modifiers: [
       { name: 'Hot Fudge', priceAdjustment: 0.75, isDefault: false, sortOrder: 1 },
-      { name: 'Sprinkles', priceAdjustment: 0.50, isDefault: false, sortOrder: 2 },
+      { name: 'Sprinkles', priceAdjustment: 0.5, isDefault: false, sortOrder: 2 },
       { name: 'Crushed Oreos', priceAdjustment: 0.75, isDefault: false, sortOrder: 3 },
       { name: 'Caramel Sauce', priceAdjustment: 0.75, isDefault: false, sortOrder: 4 },
-      { name: 'Whipped Cream', priceAdjustment: 0.50, isDefault: false, sortOrder: 5 },
+      { name: 'Whipped Cream', priceAdjustment: 0.5, isDefault: false, sortOrder: 5 },
     ],
     applyTo: ['Single Scoop', 'Double Scoop', 'Waffle Bowl'],
   },

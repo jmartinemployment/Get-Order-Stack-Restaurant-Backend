@@ -810,11 +810,165 @@ const STAFF_PINS = [
 ];
 
 // ============================================================
+// HELPER: Seed catering activity entries based on event status
+// ============================================================
+
+const STATUS_PROGRESSION = ['proposal_sent', 'contract_signed', 'deposit_received', 'in_progress', 'completed'] as const;
+
+function statusReachedOrPassed(status: string, target: string): boolean {
+  const idx = STATUS_PROGRESSION.indexOf(target as typeof STATUS_PROGRESSION[number]);
+  const current = STATUS_PROGRESSION.indexOf(status as typeof STATUS_PROGRESSION[number]);
+  return idx >= 0 && current >= idx;
+}
+
+async function seedCateringActivities(jobId: string, title: string, status: string): Promise<void> {
+  await prisma.cateringActivity.create({
+    data: { jobId, action: 'created', description: `Job "${title}" created`, actorType: 'operator' },
+  });
+
+  if (statusReachedOrPassed(status, 'proposal_sent')) {
+    await prisma.cateringActivity.create({
+      data: { jobId, action: 'status_changed', description: 'Proposal sent to client', metadata: { from: 'inquiry', to: 'proposal_sent' }, actorType: 'operator' },
+    });
+  }
+
+  if (statusReachedOrPassed(status, 'contract_signed')) {
+    await prisma.cateringActivity.create({
+      data: { jobId, action: 'package_selected', description: 'Client selected package', actorType: 'client' },
+    });
+    await prisma.cateringActivity.create({
+      data: { jobId, action: 'status_changed', description: 'Contract signed by client', metadata: { from: 'proposal_sent', to: 'contract_signed' }, actorType: 'client' },
+    });
+  }
+
+  if (statusReachedOrPassed(status, 'deposit_received')) {
+    await prisma.cateringActivity.create({
+      data: { jobId, action: 'milestone_paid', description: 'Deposit received', actorType: 'system' },
+    });
+    await prisma.cateringActivity.create({
+      data: { jobId, action: 'status_changed', description: 'Deposit received — job confirmed', metadata: { from: 'contract_signed', to: 'deposit_received' }, actorType: 'system' },
+    });
+  }
+
+  if (statusReachedOrPassed(status, 'in_progress')) {
+    await prisma.cateringActivity.create({
+      data: { jobId, action: 'status_changed', description: 'Job moved to in progress', metadata: { from: 'deposit_received', to: 'in_progress' }, actorType: 'operator' },
+    });
+  }
+
+  if (status === 'completed') {
+    await prisma.cateringActivity.create({
+      data: { jobId, action: 'milestone_paid', description: 'Final payment received', actorType: 'system' },
+    });
+    await prisma.cateringActivity.create({
+      data: { jobId, action: 'status_changed', description: 'Job completed', metadata: { from: 'in_progress', to: 'completed' }, actorType: 'operator' },
+    });
+  }
+}
+
+// ============================================================
+// HELPER: Link restaurant to Taipa group
+// ============================================================
+
+function resolveGroupRole(email: string | null): string {
+  if (email === 'admin@orderstack.com' || email === 'owner@taipa.com') return 'owner';
+  if (email === 'manager@taipa.com') return 'manager';
+  return 'staff';
+}
+
+async function linkToTaipaGroup(restaurantId: string): Promise<void> {
+  const group = await prisma.restaurantGroup.findFirst({ where: { slug: 'taipa-group' } });
+  if (!group) return;
+
+  await prisma.restaurant.update({
+    where: { id: restaurantId },
+    data: { restaurantGroupId: group.id },
+  });
+  console.log(`   Linked to restaurant group: ${group.name}`);
+
+  const existingMembers = await prisma.teamMember.findMany({
+    where: { email: { in: ['admin@orderstack.com', 'owner@taipa.com', 'manager@taipa.com', 'staff@taipa.com'] } },
+    select: { id: true, email: true },
+  });
+
+  for (const m of existingMembers) {
+    const role = resolveGroupRole(m.email);
+    await prisma.userRestaurantAccess.upsert({
+      where: { teamMemberId_restaurantId: { teamMemberId: m.id, restaurantId } },
+      update: { role },
+      create: { teamMemberId: m.id, restaurantId, role },
+    });
+  }
+  console.log(`   ${existingMembers.length} existing users linked`);
+}
+
+// ============================================================
+// HELPER: Seed staff PINs + team members
+// ============================================================
+
+async function seedStaffPins(restaurantId: string): Promise<void> {
+  console.log('   Creating staff...');
+  await prisma.staffPin.deleteMany({ where: { restaurantId } });
+
+  const existingStaff = await prisma.teamMember.findMany({
+    where: { restaurantId },
+    select: { id: true },
+  });
+  if (existingStaff.length > 0) {
+    await prisma.teamMemberJob.deleteMany({
+      where: { teamMemberId: { in: existingStaff.map(m => m.id) } },
+    });
+  }
+
+  for (const sp of STAFF_PINS) {
+    let teamMember = await prisma.teamMember.findFirst({
+      where: { restaurantId, displayName: sp.displayName },
+    });
+
+    if (!teamMember) {
+      teamMember = await prisma.teamMember.create({
+        data: {
+          displayName: sp.displayName,
+          firstName: sp.displayName,
+          role: sp.role,
+          restaurantId,
+          status: 'active',
+        },
+      });
+    }
+
+    await prisma.teamMemberJob.create({
+      data: {
+        teamMemberId: teamMember.id,
+        jobTitle: sp.jobTitle,
+        hourlyRate: sp.hourlyRate,
+        isTipEligible: sp.isTipEligible,
+        isPrimary: true,
+        overtimeEligible: sp.role === 'staff',
+      },
+    });
+
+    const pinHash = await bcrypt.hash(sp.pin, SALT_ROUNDS);
+    await prisma.staffPin.create({
+      data: {
+        restaurantId,
+        name: sp.displayName,
+        pin: pinHash,
+        role: sp.role,
+        teamMemberId: teamMember.id,
+      },
+    });
+  }
+  console.log(`   ${STAFF_PINS.length} staff PINs`);
+}
+
+// ============================================================
 // SEED FUNCTION
 // ============================================================
 
-async function seedJaysCatering() {
-  console.log("\n  Seeding Jay's Catering Number 3...\n");
+console.log("\n  Seeding Jay's Catering Number 3...\n");
+
+try {
 
   // 1. Create or find restaurant
   let restaurant = await prisma.restaurant.findUnique({
@@ -843,32 +997,7 @@ async function seedJaysCatering() {
   const restaurantId = restaurant.id;
 
   // 2. Link to Taipa group (so same login accounts work)
-  const group = await prisma.restaurantGroup.findFirst({
-    where: { slug: 'taipa-group' },
-  });
-  if (group) {
-    await prisma.restaurant.update({
-      where: { id: restaurantId },
-      data: { restaurantGroupId: group.id },
-    });
-    console.log(`   Linked to restaurant group: ${group.name}`);
-
-    const existingMembers = await prisma.teamMember.findMany({
-      where: { email: { in: ['admin@orderstack.com', 'owner@taipa.com', 'manager@taipa.com', 'staff@taipa.com'] } },
-      select: { id: true, email: true },
-    });
-
-    for (const m of existingMembers) {
-      const role = m.email === 'admin@orderstack.com' || m.email === 'owner@taipa.com' ? 'owner'
-        : m.email === 'manager@taipa.com' ? 'manager' : 'staff';
-      await prisma.userRestaurantAccess.upsert({
-        where: { teamMemberId_restaurantId: { teamMemberId: m.id, restaurantId } },
-        update: { role },
-        create: { teamMemberId: m.id, restaurantId, role },
-      });
-    }
-    console.log(`   ${existingMembers.length} existing users linked`);
-  }
+  await linkToTaipaGroup(restaurantId);
 
   // 3. Menu categories & items
   console.log('   Creating menu...');
@@ -979,100 +1108,8 @@ async function seedJaysCatering() {
       },
     });
 
-    // Create activity entries for non-inquiry events
     if (evt.status !== 'inquiry') {
-      await prisma.cateringActivity.create({
-        data: {
-          jobId: created.id,
-          action: 'created',
-          description: `Job "${evt.title}" created`,
-          actorType: 'operator',
-        },
-      });
-
-      if (['proposal_sent', 'contract_signed', 'deposit_received', 'in_progress', 'completed'].includes(evt.status)) {
-        await prisma.cateringActivity.create({
-          data: {
-            jobId: created.id,
-            action: 'status_changed',
-            description: 'Proposal sent to client',
-            metadata: { from: 'inquiry', to: 'proposal_sent' },
-            actorType: 'operator',
-          },
-        });
-      }
-
-      if (['contract_signed', 'deposit_received', 'in_progress', 'completed'].includes(evt.status)) {
-        await prisma.cateringActivity.create({
-          data: {
-            jobId: created.id,
-            action: 'package_selected',
-            description: `Client selected package`,
-            actorType: 'client',
-          },
-        });
-        await prisma.cateringActivity.create({
-          data: {
-            jobId: created.id,
-            action: 'status_changed',
-            description: 'Contract signed by client',
-            metadata: { from: 'proposal_sent', to: 'contract_signed' },
-            actorType: 'client',
-          },
-        });
-      }
-
-      if (['deposit_received', 'in_progress', 'completed'].includes(evt.status)) {
-        await prisma.cateringActivity.create({
-          data: {
-            jobId: created.id,
-            action: 'milestone_paid',
-            description: 'Deposit received',
-            actorType: 'system',
-          },
-        });
-        await prisma.cateringActivity.create({
-          data: {
-            jobId: created.id,
-            action: 'status_changed',
-            description: 'Deposit received — job confirmed',
-            metadata: { from: 'contract_signed', to: 'deposit_received' },
-            actorType: 'system',
-          },
-        });
-      }
-
-      if (['in_progress', 'completed'].includes(evt.status)) {
-        await prisma.cateringActivity.create({
-          data: {
-            jobId: created.id,
-            action: 'status_changed',
-            description: 'Job moved to in progress',
-            metadata: { from: 'deposit_received', to: 'in_progress' },
-            actorType: 'operator',
-          },
-        });
-      }
-
-      if (evt.status === 'completed') {
-        await prisma.cateringActivity.create({
-          data: {
-            jobId: created.id,
-            action: 'milestone_paid',
-            description: 'Final payment received',
-            actorType: 'system',
-          },
-        });
-        await prisma.cateringActivity.create({
-          data: {
-            jobId: created.id,
-            action: 'status_changed',
-            description: 'Job completed',
-            metadata: { from: 'in_progress', to: 'completed' },
-            actorType: 'operator',
-          },
-        });
-      }
+      await seedCateringActivities(created.id, evt.title, evt.status);
     }
   }
   console.log(`   ${events.length} catering events with financial data`);
@@ -1086,59 +1123,7 @@ async function seedJaysCatering() {
   console.log('   Capacity settings (4 events/day, 500 headcount/day)');
 
   // 7. Staff PINs + Team Members
-  console.log('   Creating staff...');
-  await prisma.staffPin.deleteMany({ where: { restaurantId } });
-
-  const existingStaff = await prisma.teamMember.findMany({
-    where: { restaurantId },
-    select: { id: true },
-  });
-  if (existingStaff.length > 0) {
-    await prisma.teamMemberJob.deleteMany({
-      where: { teamMemberId: { in: existingStaff.map(m => m.id) } },
-    });
-  }
-
-  for (const sp of STAFF_PINS) {
-    let teamMember = await prisma.teamMember.findFirst({
-      where: { restaurantId, displayName: sp.displayName },
-    });
-
-    if (!teamMember) {
-      teamMember = await prisma.teamMember.create({
-        data: {
-          displayName: sp.displayName,
-          firstName: sp.displayName,
-          role: sp.role,
-          restaurantId,
-          status: 'active',
-        },
-      });
-    }
-
-    await prisma.teamMemberJob.create({
-      data: {
-        teamMemberId: teamMember.id,
-        jobTitle: sp.jobTitle,
-        hourlyRate: sp.hourlyRate,
-        isTipEligible: sp.isTipEligible,
-        isPrimary: true,
-        overtimeEligible: sp.role === 'staff',
-      },
-    });
-
-    const pinHash = await bcrypt.hash(sp.pin, SALT_ROUNDS);
-    await prisma.staffPin.create({
-      data: {
-        restaurantId,
-        name: sp.displayName,
-        pin: pinHash,
-        role: sp.role,
-        teamMemberId: teamMember.id,
-      },
-    });
-  }
-  console.log(`   ${STAFF_PINS.length} staff PINs`);
+  await seedStaffPins(restaurantId);
 
   // Summary
   console.log('\n' + '='.repeat(55));
@@ -1162,11 +1147,9 @@ async function seedJaysCatering() {
   console.log('');
   console.log('   Login with owner@taipa.com / owner123');
   console.log("   Select 'Jay's Catering' from restaurant picker\n");
+} catch (error: unknown) {
+  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  process.exit(1);
+} finally {
+  await prisma.$disconnect();
 }
-
-seedJaysCatering()
-  .catch((error) => {
-    console.error('Seed failed:', error);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());

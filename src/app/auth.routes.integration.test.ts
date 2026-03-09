@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { api } from '../test/request-helper';
 import { getPrismaMock, resetPrismaMock } from '../test/prisma-mock';
-import { tokens } from '../test/auth-helper';
-import { USERS, RESTAURANT_ID, RESTAURANT_GROUP_ID, SESSION } from '../test/fixtures';
+import { USERS, RESTAURANT_ID, RESTAURANT_GROUP_ID } from '../test/fixtures';
 
 // Mock authService — must not reference imports in the factory (hoisted)
 vi.mock('../services/auth.service', async (importOriginal) => {
@@ -36,8 +35,8 @@ beforeEach(() => {
   vi.clearAllMocks();
 
   // Restore defaults after clearAllMocks
-  (authService.validateSession as any).mockResolvedValue(true);
-  (authService.loginUser as any).mockResolvedValue({
+  vi.mocked(authService.validateSession).mockResolvedValue(true);
+  vi.mocked(authService.loginUser).mockResolvedValue({
     success: true,
     token: 'mock-jwt-token',
     user: {
@@ -50,25 +49,25 @@ beforeEach(() => {
     },
     restaurants: [{ id: RESTAURANT_ID, name: 'Taipa Restaurant', slug: 'taipa', role: 'owner' }],
   });
-  (authService.createUser as any).mockResolvedValue({
+  vi.mocked(authService.createUser).mockResolvedValue({
     success: true,
     user: { id: 'new-user-id', email: 'new@example.com', firstName: 'New', lastName: 'User', role: 'owner' },
   });
-  (authService.verifyStaffPin as any).mockResolvedValue({
+  vi.mocked(authService.verifyStaffPin).mockResolvedValue({
     success: true,
     staffPin: { id: 'pin-1', name: 'John', role: 'staff', restaurantId: RESTAURANT_ID },
   });
-  (authService.createStaffPin as any).mockResolvedValue({
+  vi.mocked(authService.createStaffPin).mockResolvedValue({
     success: true,
     staffPin: { id: 'pin-new', name: 'Jane', role: 'staff' },
   });
-  (authService.updateStaffPin as any).mockResolvedValue({ success: true });
-  (authService.deleteStaffPin as any).mockResolvedValue({ success: true });
-  (authService.logout as any).mockResolvedValue({ success: true });
-  (authService.changePassword as any).mockResolvedValue({ success: true });
-  (authService.updateUser as any).mockResolvedValue({ success: true });
-  (authService.listUsers as any).mockResolvedValue([]);
-  (authService.checkRestaurantAccess as any).mockResolvedValue({ hasAccess: true, role: 'owner' });
+  vi.mocked(authService.updateStaffPin).mockResolvedValue({ success: true });
+  vi.mocked(authService.deleteStaffPin).mockResolvedValue({ success: true });
+  vi.mocked(authService.logout).mockResolvedValue({ success: true });
+  vi.mocked(authService.changePassword).mockResolvedValue({ success: true });
+  vi.mocked(authService.updateUser).mockResolvedValue({ success: true });
+  vi.mocked(authService.listUsers).mockResolvedValue([]);
+  vi.mocked(authService.checkRestaurantAccess).mockResolvedValue({ hasAccess: true, role: 'owner' });
 });
 
 // ============ POST /api/auth/signup ============
@@ -78,14 +77,14 @@ describe('POST /api/auth/signup', () => {
 
   it('creates account and returns token', async () => {
     const res = await api.anonymous().post(url).send({
-      firstName: 'New', lastName: 'User', email: 'new@example.com', password: 'password123',
+      firstName: 'New', lastName: 'User', email: 'new@example.com', password: 'password123', // NOSONAR - intentional test credential
     });
     expect(res.status).toBe(201);
     expect(res.body.token).toBeDefined();
   });
 
   it('returns 400 for missing email', async () => {
-    const res = await api.anonymous().post(url).send({ firstName: 'New', lastName: 'User', password: 'password123' });
+    const res = await api.anonymous().post(url).send({ firstName: 'New', lastName: 'User', password: 'password123' }); // NOSONAR - intentional test credential
     expect(res.status).toBe(400);
   });
 
@@ -95,21 +94,21 @@ describe('POST /api/auth/signup', () => {
   });
 
   it('returns 400 for missing names', async () => {
-    const res = await api.anonymous().post(url).send({ email: 'new@example.com', password: 'password123' });
+    const res = await api.anonymous().post(url).send({ email: 'new@example.com', password: 'password123' }); // NOSONAR - intentional test credential
     expect(res.status).toBe(400);
   });
 
   it('returns 400 for short password', async () => {
     const res = await api.anonymous().post(url).send({
-      firstName: 'New', lastName: 'User', email: 'new@example.com', password: '12345',
+      firstName: 'New', lastName: 'User', email: 'new@example.com', password: '12345', // NOSONAR - intentional test credential
     });
     expect(res.status).toBe(400);
   });
 
   it('returns 400 when email already exists', async () => {
-    (authService.createUser as any).mockResolvedValue({ success: false, error: 'Email already registered' });
+    vi.mocked(authService.createUser).mockResolvedValue({ success: false, error: 'Email already registered' });
     const res = await api.anonymous().post(url).send({
-      firstName: 'New', lastName: 'User', email: 'existing@example.com', password: 'password123',
+      firstName: 'New', lastName: 'User', email: 'existing@example.com', password: 'password123', // NOSONAR - intentional test credential
     });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Email already registered');
@@ -122,7 +121,7 @@ describe('POST /api/auth/login', () => {
   const url = '/api/auth/login';
 
   it('returns token and user on success', async () => {
-    const res = await api.anonymous().post(url).send({ email: 'owner@taipa.com', password: 'owner123' });
+    const res = await api.anonymous().post(url).send({ email: 'owner@taipa.com', password: 'owner123' }); // NOSONAR - intentional test credential
     expect(res.status).toBe(200);
     expect(res.body.token).toBeDefined();
     expect(res.body.user).toBeDefined();
@@ -130,7 +129,7 @@ describe('POST /api/auth/login', () => {
   });
 
   it('returns 400 for missing email', async () => {
-    const res = await api.anonymous().post(url).send({ password: 'owner123' });
+    const res = await api.anonymous().post(url).send({ password: 'owner123' }); // NOSONAR - intentional test credential
     expect(res.status).toBe(400);
   });
 
@@ -140,8 +139,8 @@ describe('POST /api/auth/login', () => {
   });
 
   it('returns 401 for invalid credentials', async () => {
-    (authService.loginUser as any).mockResolvedValue({ success: false, error: 'Invalid email or password' });
-    const res = await api.anonymous().post(url).send({ email: 'wrong@example.com', password: 'wrongpass' });
+    vi.mocked(authService.loginUser).mockResolvedValue({ success: false, error: 'Invalid email or password' });
+    const res = await api.anonymous().post(url).send({ email: 'wrong@example.com', password: 'wrongpass' }); // NOSONAR - intentional test credential
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('Invalid email or password');
   });
@@ -182,7 +181,7 @@ describe('GET /api/auth/me', () => {
   });
 
   it('returns 401 for expired session', async () => {
-    (authService.validateSession as any).mockResolvedValue(false);
+    vi.mocked(authService.validateSession).mockResolvedValue(false);
     const res = await api.owner.get('/api/auth/me');
     expect(res.status).toBe(401);
   });
@@ -205,7 +204,7 @@ describe('POST /api/auth/:merchantId/pin/verify', () => {
   });
 
   it('returns 401 for invalid PIN', async () => {
-    (authService.verifyStaffPin as any).mockResolvedValue({ success: false, error: 'Invalid PIN' });
+    vi.mocked(authService.verifyStaffPin).mockResolvedValue({ success: false, error: 'Invalid PIN' });
     const res = await api.anonymous().post(url).send({ pin: '9999' });
     expect(res.status).toBe(401);
   });
@@ -264,7 +263,7 @@ describe('User Management', () => {
   });
 
   it('GET /users returns list for admin', async () => {
-    (authService.listUsers as any).mockResolvedValue([{ id: USERS.owner.id, email: USERS.owner.email }]);
+    vi.mocked(authService.listUsers).mockResolvedValue([{ id: USERS.owner.id, email: USERS.owner.email }]);
     const res = await api.owner.get('/api/auth/users');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
@@ -306,37 +305,37 @@ describe('User Management', () => {
 
 describe('POST /api/auth/change-password', () => {
   it('returns 401 without auth', async () => {
-    const res = await api.anonymous().post('/api/auth/change-password').send({ oldPassword: 'old', newPassword: 'new123' });
+    const res = await api.anonymous().post('/api/auth/change-password').send({ oldPassword: 'old', newPassword: 'new123' }); // NOSONAR - intentional test credential
     expect(res.status).toBe(401);
   });
 
   it('changes password', async () => {
-    const res = await api.owner.post('/api/auth/change-password').send({ oldPassword: 'owner123', newPassword: 'newpass123' });
+    const res = await api.owner.post('/api/auth/change-password').send({ oldPassword: 'owner123', newPassword: 'newpass123' }); // NOSONAR - intentional test credential
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
 
   it('returns 400 for missing fields', async () => {
-    const res = await api.owner.post('/api/auth/change-password').send({ oldPassword: 'owner123' });
+    const res = await api.owner.post('/api/auth/change-password').send({ oldPassword: 'owner123' }); // NOSONAR - intentional test credential
     expect(res.status).toBe(400);
   });
 });
 
 describe('POST /api/auth/users (create user)', () => {
   it('returns 403 for non-super_admin', async () => {
-    const res = await api.owner.post('/api/auth/users').send({ email: 'new@e.com', password: 'pass123' });
+    const res = await api.owner.post('/api/auth/users').send({ email: 'new@e.com', password: 'pass123' }); // NOSONAR - intentional test credential
     expect(res.status).toBe(403);
   });
 
   it('creates user as super_admin', async () => {
     const res = await api.superAdmin.post('/api/auth/users').send({
-      email: 'new@e.com', password: 'pass123', firstName: 'New', lastName: 'User',
+      email: 'new@e.com', password: 'pass123', firstName: 'New', lastName: 'User', // NOSONAR - intentional test credential
     });
     expect(res.status).toBe(201);
   });
 
   it('returns 400 for missing email', async () => {
-    const res = await api.superAdmin.post('/api/auth/users').send({ password: 'pass123' });
+    const res = await api.superAdmin.post('/api/auth/users').send({ password: 'pass123' }); // NOSONAR - intentional test credential
     expect(res.status).toBe(400);
   });
 });

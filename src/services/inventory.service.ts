@@ -237,7 +237,7 @@ export class InventoryService {
         previousStock: item.currentStock,
         newStock,
         changeAmount: quantity,
-        reason: `restock${invoiceNumber ? ` (Invoice: ${invoiceNumber})` : ''}`,
+        reason: invoiceNumber ? `restock (Invoice: ${invoiceNumber})` : 'restock',
         createdAt: new Date()
       }
     });
@@ -396,7 +396,7 @@ export class InventoryService {
     const reorderList = predictions
       .filter(p => p.reorderRecommended)
       .map(p => {
-        const item = items.find(i => i.id === p.inventoryItemId)!;
+        const item = items.find(i => i.id === p.inventoryItemId);
         return {
           item,
           suggestedQuantity: p.reorderQuantity,

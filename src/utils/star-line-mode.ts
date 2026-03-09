@@ -11,7 +11,7 @@ const LF = 0x0A;
  * Star Line Mode command builder for thermal receipt printing
  */
 export class StarLineMode {
-  private buffer: number[] = [];
+  private readonly buffer: number[] = [];
 
   /**
    * Initialize printer (ESC @)
@@ -135,29 +135,17 @@ function formatDateTime(date: Date | string): string {
   return `${month}/${day}/${year} ${hours}:${minutes}`;
 }
 
-/**
- * Generate receipt for an order
- */
-export function generateReceipt(order: any, printer: any, restaurantName: string): Buffer {
-  const slm = new StarLineMode();
-  const width = printer.printWidth ?? 48;
-
-  // Initialize
-  slm.init();
-
-  // Header - Restaurant Name (centered, bold)
+function renderReceiptHeader(slm: StarLineMode, order: any, restaurantName: string, width: number): void {
   slm.divider('=', width);
   slm.setBold(true).setAlignment(1);
   slm.textLine(restaurantName.toUpperCase());
   slm.setBold(false).setAlignment(0);
   slm.divider('=', width);
 
-  // Order info
   const orderType = order.orderType ?? 'Dine-In';
   slm.paddedLine(`Order #${order.orderNumber}`, orderType, width);
   slm.textLine(formatDateTime(order.createdAt));
 
-  // Table/Customer info
   if (order.table?.tableNumber) {
     slm.textLine(`Table: ${order.table.tableNumber}`);
   }
@@ -170,36 +158,31 @@ export function generateReceipt(order: any, printer: any, restaurantName: string
 
   slm.divider('=', width);
   slm.newline();
+}
 
-  // Order items
-  if (order.orderItems && order.orderItems.length > 0) {
-    for (const item of order.orderItems) {
-      // Quantity and item name
-      const qtyStr = `  ${item.quantity}x  `;
-      const itemName = truncate(item.menuItemName, width - qtyStr.length - 10);
-      const itemPrice = formatCurrency(item.totalPrice);
+function renderReceiptItems(slm: StarLineMode, order: any, width: number): void {
+  if (!order.orderItems || order.orderItems.length === 0) return;
 
-      slm.paddedLine(qtyStr + itemName, itemPrice, width);
+  for (const item of order.orderItems) {
+    const qtyStr = `  ${item.quantity}x  `;
+    const itemName = truncate(item.menuItemName, width - qtyStr.length - 10);
+    slm.paddedLine(qtyStr + itemName, formatCurrency(item.totalPrice), width);
 
-      // Modifiers
-      if (item.modifiers && item.modifiers.length > 0) {
-        for (const mod of item.modifiers) {
-          const modText = `        + ${truncate(mod.modifierName, width - 20)}`;
-          const modPrice = formatCurrency(mod.priceAdjustment);
-          slm.paddedLine(modText, modPrice, width);
-        }
+    if (item.modifiers && item.modifiers.length > 0) {
+      for (const mod of item.modifiers) {
+        slm.paddedLine(`        + ${truncate(mod.modifierName, width - 20)}`, formatCurrency(mod.priceAdjustment), width);
       }
-
-      // Special instructions
-      if (item.specialInstructions) {
-        slm.text('      Note: ').textLine(truncate(item.specialInstructions, width - 12));
-      }
-
-      slm.newline();
     }
-  }
 
-  // Totals
+    if (item.specialInstructions) {
+      slm.text('      Note: ').textLine(truncate(item.specialInstructions, width - 12));
+    }
+
+    slm.newline();
+  }
+}
+
+function renderReceiptTotals(slm: StarLineMode, order: any, width: number): void {
   slm.divider('=', width);
   slm.paddedLine('Subtotal', formatCurrency(Number.parseFloat(order.subtotal.toString())), width);
   slm.paddedLine(`Tax (${(order.restaurant?.taxRate ?? 0.0825) * 100}%)`, formatCurrency(Number.parseFloat(order.tax.toString())), width);
@@ -207,11 +190,9 @@ export function generateReceipt(order: any, printer: any, restaurantName: string
   if (order.tip && Number.parseFloat(order.tip.toString()) > 0) {
     slm.paddedLine('Tip', formatCurrency(Number.parseFloat(order.tip.toString())), width);
   }
-
   if (order.deliveryFee && Number.parseFloat(order.deliveryFee.toString()) > 0) {
     slm.paddedLine('Delivery Fee', formatCurrency(Number.parseFloat(order.deliveryFee.toString())), width);
   }
-
   if (order.discount && Number.parseFloat(order.discount.toString()) > 0) {
     slm.paddedLine('Discount', `-${formatCurrency(Number.parseFloat(order.discount.toString()))}`, width);
   }
@@ -221,21 +202,19 @@ export function generateReceipt(order: any, printer: any, restaurantName: string
   slm.paddedLine('TOTAL', formatCurrency(Number.parseFloat(order.total.toString())), width);
   slm.setBold(false);
   slm.divider('=', width);
+}
 
-  // Payment method
+function renderReceiptFooter(slm: StarLineMode, order: any, width: number): void {
   if (order.paymentMethod) {
     slm.newline();
     slm.textLine(`Payment: ${order.paymentMethod}`);
   }
-
-  // Special instructions
   if (order.specialInstructions) {
     slm.newline();
     slm.textLine('Order Notes:');
     slm.textLine(truncate(order.specialInstructions, width));
   }
 
-  // Footer
   slm.newline(2);
   slm.setAlignment(1);
   slm.textLine('Thank you for your order!');
@@ -244,8 +223,20 @@ export function generateReceipt(order: any, printer: any, restaurantName: string
   slm.newline();
   slm.divider('=', width);
   slm.newline(3);
+}
 
-  // Cut paper
+/**
+ * Generate receipt for an order
+ */
+export function generateReceipt(order: any, printer: any, restaurantName: string): Buffer {
+  const slm = new StarLineMode();
+  const width = printer.printWidth ?? 48;
+
+  slm.init();
+  renderReceiptHeader(slm, order, restaurantName, width);
+  renderReceiptItems(slm, order, width);
+  renderReceiptTotals(slm, order, width);
+  renderReceiptFooter(slm, order, width);
   slm.cut();
 
   return slm.build();

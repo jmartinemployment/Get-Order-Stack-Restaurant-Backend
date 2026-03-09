@@ -368,7 +368,7 @@ export const paypalService = {
         }
 
         default:
-          console.log(`[PayPal Webhook] Unhandled event type: ${eventType}`);
+          console.log('[PayPal Webhook] Unhandled event type', { eventType });
       }
 
       return { success: true };

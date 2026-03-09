@@ -240,7 +240,7 @@ describe('POST /api/onboarding/create', () => {
     const res = await api.anonymous().post('/api/onboarding/create').send({
       businessName: 'New Restaurant',
       ownerEmail: 'newowner@test.com',
-      ownerPassword: 'password123',
+      ownerPassword: 'password123', // NOSONAR - intentional test credential
     });
     expect(res.status).toBe(201);
     expect(res.body.restaurantId).toBe(RESTAURANT_ID);
@@ -277,7 +277,7 @@ describe('POST /api/onboarding/create', () => {
     const res = await api.anonymous().post('/api/onboarding/create').send({
       businessName: 'Test',
       ownerEmail: 'existing@test.com',
-      ownerPassword: 'password123',
+      ownerPassword: 'password123', // NOSONAR - intentional test credential
     });
     expect(res.status).toBe(409);
     expect(res.body.error).toContain('already exists');

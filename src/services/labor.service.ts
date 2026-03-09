@@ -27,6 +27,39 @@ interface LaborRecommendation {
   potentialSavings?: number;
 }
 
+function formatHourLabel(hour: number): string {
+  const displayHour = hour > 12 ? hour - 12 : hour;
+  const period = hour >= 12 ? 'PM' : 'AM';
+  return `${displayHour}${period}`;
+}
+
+function evaluateHourlyStaffing(
+  hour: number,
+  orders: number,
+  staffCount: number,
+): LaborRecommendation | null {
+  if (orders > 10 && staffCount < 2) {
+    return {
+      type: 'understaffed',
+      title: `Understaffed at ${formatHourLabel(hour)}`,
+      message: `${orders} orders at ${hour}:00 with only ${staffCount} staff scheduled. Consider adding 1-2 more staff.`,
+      hour,
+      priority: 'high',
+    };
+  }
+  if (orders < 3 && staffCount > 3) {
+    return {
+      type: 'overstaffed',
+      title: `Overstaffed at ${formatHourLabel(hour)}`,
+      message: `Only ${orders} orders at ${hour}:00 with ${staffCount} staff scheduled. Could reduce by ${staffCount - 2} staff.`,
+      hour,
+      priority: 'medium',
+      potentialSavings: (staffCount - 2) * 15,
+    };
+  }
+  return null;
+}
+
 function generateBasicRecommendations(
   ordersByHour: Record<number, number>,
   shiftsByHour: Record<number, number>,
@@ -36,26 +69,8 @@ function generateBasicRecommendations(
   for (const [hourStr, orders] of Object.entries(ordersByHour)) {
     const hour = Number(hourStr);
     const staffCount = shiftsByHour[hour] ?? 0;
-
-    if (orders > 10 && staffCount < 2) {
-      recommendations.push({
-        type: 'understaffed',
-        title: `Understaffed at ${hour > 12 ? hour - 12 : hour}${hour >= 12 ? 'PM' : 'AM'}`,
-        message: `${orders} orders at ${hour}:00 with only ${staffCount} staff scheduled. Consider adding 1-2 more staff.`,
-        hour,
-        priority: 'high',
-      });
-    } else if (orders < 3 && staffCount > 3) {
-      const savings = (staffCount - 2) * 15;
-      recommendations.push({
-        type: 'overstaffed',
-        title: `Overstaffed at ${hour > 12 ? hour - 12 : hour}${hour >= 12 ? 'PM' : 'AM'}`,
-        message: `Only ${orders} orders at ${hour}:00 with ${staffCount} staff scheduled. Could reduce by ${staffCount - 2} staff.`,
-        hour,
-        priority: 'medium',
-        potentialSavings: savings,
-      });
-    }
+    const rec = evaluateHourlyStaffing(hour, orders, staffCount);
+    if (rec) recommendations.push(rec);
   }
 
   if (recommendations.length === 0) {
@@ -466,7 +481,7 @@ export const laborService = {
         revenue: Math.round(dayRevenue * 100) / 100,
         laborPercent: dayLaborPercent,
         targetPercent: target,
-        variancePercent: target !== null ? Math.round((dayLaborPercent - target) * 100) / 100 : null,
+        variancePercent: target === null ? null : Math.round((dayLaborPercent - target) * 100) / 100,
       };
     }).sort((a, b) => a.date.localeCompare(b.date));
 
@@ -592,7 +607,7 @@ Format: [{"type":"...", "title":"...", "message":"...", "priority":"...", ...}]`
       id: t.id,
       dayOfWeek: t.dayOfWeek,
       targetPercent: Number(t.targetPercent),
-      targetCost: t.targetCost !== null ? Number(t.targetCost) : null,
+      targetCost: t.targetCost === null ? null : Number(t.targetCost),
     }));
   },
 
@@ -620,7 +635,7 @@ Format: [{"type":"...", "title":"...", "message":"...", "priority":"...", ...}]`
       id: target.id,
       dayOfWeek: target.dayOfWeek,
       targetPercent: Number(target.targetPercent),
-      targetCost: target.targetCost !== null ? Number(target.targetCost) : null,
+      targetCost: target.targetCost === null ? null : Number(target.targetCost),
     };
   },
 };

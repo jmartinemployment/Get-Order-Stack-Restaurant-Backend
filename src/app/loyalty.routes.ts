@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { toErrorMessage } from '../utils/errors';
 import { loyaltyService } from '../services/loyalty.service';
 import {
   LoyaltyConfigUpdateSchema,
@@ -245,7 +246,7 @@ router.get('/:merchantId/referrals/config', async (req: Request, res: Response) 
       maxReferrals: config.maxReferrals,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error getting referral config:', message);
     res.status(500).json({ error: 'Failed to get referral config' });
   }
@@ -267,7 +268,7 @@ router.put('/:merchantId/referrals/config', async (req: Request, res: Response) 
       maxReferrals: config.maxReferrals,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error saving referral config:', message);
     res.status(500).json({ error: 'Failed to save referral config' });
   }

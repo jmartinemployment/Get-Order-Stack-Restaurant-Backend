@@ -138,28 +138,36 @@ class OrderThrottlingService {
   async evaluateAndRelease(restaurantId: string): Promise<ThrottleEvaluationResult> {
     const settings = await this.getSettings(restaurantId);
     if (!settings.orderThrottlingEnabled) {
-      const heldOrders = await this.prisma.order.findMany({
-        where: {
-          restaurantId,
-          throttleState: 'HELD',
-          status: { in: ACTIVE_ORDER_STATUSES },
-        },
-        select: { id: true },
-      });
-
-      const releasedOrderIds: string[] = [];
-      for (const held of heldOrders) {
-        const released = await this.releaseOrder(held.id, 'LOAD_RECOVERED', 'AUTO');
-        if (released) releasedOrderIds.push(held.id);
-      }
-      return { releasedOrderIds };
+      return this.releaseAllHeld(restaurantId);
     }
 
-    const releasedOrderIds: string[] = [];
-    const now = Date.now();
-    const maxHoldCutoff = new Date(now - settings.maxHoldMinutes * 60 * 1000);
+    const releasedOrderIds = await this.releaseStaleHeld(restaurantId, settings.maxHoldMinutes);
+    const loadReleased = await this.releaseOnLoadRecovery(restaurantId, settings);
+    releasedOrderIds.push(...loadReleased);
 
-    // Safety release for tickets held too long.
+    return { releasedOrderIds };
+  }
+
+  private async releaseAllHeld(restaurantId: string): Promise<ThrottleEvaluationResult> {
+    const heldOrders = await this.prisma.order.findMany({
+      where: {
+        restaurantId,
+        throttleState: 'HELD',
+        status: { in: ACTIVE_ORDER_STATUSES },
+      },
+      select: { id: true },
+    });
+
+    const releasedOrderIds: string[] = [];
+    for (const held of heldOrders) {
+      const released = await this.releaseOrder(held.id, 'LOAD_RECOVERED', 'AUTO');
+      if (released) releasedOrderIds.push(held.id);
+    }
+    return { releasedOrderIds };
+  }
+
+  private async releaseStaleHeld(restaurantId: string, maxHoldMinutes: number): Promise<string[]> {
+    const maxHoldCutoff = new Date(Date.now() - maxHoldMinutes * 60 * 1000);
     const staleHeldOrders = await this.prisma.order.findMany({
       where: {
         restaurantId,
@@ -171,35 +179,36 @@ class OrderThrottlingService {
       orderBy: { throttleHeldAt: 'asc' },
     });
 
+    const releasedOrderIds: string[] = [];
     for (const held of staleHeldOrders) {
       const released = await this.releaseOrder(held.id, 'MAX_HOLD_TIMEOUT', 'AUTO');
       if (released) releasedOrderIds.push(held.id);
     }
+    return releasedOrderIds;
+  }
 
-    // Release one additional held ticket when kitchen load has recovered.
+  private async releaseOnLoadRecovery(restaurantId: string, settings: OrderThrottlingSettings): Promise<string[]> {
     const load = await this.getKitchenLoad(restaurantId);
     const recovered =
       load.activeOrders <= settings.releaseActiveOrders
       && load.overdueOrders <= settings.releaseOverdueOrders;
 
-    if (recovered) {
-      const nextHeld = await this.prisma.order.findFirst({
-        where: {
-          restaurantId,
-          throttleState: 'HELD',
-          status: { in: ACTIVE_ORDER_STATUSES },
-        },
-        select: { id: true },
-        orderBy: { throttleHeldAt: 'asc' },
-      });
+    if (!recovered) return [];
 
-      if (nextHeld) {
-        const released = await this.releaseOrder(nextHeld.id, 'LOAD_RECOVERED', 'AUTO');
-        if (released) releasedOrderIds.push(nextHeld.id);
-      }
-    }
+    const nextHeld = await this.prisma.order.findFirst({
+      where: {
+        restaurantId,
+        throttleState: 'HELD',
+        status: { in: ACTIVE_ORDER_STATUSES },
+      },
+      select: { id: true },
+      orderBy: { throttleHeldAt: 'asc' },
+    });
 
-    return { releasedOrderIds };
+    if (!nextHeld) return [];
+
+    const released = await this.releaseOrder(nextHeld.id, 'LOAD_RECOVERED', 'AUTO');
+    return released ? [nextHeld.id] : [];
   }
 
   private async holdOrder(
@@ -297,15 +306,15 @@ class OrderThrottlingService {
     const courseItems: Array<{ id: string; sortOrder: number }> = [];
 
     for (const item of items) {
-      if (!item.courseGuid) {
-        nonCourseItemIds.push(item.id);
-      } else {
+      if (item.courseGuid) {
         courseItems.push({
           id: item.id,
           sortOrder: Number.isFinite(Number(item.courseSortOrder))
             ? Number(item.courseSortOrder)
             : 0,
         });
+      } else {
+        nonCourseItemIds.push(item.id);
       }
     }
 

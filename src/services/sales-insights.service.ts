@@ -319,6 +319,47 @@ export class SalesInsightsService {
     return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
   }
 
+  private addRevenueInsights(current: SalesSummary, insights: SalesInsight[]): void {
+    if (!current.comparisonToPrevious) return;
+    const { revenueChangePercent, avgTicketChangePercent } = current.comparisonToPrevious;
+
+    if (revenueChangePercent > 10) {
+      insights.push({ type: 'success', title: 'Revenue Up!', message: `Revenue increased ${revenueChangePercent.toFixed(0)}% compared to yesterday`, metric: `$${current.totalRevenue.toFixed(2)}`, actionable: false, priority: 'high' });
+    } else if (revenueChangePercent < -10) {
+      insights.push({ type: 'warning', title: 'Revenue Down', message: `Revenue decreased ${Math.abs(revenueChangePercent).toFixed(0)}% compared to yesterday`, metric: `$${current.totalRevenue.toFixed(2)}`, actionable: true, priority: 'high' });
+    }
+
+    if (avgTicketChangePercent > 15) {
+      insights.push({ type: 'success', title: 'Higher Average Ticket', message: `Average order value up ${avgTicketChangePercent.toFixed(0)}% to $${current.avgTicket.toFixed(2)}`, actionable: false, priority: 'medium' });
+    }
+  }
+
+  private addProfitMarginInsight(current: SalesSummary, insights: SalesInsight[]): void {
+    if (current.avgProfitMargin < 60) {
+      insights.push({ type: 'warning', title: 'Profit Margin Alert', message: `Average profit margin is ${current.avgProfitMargin.toFixed(0)}%. Industry target is 65-70%.`, actionable: true, priority: 'high' });
+    } else if (current.avgProfitMargin >= 70) {
+      insights.push({ type: 'success', title: 'Strong Margins', message: `Your ${current.avgProfitMargin.toFixed(0)}% profit margin exceeds industry benchmarks`, actionable: false, priority: 'low' });
+    }
+  }
+
+  private addWeekOverWeekInsight(current: SalesSummary, weekAgo: SalesSummary | undefined, insights: SalesInsight[]): void {
+    if (!weekAgo || weekAgo.totalOrders === 0) return;
+    const weekChangePercent = ((current.totalRevenue - weekAgo.totalRevenue) / weekAgo.totalRevenue) * 100;
+    if (Math.abs(weekChangePercent) > 20) {
+      insights.push({ type: weekChangePercent > 0 ? 'success' : 'warning', title: 'Week-over-Week', message: `Revenue ${weekChangePercent > 0 ? 'up' : 'down'} ${Math.abs(weekChangePercent).toFixed(0)}% vs same day last week`, actionable: weekChangePercent < 0, priority: 'medium' });
+    }
+  }
+
+  private addPeakHourInsight(current: SalesSummary, insights: SalesInsight[]): void {
+    const peakHour = Object.entries(current.ordersByHour)
+      .sort(([, a], [, b]) => b - a)[0];
+    if (!peakHour) return;
+    const hour = Number.parseInt(peakHour[0], 10);
+    const pmLabel = hour === 12 ? '12pm' : `${hour - 12}pm`;
+    const hourLabel = hour < 12 ? `${hour}am` : pmLabel;
+    insights.push({ type: 'info', title: 'Peak Hour', message: `Your busiest time was ${hourLabel} with ${peakHour[1]} orders`, actionable: false, priority: 'low' });
+  }
+
   private async generateInsights(
     current: SalesSummary,
     previous: SalesSummary,
@@ -326,101 +367,16 @@ export class SalesInsightsService {
   ): Promise<SalesInsight[]> {
     const insights: SalesInsight[] = [];
 
-    // Revenue comparison
-    if (current.comparisonToPrevious) {
-      const { revenueChangePercent, ordersChangePercent, avgTicketChangePercent } = current.comparisonToPrevious;
+    this.addRevenueInsights(current, insights);
 
-      if (revenueChangePercent > 10) {
-        insights.push({
-          type: 'success',
-          title: 'Revenue Up!',
-          message: `Revenue increased ${revenueChangePercent.toFixed(0)}% compared to yesterday`,
-          metric: `$${current.totalRevenue.toFixed(2)}`,
-          actionable: false,
-          priority: 'high'
-        });
-      } else if (revenueChangePercent < -10) {
-        insights.push({
-          type: 'warning',
-          title: 'Revenue Down',
-          message: `Revenue decreased ${Math.abs(revenueChangePercent).toFixed(0)}% compared to yesterday`,
-          metric: `$${current.totalRevenue.toFixed(2)}`,
-          actionable: true,
-          priority: 'high'
-        });
-      }
-
-      if (avgTicketChangePercent > 15) {
-        insights.push({
-          type: 'success',
-          title: 'Higher Average Ticket',
-          message: `Average order value up ${avgTicketChangePercent.toFixed(0)}% to $${current.avgTicket.toFixed(2)}`,
-          actionable: false,
-          priority: 'medium'
-        });
-      }
-    }
-
-    // Top seller insight
     if (current.topSellingItems.length > 0) {
       const topItem = current.topSellingItems[0];
-      insights.push({
-        type: 'info',
-        title: 'Top Seller',
-        message: `${topItem.name} was your best seller with ${topItem.quantity} sold`,
-        metric: `$${topItem.revenue.toFixed(2)} revenue`,
-        actionable: false,
-        priority: 'medium'
-      });
+      insights.push({ type: 'info', title: 'Top Seller', message: `${topItem.name} was your best seller with ${topItem.quantity} sold`, metric: `$${topItem.revenue.toFixed(2)} revenue`, actionable: false, priority: 'medium' });
     }
 
-    // Profit margin insight
-    if (current.avgProfitMargin < 60) {
-      insights.push({
-        type: 'warning',
-        title: 'Profit Margin Alert',
-        message: `Average profit margin is ${current.avgProfitMargin.toFixed(0)}%. Industry target is 65-70%.`,
-        actionable: true,
-        priority: 'high'
-      });
-    } else if (current.avgProfitMargin >= 70) {
-      insights.push({
-        type: 'success',
-        title: 'Strong Margins',
-        message: `Your ${current.avgProfitMargin.toFixed(0)}% profit margin exceeds industry benchmarks`,
-        actionable: false,
-        priority: 'low'
-      });
-    }
-
-    // Week-over-week comparison
-    if (weekAgo && weekAgo.totalOrders > 0) {
-      const weekChangePercent = ((current.totalRevenue - weekAgo.totalRevenue) / weekAgo.totalRevenue) * 100;
-      if (Math.abs(weekChangePercent) > 20) {
-        insights.push({
-          type: weekChangePercent > 0 ? 'success' : 'warning',
-          title: 'Week-over-Week',
-          message: `Revenue ${weekChangePercent > 0 ? 'up' : 'down'} ${Math.abs(weekChangePercent).toFixed(0)}% vs same day last week`,
-          actionable: weekChangePercent < 0,
-          priority: 'medium'
-        });
-      }
-    }
-
-    // Peak hours
-    const peakHour = Object.entries(current.ordersByHour)
-      .sort(([, a], [, b]) => b - a)[0];
-    if (peakHour) {
-      const hour = Number.parseInt(peakHour[0], 10);
-      const hourLabel = hour < 12 ? `${hour}am` : hour === 12 ? '12pm' : `${hour - 12}pm`;
-      insights.push({
-        type: 'info',
-        title: 'Peak Hour',
-        message: `Your busiest time was ${hourLabel} with ${peakHour[1]} orders`,
-        actionable: false,
-        priority: 'low'
-      });
-    }
+    this.addProfitMarginInsight(current, insights);
+    this.addWeekOverWeekInsight(current, weekAgo, insights);
+    this.addPeakHourInsight(current, insights);
 
     return insights;
   }
@@ -432,6 +388,14 @@ export class SalesInsightsService {
     }
 
     try {
+      const comp = summary.comparisonToPrevious;
+      const revenueSign = comp && comp.revenueChangePercent > 0 ? '+' : '';
+      const ordersSign = comp && comp.ordersChangePercent > 0 ? '+' : '';
+      const ticketSign = comp && comp.avgTicketChangePercent > 0 ? '+' : '';
+      const comparisonBlock = comp
+        ? `COMPARED TO PREVIOUS PERIOD:\n- Revenue: ${revenueSign}${comp.revenueChangePercent.toFixed(0)}%\n- Orders: ${ordersSign}${comp.ordersChangePercent.toFixed(0)}%\n- Avg Ticket: ${ticketSign}${comp.avgTicketChangePercent.toFixed(0)}%`
+        : '';
+
       const prompt = `You are a restaurant business advisor. Based on this sales data for ${restaurantName}, provide 3-4 specific, actionable recommendations.
 
 SALES DATA:
@@ -445,12 +409,7 @@ TOP SELLERS: ${summary.topSellingItems.map(i => `${i.name} (${i.quantity} sold)`
 
 TOP PROFITABLE: ${summary.topProfitableItems.map(i => `${i.name} (${i.margin.toFixed(0)}% margin)`).join(', ')}
 
-${summary.comparisonToPrevious ? `
-COMPARED TO PREVIOUS PERIOD:
-- Revenue: ${summary.comparisonToPrevious.revenueChangePercent > 0 ? '+' : ''}${summary.comparisonToPrevious.revenueChangePercent.toFixed(0)}%
-- Orders: ${summary.comparisonToPrevious.ordersChangePercent > 0 ? '+' : ''}${summary.comparisonToPrevious.ordersChangePercent.toFixed(0)}%
-- Avg Ticket: ${summary.comparisonToPrevious.avgTicketChangePercent > 0 ? '+' : ''}${summary.comparisonToPrevious.avgTicketChangePercent.toFixed(0)}%
-` : ''}
+${comparisonBlock}
 
 Provide recommendations as a JSON array of strings. Each should be:
 - Specific and actionable

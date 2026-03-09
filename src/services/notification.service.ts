@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { toErrorMessage } from '../utils/errors';
 
 const prisma = new PrismaClient();
 
@@ -94,7 +95,7 @@ async function onOrderReady(orderId: string): Promise<NotificationResult[]> {
     });
 
     if (!order) {
-      console.log(`[Notification] Order ${orderId} not found — skipping notification`);
+      console.log('[Notification] Order not found — skipping notification', { orderId });
       return results;
     }
 
@@ -155,7 +156,7 @@ async function onOrderReady(orderId: string): Promise<NotificationResult[]> {
 
     console.log(`[Notification] Order ${order.orderNumber} ready — ${results.length} notification(s) attempted`);
   } catch (error: unknown) {
-    console.error(`[Notification] Error processing order ${orderId}:`, error instanceof Error ? error.message : String(error));
+    console.error(`[Notification] Error processing order ${orderId}:`, toErrorMessage(error));
   }
 
   return results;

@@ -102,7 +102,7 @@ async function apiRequest(
   },
 ): Promise<{ response: Response; body: unknown }> {
   const headers: Record<string, string> = {
-    ...(options?.headers ?? {}),
+    ...options?.headers,
   };
 
   if (options?.token) {
@@ -296,12 +296,12 @@ async function ensureAuthContext(): Promise<AuthContext> {
     throw new Error('Login response missing token');
   }
 
-  const restaurants = asArray(loginJson.restaurants)
+  const firstRestaurant = asArray(loginJson.restaurants)
     .map(asJsonObject)
     .map(entry => ({ id: asString(entry.id) ?? '' }))
-    .filter(entry => entry.id.length > 0);
+    .find(entry => entry.id.length > 0);
 
-  const restaurantId = configuredRestaurantId ?? restaurants[0]?.id;
+  const restaurantId = configuredRestaurantId ?? firstRestaurant?.id;
   if (!restaurantId) {
     throw new Error('No restaurant available for verification');
   }
@@ -449,7 +449,7 @@ async function getFirstMenuItemId(context: AuthContext): Promise<{ id: string; n
   if (!first) throw new Error('No menu items found for e2e verification');
 
   return {
-    id: asString(first.id)!,
+    id: asString(first.id),
     name: asString(first.name) ?? 'Menu Item',
   };
 }
@@ -659,11 +659,12 @@ function printSummary(results: CheckResult[]): void {
   console.log('\n[Phase5] Verification Summary');
   for (const result of results) {
     const status = result.passed ? 'PASS' : 'FAIL';
-    console.log(`- [${status}] ${result.name}${result.details ? ` (${result.details})` : ''}`);
+    const detailsSuffix = result.details ? ` (${result.details})` : '';
+    console.log(`- [${status}] ${result.name}${detailsSuffix}`);
   }
 }
 
-async function run(): Promise<void> {
+try {
   console.log(`[Phase5] API base: ${API_BASE_URL}`);
   console.log(`[Phase5] Provider: ${PROVIDER}`);
   console.log(`[Phase5] Mode: ${MODE}`);
@@ -684,13 +685,10 @@ async function run(): Promise<void> {
 
   if (results.some(result => !result.passed)) {
     process.exitCode = 1;
-    return;
+  } else {
+    console.log('\n[Phase5] All checks passed.');
   }
-
-  console.log('\n[Phase5] All checks passed.');
+} catch (error: unknown) {
+  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  process.exit(1);
 }
-
-run().catch((error: unknown) => {
-  console.error('[Phase5] Verification failed:', error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});

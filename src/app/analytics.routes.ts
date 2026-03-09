@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import { toErrorMessage } from '../utils/errors';
 import { menuEngineeringService } from '../services/menu-engineering.service';
 import { salesInsightsService } from '../services/sales-insights.service';
 import { inventoryService } from '../services/inventory.service';
@@ -65,7 +66,7 @@ router.get('/:merchantId/analytics/today-stats', async (req: Request, res: Respo
       priorDayOrderCount: yesterdayOrders.length,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error getting today stats:', message);
     res.status(500).json({ error: 'Failed to get today stats' });
   }
@@ -213,7 +214,8 @@ router.get('/:merchantId/analytics/menu/cannibalization', async (req: Request, r
 
       for (let i = 0; i < unique.length; i++) {
         for (let j = i + 1; j < unique.length; j++) {
-          const key = [unique[i], unique[j]].sort().join('|');
+          const pair: [string, string] = [unique[i], unique[j]];
+          const key = pair.sort((a, b) => a.localeCompare(b)).join('|');
           pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
         }
       }
@@ -591,7 +593,7 @@ router.get('/:merchantId/inventory/expiring', async (req: Request, res: Response
 
     res.json(expiring);
   } catch (error: unknown) {
-    console.error('Error getting expiring items:', error instanceof Error ? error.message : String(error));
+    console.error('Error getting expiring items:', toErrorMessage(error));
     res.json([]);
   }
 });
@@ -686,7 +688,7 @@ router.post('/:merchantId/inventory/cycle-counts', async (req: Request, res: Res
             inventoryItemId: i.inventoryItemId,
             expectedQty: i.expectedQty,
             actualQty: i.actualQty ?? null,
-            variance: i.actualQty !== undefined ? i.actualQty - i.expectedQty : null,
+            variance: i.actualQty === undefined ? null : i.actualQty - i.expectedQty,
           })),
         } : undefined,
       },
@@ -885,7 +887,7 @@ router.get('/:merchantId/analytics/goals', async (req: Request, res: Response) =
     const goals = (profile?.salesGoals as unknown[]) ?? [];
     res.json(goals);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error getting sales goals:', message);
     res.status(500).json({ error: 'Failed to get sales goals' });
   }
@@ -919,7 +921,7 @@ router.get('/:merchantId/reporting-categories', async (req: Request, res: Respon
 
     res.json(categories);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error getting reporting categories:', message);
     res.status(500).json({ error: 'Failed to get reporting categories' });
   }
@@ -939,7 +941,7 @@ router.post('/:merchantId/reporting-categories', async (req: Request, res: Respo
       return;
     }
 
-    const slug = name.trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const slug = name.trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replaceAll(/^-|-$/g, '');
 
     const category = await prisma.primaryCategory.create({
       data: { restaurantId, name: name.trim(), slug, displayOrder },
@@ -947,7 +949,7 @@ router.post('/:merchantId/reporting-categories', async (req: Request, res: Respo
 
     res.status(201).json(category);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error creating reporting category:', message);
     res.status(500).json({ error: 'Failed to create reporting category' });
   }
@@ -959,13 +961,13 @@ router.post('/:merchantId/reporting-categories', async (req: Request, res: Respo
  */
 router.patch('/:merchantId/reporting-categories/:id', async (req: Request, res: Response) => {
   try {
-    const { id, merchantId: restaurantId } = req.params;
+    const { id } = req.params;
     const { name, displayOrder } = req.body as { name?: string; displayOrder?: number };
 
     const data: Record<string, unknown> = {};
     if (name !== undefined) {
       data['name'] = name.trim();
-      data['slug'] = name.trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      data['slug'] = name.trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replaceAll(/^-|-$/g, '');
     }
     if (displayOrder !== undefined) data['displayOrder'] = displayOrder;
 
@@ -976,7 +978,7 @@ router.patch('/:merchantId/reporting-categories/:id', async (req: Request, res: 
 
     res.json(category);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error updating reporting category:', message);
     res.status(500).json({ error: 'Failed to update reporting category' });
   }
@@ -988,13 +990,13 @@ router.patch('/:merchantId/reporting-categories/:id', async (req: Request, res: 
  */
 router.delete('/:merchantId/reporting-categories/:id', async (req: Request, res: Response) => {
   try {
-    const { id, merchantId: restaurantId } = req.params;
+    const { id } = req.params;
 
     await prisma.primaryCategory.delete({ where: { id } });
 
     res.status(204).send();
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error deleting reporting category:', message);
     res.status(500).json({ error: 'Failed to delete reporting category' });
   }
@@ -1061,7 +1063,7 @@ router.get('/:merchantId/reports/realtime-kpis', async (req: Request, res: Respo
       timestamp: now.toISOString(),
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error getting realtime KPIs:', message);
     res.status(500).json({ error: 'Failed to get realtime KPIs' });
   }
@@ -1132,7 +1134,7 @@ router.get('/:merchantId/bookings/turn-time-stats', async (req: Request, res: Re
     });
   } catch (error: unknown) {
     // If seatedAt/completedAt columns don't exist yet, return defaults
-    console.error('Error getting turn time stats:', error instanceof Error ? error.message : String(error));
+    console.error('Error getting turn time stats:', toErrorMessage(error));
     res.json({ overall: 45, byPartySize: [], byMealPeriod: [], byDayOfWeek: [], sampleSize: 0 });
   }
 });
@@ -1158,7 +1160,7 @@ router.get('/:merchantId/waitlist', async (req: Request, res: Response) => {
     res.json(entries);
   } catch (error: unknown) {
     // If 'waitlisted' status isn't used yet, return empty array
-    console.error('Error getting waitlist:', error instanceof Error ? error.message : String(error));
+    console.error('Error getting waitlist:', toErrorMessage(error));
     res.json([]);
   }
 });
@@ -1185,7 +1187,7 @@ router.get('/:merchantId/purchase-orders', async (req: Request, res: Response) =
     res.json(orders);
   } catch (error: unknown) {
     // If 'type' field doesn't exist yet, return empty array
-    console.error('Error getting purchase orders:', error instanceof Error ? error.message : String(error));
+    console.error('Error getting purchase orders:', toErrorMessage(error));
     res.json([]);
   }
 });
@@ -1210,7 +1212,7 @@ router.get('/:merchantId/order-templates', async (req: Request, res: Response) =
     });
     res.json(templates);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error getting order templates:', message);
     res.status(500).json({ error: 'Failed to get order templates' });
   }
@@ -1231,7 +1233,7 @@ router.post('/:merchantId/order-templates', async (req: Request, res: Response) 
     });
     res.status(201).json(template);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error creating order template:', message);
     res.status(500).json({ error: 'Failed to create order template' });
   }
@@ -1243,7 +1245,7 @@ router.delete('/:merchantId/order-templates/:id', async (req: Request, res: Resp
     await prisma.orderTemplate.delete({ where: { id } });
     res.json({ success: true });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error deleting order template:', message);
     res.status(500).json({ error: 'Failed to delete order template' });
   }
@@ -1280,7 +1282,7 @@ router.get('/:merchantId/reports/saved', async (req: Request, res: Response) => 
     });
     res.json(reports);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error getting saved reports:', message);
     res.status(500).json({ error: 'Failed to get saved reports' });
   }
@@ -1301,7 +1303,7 @@ router.post('/:merchantId/reports/saved', async (req: Request, res: Response) =>
     });
     res.status(201).json(report);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error creating saved report:', message);
     res.status(500).json({ error: 'Failed to create saved report' });
   }
@@ -1321,7 +1323,7 @@ router.patch('/:merchantId/reports/saved/:id', async (req: Request, res: Respons
     });
     res.json(report);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error updating saved report:', message);
     res.status(500).json({ error: 'Failed to update saved report' });
   }
@@ -1333,7 +1335,7 @@ router.delete('/:merchantId/reports/saved/:id', async (req: Request, res: Respon
     await prisma.savedReport.delete({ where: { id } });
     res.json({ success: true });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error deleting saved report:', message);
     res.status(500).json({ error: 'Failed to delete saved report' });
   }
@@ -1368,7 +1370,7 @@ router.get('/:merchantId/reports/schedules', async (req: Request, res: Response)
     });
     res.json(schedules);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error getting report schedules:', message);
     res.status(500).json({ error: 'Failed to get report schedules' });
   }
@@ -1388,7 +1390,7 @@ router.post('/:merchantId/reports/schedules', async (req: Request, res: Response
     });
     res.status(201).json(schedule);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error creating report schedule:', message);
     res.status(500).json({ error: 'Failed to create report schedule' });
   }
@@ -1408,7 +1410,7 @@ router.patch('/:merchantId/reports/schedules/:id', async (req: Request, res: Res
     });
     res.json(schedule);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error updating report schedule:', message);
     res.status(500).json({ error: 'Failed to update report schedule' });
   }
@@ -1420,7 +1422,7 @@ router.delete('/:merchantId/reports/schedules/:id', async (req: Request, res: Re
     await prisma.reportSchedule.delete({ where: { id } });
     res.json({ success: true });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     console.error('Error deleting report schedule:', message);
     res.status(500).json({ error: 'Failed to delete report schedule' });
   }
@@ -2099,11 +2101,12 @@ router.get('/:merchantId/analytics/forecast/revenue', async (req: Request, res: 
       };
     });
 
+    const forecastConfidence = orders.length > 0 ? 'low' : null;
     res.json({
       forecast,
       avgDailyRevenue: Math.round(avgDailyRevenue * 100) / 100,
       basedOnDays: 30,
-      confidence: orders.length > 100 ? 'medium' : orders.length > 0 ? 'low' : null,
+      confidence: orders.length > 100 ? 'medium' : forecastConfidence,
     });
   } catch (error: unknown) {
     console.error('[Analytics] Error getting revenue forecast:', error);
@@ -2141,10 +2144,11 @@ router.get('/:merchantId/analytics/forecast/demand', async (req: Request, res: R
       avgOrders: Math.round(((byDayOfWeek[i] ?? 0) / 4) * 10) / 10, // ~4 weeks in 30 days
     }));
 
+    const demandConfidence = orders.length > 0 ? 'low' : null;
     res.json({
       forecast,
       basedOnDays: 30,
-      confidence: orders.length > 100 ? 'medium' : orders.length > 0 ? 'low' : null,
+      confidence: orders.length > 100 ? 'medium' : demandConfidence,
     });
   } catch (error: unknown) {
     console.error('[Analytics] Error getting demand forecast:', error);
@@ -2187,10 +2191,11 @@ router.get('/:merchantId/analytics/forecast/staffing', async (req: Request, res:
       };
     });
 
+    const staffingConfidence = orders.length > 0 ? 'low' : null;
     res.json({
       forecast,
       basedOnDays: 30,
-      confidence: orders.length > 100 ? 'medium' : orders.length > 0 ? 'low' : null,
+      confidence: orders.length > 100 ? 'medium' : staffingConfidence,
     });
   } catch (error: unknown) {
     console.error('[Analytics] Error getting staffing forecast:', error);

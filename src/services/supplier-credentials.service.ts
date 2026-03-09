@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
+import { toErrorMessage } from '../utils/errors';
 
 const prisma = new PrismaClient();
 
@@ -410,8 +411,7 @@ export const supplierCredentialsService = {
 
       return { success: false, message: `Unknown provider: ${provider}` };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      return { success: false, message: `Connection failed: ${message}` };
+      return { success: false, message: `Connection failed: ${toErrorMessage(error)}` };
     }
   },
 };

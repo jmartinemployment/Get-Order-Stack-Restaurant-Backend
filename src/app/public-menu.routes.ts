@@ -13,6 +13,62 @@ function isOnlineVisible(channelVisibility: string[] | null | undefined): boolea
   return visibility.length === 0 || visibility.includes('online');
 }
 
+interface BusinessHoursEntry {
+  day: string;
+  open: string;
+  close: string;
+  isClosed?: boolean;
+}
+
+interface OnlineStatus {
+  isOpen: boolean;
+  nextOpenTime: string | null;
+}
+
+const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+/**
+ * Determine if the restaurant is currently open based on business hours,
+ * and find the next open time if currently closed.
+ */
+function computeOnlineStatus(businessHours: unknown): OnlineStatus {
+  if (!businessHours || !Array.isArray(businessHours)) {
+    return { isOpen: false, nextOpenTime: null };
+  }
+
+  const hours = businessHours as BusinessHoursEntry[];
+  const now = new Date();
+  const todayName = DAY_NAMES[now.getDay()];
+
+  const todayHours = hours.find(h => h.day === todayName);
+  if (todayHours && !todayHours.isClosed) {
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    if (currentTime >= todayHours.open && currentTime < todayHours.close) {
+      return { isOpen: true, nextOpenTime: null };
+    }
+    if (currentTime < todayHours.open) {
+      return { isOpen: false, nextOpenTime: todayHours.open };
+    }
+  }
+
+  const nextOpenTime = findNextOpenTime(hours, now);
+  return { isOpen: false, nextOpenTime };
+}
+
+/**
+ * Scan the next 7 days to find the earliest opening time.
+ */
+function findNextOpenTime(hours: BusinessHoursEntry[], now: Date): string | null {
+  for (let offset = 1; offset <= 7; offset++) {
+    const nextDay = DAY_NAMES[(now.getDay() + offset) % 7];
+    const nextHours = hours.find(h => h.day === nextDay);
+    if (nextHours && !nextHours.isClosed) {
+      return `${nextDay} ${nextHours.open}`;
+    }
+  }
+  return null;
+}
+
 /**
  * GET /api/public/:merchantSlug/menu
  *
@@ -44,7 +100,7 @@ router.get('/:merchantSlug/menu', async (req: Request, res: Response) => {
       },
     });
 
-    if (!restaurant || !restaurant.active) {
+    if (!restaurant?.active) {
       res.status(404).json({ error: 'Restaurant not found' });
       return;
     }
@@ -180,35 +236,7 @@ router.get('/:merchantSlug/menu', async (req: Request, res: Response) => {
       categoryMap.get(item.categoryId)?.items.push(item);
     }
 
-    // Determine if currently open based on business hours
-    const now = new Date();
-    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const todayName = dayNames[now.getDay()];
-    let isOpen = false;
-    let nextOpenTime: string | null = null;
-
-    if (restaurant.businessHours && Array.isArray(restaurant.businessHours)) {
-      const todayHours = (restaurant.businessHours as Array<{ day: string; open: string; close: string; isClosed?: boolean }>)
-        .find(h => h.day === todayName);
-      if (todayHours && !todayHours.isClosed) {
-        const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        isOpen = currentTime >= todayHours.open && currentTime < todayHours.close;
-        if (!isOpen && currentTime < todayHours.open) {
-          nextOpenTime = todayHours.open;
-        }
-      }
-      if (!isOpen && !nextOpenTime) {
-        for (let offset = 1; offset <= 7; offset++) {
-          const nextDay = dayNames[(now.getDay() + offset) % 7];
-          const nextHours = (restaurant.businessHours as Array<{ day: string; open: string; close: string; isClosed?: boolean }>)
-            .find(h => h.day === nextDay);
-          if (nextHours && !nextHours.isClosed) {
-            nextOpenTime = `${nextDay} ${nextHours.open}`;
-            break;
-          }
-        }
-      }
-    }
+    const onlineStatus = computeOnlineStatus(restaurant.businessHours);
 
     res.json({
       restaurant: {
@@ -225,10 +253,7 @@ router.get('/:merchantSlug/menu', async (req: Request, res: Response) => {
         deliveryEnabled: restaurant.deliveryEnabled,
         dineInEnabled: restaurant.dineInEnabled,
       },
-      onlineStatus: {
-        isOpen,
-        nextOpenTime,
-      },
+      onlineStatus,
       categories: [...categoryMap.values()].filter(c => c.items.length > 0),
     });
   } catch (error: unknown) {

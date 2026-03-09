@@ -111,7 +111,7 @@ router.get('/:merchantId/marketplace/menu-mappings', requireAuth, requireMerchan
     res.json({ mappings });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to load marketplace menu mappings';
-    console.error('[Marketplace] Failed to load menu mappings:', message);
+    console.error('[Marketplace] Failed to load menu mappings', { error: message });
     res.status(500).json({ error: message });
   }
 });

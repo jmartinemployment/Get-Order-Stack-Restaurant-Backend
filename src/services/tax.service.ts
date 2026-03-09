@@ -131,7 +131,8 @@ The rate should be a decimal (e.g., 0.07 for 7%). Include the breakdown of state
         city: parsed.city || null,
         breakdown: parsed.breakdown || null
       };
-    } catch (error) {
+    } catch {
+      // JSON.parse failed — AI returned non-JSON; log the raw text for debugging
       console.error('[TaxService] Failed to parse AI response:', content.text);
       return null;
     }

@@ -3,19 +3,16 @@ import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
-async function createTestUser() {
-  const email = 'admin@orderstack.com';
-  const password = 'admin123'; // Change this in production!
-  const SALT_ROUNDS = 10;
+const email = 'admin@orderstack.com';
+const password = 'admin123'; // NOSONAR - seed script credential (change in production!)
+const SALT_ROUNDS = 10;
 
-  try {
-    // Check if user already exists
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      console.log(`⚠️  User ${email} already exists`);
-      return;
-    }
-
+try {
+  // Check if user already exists
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    console.log(`⚠️  User ${email} already exists`);
+  } else {
     // Hash password
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
@@ -37,12 +34,10 @@ async function createTestUser() {
     console.log(`   Role: super_admin`);
     console.log(`   ID: ${user.id}`);
     console.log(`\n⚠️  Remember to change the password in production!`);
-
-  } catch (error) {
-    console.error('❌ Failed to create user:', error);
-  } finally {
-    await prisma.$disconnect();
   }
+} catch (error: unknown) {
+  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  process.exit(1);
+} finally {
+  await prisma.$disconnect();
 }
-
-createTestUser();

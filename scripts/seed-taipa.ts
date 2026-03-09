@@ -200,8 +200,8 @@ const menuItems: MenuItem[] = [
   { name: 'La Picarona', description: 'Picarones, vanilla ice cream, fudge, whipped cream and Doña Pepa cookies.', price: 13, category: 'Desserts' },
 
   // BEVERAGES
-  { name: 'Inca Kola', description: 'Classic Peruvian soda.', price: 3.50, category: 'Beverages' },
-  { name: 'Inca Diet', description: 'Diet Inca Kola.', price: 3.50, category: 'Beverages' },
+  { name: 'Inca Kola', description: 'Classic Peruvian soda.', price: 3.5, category: 'Beverages' },
+  { name: 'Inca Diet', description: 'Diet Inca Kola.', price: 3.5, category: 'Beverages' },
   { name: 'Kola Inglesa', description: 'Peruvian red soda.', price: 4, category: 'Beverages' },
   { name: 'Fiji Water', description: 'Premium bottled water.', price: 3.75, category: 'Beverages' },
   { name: 'Pellegrino', description: 'Sparkling water.', price: 4, category: 'Beverages' },
@@ -250,11 +250,10 @@ const menuItems: MenuItem[] = [
   { name: 'Red Sangria - Pitcher', description: 'Red sangria. Pitcher.', price: 21, category: 'Cocktails' },
 ];
 
-async function seed() {
-  console.log('🌱 Starting Taipa seed...\n');
+console.log('🌱 Starting Taipa seed...\n');
 
-  try {
-    for (const restaurantData of restaurants) {
+try {
+  for (const restaurantData of restaurants) {
       console.log(`\n📍 Creating restaurant: ${restaurantData.name} (${restaurantData.slug})`);
       
       const existing = await prisma.restaurant.findUnique({
@@ -321,12 +320,9 @@ async function seed() {
     console.log(`   Categories: ${categoryCount}`);
     console.log(`   Menu Items: ${itemCount}`);
 
-  } catch (error) {
-    console.error('❌ Seed failed:', error);
-    throw error;
-  } finally {
-    await prisma.$disconnect();
-  }
+} catch (error: unknown) {
+  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  process.exit(1);
+} finally {
+  await prisma.$disconnect();
 }
-
-seed();

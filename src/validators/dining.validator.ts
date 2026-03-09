@@ -61,9 +61,73 @@ export interface ValidationResult {
 function validateCustomerInfo(customerInfo: unknown, errors: string[]): void {
   const customerResult = CustomerInfoSchema.safeParse(customerInfo);
   if (!customerResult.success) {
-    customerResult.error.issues.forEach(err => {
+    for (const err of customerResult.error.issues) {
       errors.push(`Customer: ${err.path.join('.')}: ${err.message}`);
-    });
+    }
+  }
+}
+
+/**
+ * Validates a required Zod schema field, pushing formatted errors
+ */
+function validateRequiredSchema(
+  data: unknown,
+  schema: z.ZodType,
+  label: string,
+  missingMessage: string,
+  errors: string[],
+): void {
+  if (!data) {
+    errors.push(missingMessage);
+    return;
+  }
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    for (const err of result.error.issues) {
+      errors.push(`${label}: ${err.path.join('.')}: ${err.message}`);
+    }
+  }
+}
+
+function validateDeliveryOrder(data: { customerInfo?: unknown; deliveryInfo?: unknown }, errors: string[]): void {
+  if (data.customerInfo) {
+    validateCustomerInfo(data.customerInfo, errors);
+  } else {
+    errors.push('Customer information is required for delivery orders');
+  }
+  validateRequiredSchema(data.deliveryInfo, DeliveryInfoSchema, 'Delivery', 'Delivery address information is required for delivery orders', errors);
+}
+
+function validateCurbsideOrder(data: { customerInfo?: unknown; curbsideInfo?: unknown }, errors: string[]): void {
+  if (data.customerInfo) {
+    validateCustomerInfo(data.customerInfo, errors);
+  } else {
+    errors.push('Customer information is required for curbside pickup orders');
+  }
+  validateRequiredSchema(data.curbsideInfo, CurbsideInfoSchema, 'Curbside', 'Vehicle description is required for curbside pickup orders', errors);
+}
+
+function validateCateringOrder(data: { customerInfo?: unknown; cateringInfo?: unknown }, errors: string[]): void {
+  if (data.customerInfo) {
+    validateCustomerInfo(data.customerInfo, errors);
+  } else {
+    errors.push('Customer information is required for catering orders');
+  }
+  validateRequiredSchema(data.cateringInfo, CateringInfoSchema, 'Catering', 'Catering event information is required for catering orders', errors);
+}
+
+function validateTakeoutOrder(data: { customerInfo?: unknown; orderSource?: string }, errors: string[]): void {
+  const isAnonymousSource = data.orderSource === 'kiosk';
+  if (data.customerInfo) {
+    validateCustomerInfo(data.customerInfo, errors);
+  } else if (!isAnonymousSource) {
+    errors.push('Customer information is required for takeout orders');
+  }
+}
+
+function validateDineInOrder(data: { tableId?: string; tableNumber?: string }, errors: string[]): void {
+  if (!data.tableId && !data.tableNumber) {
+    errors.push('Table ID or table number is required for dine-in orders');
   }
 }
 
@@ -87,90 +151,23 @@ export function validateDiningData(
   }
 ): ValidationResult {
   const errors: string[] = [];
-  const isAnonymousSource = data.orderSource === 'kiosk';
 
   switch (orderType) {
     case 'delivery':
-      // Delivery always requires customer info AND delivery address
-      if (!data.customerInfo) {
-        errors.push('Customer information is required for delivery orders');
-      } else {
-        validateCustomerInfo(data.customerInfo, errors);
-      }
-
-      if (!data.deliveryInfo) {
-        errors.push('Delivery address information is required for delivery orders');
-      } else {
-        const deliveryResult = DeliveryInfoSchema.safeParse(data.deliveryInfo);
-        if (!deliveryResult.success) {
-          deliveryResult.error.issues.forEach(err => {
-            errors.push(`Delivery: ${err.path.join('.')}: ${err.message}`);
-          });
-        }
-      }
+      validateDeliveryOrder(data, errors);
       break;
-
     case 'curbside':
-      // Curbside requires customer info AND vehicle description
-      if (!data.customerInfo) {
-        errors.push('Customer information is required for curbside pickup orders');
-      } else {
-        validateCustomerInfo(data.customerInfo, errors);
-      }
-
-      if (!data.curbsideInfo) {
-        errors.push('Vehicle description is required for curbside pickup orders');
-      } else {
-        const curbsideResult = CurbsideInfoSchema.safeParse(data.curbsideInfo);
-        if (!curbsideResult.success) {
-          curbsideResult.error.issues.forEach(err => {
-            errors.push(`Curbside: ${err.path.join('.')}: ${err.message}`);
-          });
-        }
-      }
+      validateCurbsideOrder(data, errors);
       break;
-
     case 'catering':
-      // Catering always requires customer info AND event details
-      if (!data.customerInfo) {
-        errors.push('Customer information is required for catering orders');
-      } else {
-        validateCustomerInfo(data.customerInfo, errors);
-      }
-
-      if (!data.cateringInfo) {
-        errors.push('Catering event information is required for catering orders');
-      } else {
-        const cateringResult = CateringInfoSchema.safeParse(data.cateringInfo);
-        if (!cateringResult.success) {
-          cateringResult.error.issues.forEach(err => {
-            errors.push(`Catering: ${err.path.join('.')}: ${err.message}`);
-          });
-        }
-      }
+      validateCateringOrder(data, errors);
       break;
-
     case 'takeout':
-      // Takeout requires customer info unless from an anonymous source (kiosk)
-      if (!isAnonymousSource) {
-        if (!data.customerInfo) {
-          errors.push('Customer information is required for takeout orders');
-        } else {
-          validateCustomerInfo(data.customerInfo, errors);
-        }
-      } else if (data.customerInfo) {
-        // Kiosk may optionally provide customer info — validate if present
-        validateCustomerInfo(data.customerInfo, errors);
-      }
+      validateTakeoutOrder(data, errors);
       break;
-
     case 'dine-in':
-      // Dine-in requires table assignment
-      if (!data.tableId && !data.tableNumber) {
-        errors.push('Table ID or table number is required for dine-in orders');
-      }
+      validateDineInOrder(data, errors);
       break;
-
     default:
       errors.push(`Unknown order type: ${orderType}`);
   }

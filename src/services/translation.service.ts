@@ -18,8 +18,8 @@ interface GoogleTranslateResponse {
 }
 
 export class TranslationService {
-  private apiKey: string;
-  private baseUrl = 'https://translation.googleapis.com/language/translate/v2';
+  private readonly apiKey: string;
+  private readonly baseUrl = 'https://translation.googleapis.com/language/translate/v2';
 
   constructor() {
     this.apiKey = process.env.GOOGLE_TRANSLATE_API_KEY || '';

@@ -19,6 +19,12 @@ const TIER_NAMES: Record<string, string> = {
   premium: 'Premium',
 };
 
+function tierAmountCents(tier: string): number {
+  if (tier === 'plus') return 2500;
+  if (tier === 'premium') return 6900;
+  return 0;
+}
+
 // GET /:merchantId/subscription — current subscription info
 router.get('/:merchantId/subscription', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -49,7 +55,7 @@ router.get('/:merchantId/subscription', requireAuth, async (req: Request, res: R
       currentPeriodStart: now.toISOString(),
       currentPeriodEnd: periodEnd.toISOString(),
       cancelAtPeriodEnd: false,
-      amountCents: tier === 'plus' ? 2500 : tier === 'premium' ? 6900 : 0,
+      amountCents: tierAmountCents(tier),
       interval: 'month',
       processingRates: {
         percent: tierConfig.percent,
@@ -98,7 +104,7 @@ router.post('/:merchantId/subscription/change-plan', requireAuth, async (req: Re
       currentPeriodStart: now.toISOString(),
       currentPeriodEnd: periodEnd.toISOString(),
       cancelAtPeriodEnd: false,
-      amountCents: planTier === 'plus' ? 2500 : planTier === 'premium' ? 6900 : 0,
+      amountCents: tierAmountCents(planTier),
       interval: 'month',
     });
   } catch (error: unknown) {

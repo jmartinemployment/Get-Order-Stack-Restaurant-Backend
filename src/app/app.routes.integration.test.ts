@@ -168,7 +168,7 @@ const MOCK_MODIFIER = {
   modifierGroupId: GROUP_ID,
   name: 'Large',
   nameEn: null,
-  priceAdjustment: 2.00,
+  priceAdjustment: 2,
   isDefault: false,
   available: true,
   displayOrder: 1,
@@ -581,7 +581,7 @@ describe('POST /api/merchant/:merchantId/modifiers', () => {
     const res = await api.owner.post(`${R_URL}/modifiers`).send({
       name: 'Size',
       required: true,
-      modifiers: [{ name: 'Large', priceAdjustment: 2.00 }],
+      modifiers: [{ name: 'Large', priceAdjustment: 2 }],
     });
     expect(res.status).toBe(201);
     expect(prisma.modifierGroup.create).toHaveBeenCalled();
@@ -619,7 +619,7 @@ describe('POST /api/merchant/:merchantId/modifiers/:groupId/options', () => {
 
     const res = await api.owner.post(`${R_URL}/modifiers/${GROUP_ID}/options`).send({
       name: 'Large',
-      priceAdjustment: 2.00,
+      priceAdjustment: 2,
     });
     expect(res.status).toBe(201);
     expect(res.body.name).toBe('Large');
@@ -818,18 +818,18 @@ describe('POST /api/merchant/:merchantId/menu/items/:itemId/estimate-cost', () =
   it('estimates cost and updates item', async () => {
     const { aiCostService } = await import('../services/ai-cost.service');
     (aiCostService.estimateCost as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      estimatedCost: 3.50,
+      estimatedCost: 3.5,
       suggestedPrice: 9.99,
       profitMargin: 0.65,
       confidence: 0.8,
     });
     prisma.menuItem.findUnique.mockResolvedValue(MOCK_ITEM);
     prisma.restaurant.findUnique.mockResolvedValue(RESTAURANT);
-    prisma.menuItem.update.mockResolvedValue({ ...MOCK_ITEM, aiEstimatedCost: 3.50 });
+    prisma.menuItem.update.mockResolvedValue({ ...MOCK_ITEM, aiEstimatedCost: 3.5 });
 
     const res = await api.owner.post(url);
     expect(res.status).toBe(200);
-    expect(res.body.estimation.estimatedCost).toBe(3.50);
+    expect(res.body.estimation.estimatedCost).toBe(3.5);
   });
 });
 
@@ -1388,7 +1388,7 @@ describe('GET /api/merchant/:merchantId/orders/:orderId/payment-status', () => {
       stripePaymentIntentId: 'pi_test_123',
       paypalOrderId: null,
       paypalCaptureId: null,
-      total: 27.80,
+      total: 27.8,
     });
 
     const res = await api.owner.get(url);
@@ -1407,7 +1407,7 @@ describe('GET /api/merchant/:merchantId/orders/:orderId/payment-status', () => {
       stripePaymentIntentId: null,
       paypalOrderId: 'PP-ORDER-123',
       paypalCaptureId: null,
-      total: 27.80,
+      total: 27.8,
     });
 
     const res = await api.owner.get(url);

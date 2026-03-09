@@ -1,6 +1,6 @@
 // Allowed origins for CORS - trim whitespace from env var values
 const allowedOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim()).filter(o => o)
+  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
   : [
     'http://localhost:4200',
     'http://localhost:4201',

@@ -89,9 +89,8 @@ async function doordashRequestQuote(
   credentials: DoorDashRuntimeCredentials,
 ): Promise<DeliveryQuote> {
   // DoorDash Drive API: Create delivery quote
-  const baseUrl = credentials.mode === 'production'
-    ? 'https://openapi.doordash.com'
-    : 'https://openapi.doordash.com'; // DoorDash uses same URL with test keys
+  // DoorDash uses same URL for sandbox/production — mode selects via API key
+  const baseUrl = 'https://openapi.doordash.com';
 
   const response = await fetch(`${baseUrl}/drive/v2/deliveries`, {
     method: 'POST',
@@ -135,9 +134,7 @@ async function doordashAcceptQuote(
   externalDeliveryId: string,
   credentials: DoorDashRuntimeCredentials,
 ): Promise<DispatchResult> {
-  const baseUrl = credentials.mode === 'production'
-    ? 'https://openapi.doordash.com'
-    : 'https://openapi.doordash.com';
+  const baseUrl = 'https://openapi.doordash.com';
 
   // Accept the delivery (confirm it)
   const response = await fetch(`${baseUrl}/drive/v2/deliveries/${externalDeliveryId}`, {
@@ -168,9 +165,7 @@ async function doordashGetStatus(
   externalDeliveryId: string,
   credentials: DoorDashRuntimeCredentials,
 ): Promise<{ dispatchStatus: DispatchStatus; driver: DriverInfo }> {
-  const baseUrl = credentials.mode === 'production'
-    ? 'https://openapi.doordash.com'
-    : 'https://openapi.doordash.com';
+  const baseUrl = 'https://openapi.doordash.com';
 
   const response = await fetch(`${baseUrl}/drive/v2/deliveries/${externalDeliveryId}`, {
     headers: { 'Authorization': `Bearer ${generateDoorDashJWT(credentials)}` },
@@ -217,9 +212,7 @@ async function doordashCancel(
   externalDeliveryId: string,
   credentials: DoorDashRuntimeCredentials,
 ): Promise<boolean> {
-  const baseUrl = credentials.mode === 'production'
-    ? 'https://openapi.doordash.com'
-    : 'https://openapi.doordash.com';
+  const baseUrl = 'https://openapi.doordash.com';
 
   const response = await fetch(`${baseUrl}/drive/v2/deliveries/${externalDeliveryId}`, {
     method: 'PATCH',
@@ -511,7 +504,7 @@ export const deliveryService = {
   async getStatus(orderId: string): Promise<{ dispatchStatus: DispatchStatus; driver: DriverInfo } | null> {
     const order = await prisma.order.findUnique({ where: { id: orderId } });
 
-    if (!order || !order.deliveryExternalId || !order.deliveryProvider) return null;
+    if (!order?.deliveryExternalId || !order.deliveryProvider) return null;
 
     if (order.deliveryProvider === 'doordash') {
       const credentials = await deliveryCredentialsService.getDoorDashRuntimeCredentials(order.restaurantId);
@@ -529,7 +522,7 @@ export const deliveryService = {
   async cancelDelivery(orderId: string): Promise<boolean> {
     const order = await prisma.order.findUnique({ where: { id: orderId } });
 
-    if (!order || !order.deliveryExternalId || !order.deliveryProvider) return false;
+    if (!order?.deliveryExternalId || !order.deliveryProvider) return false;
 
     let cancelled = false;
     if (order.deliveryProvider === 'doordash') {
@@ -562,7 +555,7 @@ export const deliveryService = {
     });
 
     if (!order) {
-      console.warn(`[Delivery] Webhook for unknown delivery: ${orderId}`);
+      console.warn('[Delivery] Webhook for unknown delivery', { orderId });
       return;
     }
 

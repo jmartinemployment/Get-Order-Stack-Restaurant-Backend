@@ -75,11 +75,9 @@ vi.mock('@prisma/client', () => {
     (globalThis as any).__prismaMockTransactionFn = transactionMock;
   }
 
-  // Use a class so `new PrismaClient()` works correctly
-  class MockPrismaClient {
-    constructor() {
-      return (globalThis as any).__prismaMockProxy;
-    }
+  // Factory function that returns the mock proxy — used as `new PrismaClient()`
+  function MockPrismaClient() {
+    return (globalThis as any).__prismaMockProxy;
   }
 
   return {

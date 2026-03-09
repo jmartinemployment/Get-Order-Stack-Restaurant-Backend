@@ -91,15 +91,15 @@ const TAIPA_RESTAURANT_IDS = [TAIPA_KENDALL_ID, TAIPA_CORAL_GABLES_ID];
 function normalize(str: string): string {
   return str
     .toLowerCase()
-    .replace(/\.(jpg|jpeg|png|webp|gif)$/i, '')
-    .replace(/[áàäâ]/g, 'a')
-    .replace(/[éèëê]/g, 'e')
-    .replace(/[íìïî]/g, 'i')
-    .replace(/[óòöô]/g, 'o')
-    .replace(/[úùüû]/g, 'u')
-    .replace(/ñ/g, 'n')
-    .replace(/[-_\s]+/g, '')
-    .replace(/[^a-z0-9]/g, '');
+    .replaceAll(/\.(jpg|jpeg|png|webp|gif)$/gi, '')
+    .replaceAll(/[áàäâ]/g, 'a')
+    .replaceAll(/[éèëê]/g, 'e')
+    .replaceAll(/[íìïî]/g, 'i')
+    .replaceAll(/[óòöô]/g, 'o')
+    .replaceAll(/[úùüû]/g, 'u')
+    .replaceAll(/ñ/g, 'n')
+    .replaceAll(/[-_\s]+/g, '')
+    .replaceAll(/[^a-z0-9]/g, '');
 }
 
 function isMatch(imageFilename: string, menuItemName: string): boolean {
@@ -192,14 +192,11 @@ async function updateMenuImages() {
   }
 }
 
-async function main() {
-  try {
-    await updateMenuImages();
-  } catch (error) {
-    console.error('Error:', error);
-  } finally {
-    await prisma.$disconnect();
-  }
+try {
+  await updateMenuImages();
+} catch (error: unknown) {
+  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  process.exit(1);
+} finally {
+  await prisma.$disconnect();
 }
-
-main();

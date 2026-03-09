@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { generateReceipt, generateTestReceipt } from '../utils/star-line-mode';
 import { PRINT_JOB_TIMEOUT_MS } from '../utils/constants';
-import type { CreatePrintJobDto } from '../models/print-job.dto';
+
 import { emitToPrinter } from './socket.service';
 
 const prisma = new PrismaClient();
@@ -120,7 +120,7 @@ export class CloudPrntService {
   /**
    * Get pending job for printer (CloudPRNT polling endpoint)
    */
-  async getPendingJob(macAddress: string): Promise<any | null> {
+  async getPendingJob(macAddress: string): Promise<any> {
     // Update last poll time
     await prisma.printer.updateMany({
       where: { macAddress },
@@ -325,7 +325,7 @@ export class CloudPrntService {
   private async findPrinterForRestaurant(
     restaurantId: string,
     printerId?: string
-  ): Promise<any | null> {
+  ): Promise<any> {
     // 1. If printerId specified, use that printer
     if (printerId) {
       const printer = await prisma.printer.findFirst({

@@ -48,7 +48,7 @@ vi.mock('../services/inventory.service', () => ({
 
 vi.mock('../services/order-profit.service', () => ({
   orderProfitService: {
-    getOrderProfitInsight: vi.fn().mockResolvedValue({ orderId: 'o1', profit: 12.50 }),
+    getOrderProfitInsight: vi.fn().mockResolvedValue({ orderId: 'o1', profit: 12.5 }),
     getRecentOrdersProfit: vi.fn().mockResolvedValue({ orders: [], avgProfit: 0 }),
   },
 }));
@@ -339,7 +339,7 @@ describe('GET /orders/:orderId/profit-insight', () => {
   it('returns profit insight', async () => {
     const res = await api.owner.get(`${BASE_URL}/orders/o1/profit-insight`);
     expect(res.status).toBe(200);
-    expect(res.body.profit).toBe(12.50);
+    expect(res.body.profit).toBe(12.5);
   });
 
   it('returns 404 when order not found', async () => {
