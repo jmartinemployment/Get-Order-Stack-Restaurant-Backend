@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
@@ -612,7 +612,7 @@ async function propagateAiSettings(
   if (!overrideExisting && targetAiSettings) return false;
   await prisma.restaurant.update({
     where: { id: targetId },
-    data: { aiSettings: sourceAiSettings },
+    data: { aiSettings: sourceAiSettings as Prisma.InputJsonValue },
   });
   return true;
 }
