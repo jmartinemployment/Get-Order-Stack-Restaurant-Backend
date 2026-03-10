@@ -12,6 +12,7 @@ import { seedInventory } from './seed-inventory';
 import { seedCustomers } from './seed-customers';
 import { seedOrders } from './seed-orders';
 import { seedReservations } from './seed-reservations';
+import { toErrorMessage } from '../src/utils/errors';
 
 const prisma = new PrismaClient();
 
@@ -87,7 +88,7 @@ try {
 
   console.log('\n✅ All demo data seeded successfully!');
 } catch (error: unknown) {
-  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  console.error('Script failed:', toErrorMessage(error));
   process.exit(1);
 } finally {
   await prisma.$disconnect();

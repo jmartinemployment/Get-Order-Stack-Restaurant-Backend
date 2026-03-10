@@ -51,7 +51,7 @@ router.post('/pinned-widgets', requireAuth, async (req: Request, res: Response) 
     await prisma.restaurant.update({
       where: { id: restaurantId },
       data: {
-        merchantProfile: JSON.parse(JSON.stringify({ ...profile, pinnedWidgets: widgets })),
+        merchantProfile: structuredClone({ ...profile, pinnedWidgets: widgets }),
       },
     });
 
@@ -84,7 +84,7 @@ router.delete('/pinned-widgets/:widgetId', requireAuth, async (req: Request, res
     await prisma.restaurant.update({
       where: { id: restaurantId },
       data: {
-        merchantProfile: JSON.parse(JSON.stringify({ ...profile, pinnedWidgets: filtered })),
+        merchantProfile: structuredClone({ ...profile, pinnedWidgets: filtered }),
       },
     });
 

@@ -676,8 +676,8 @@ function computePriceAlerts(
     const entry = seen.get(key);
     if (!entry) {
       seen.set(key, { current: cost, previous: null });
-    } else if (entry.previous === null) {
-      entry.previous = cost;
+    } else {
+      entry.previous ??= cost;
     }
   }
 

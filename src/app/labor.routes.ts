@@ -1629,7 +1629,7 @@ interface AutoClockOutConfig {
 function parseAutoClockOutConfig(aiSettings: unknown): AutoClockOutConfig | null {
   const settings = (aiSettings as Record<string, unknown>) ?? {};
   const autoClockOut = settings.autoClockOut as Record<string, unknown> | undefined;
-  if (!autoClockOut || autoClockOut.enabled !== true) return null;
+  if (autoClockOut?.enabled !== true) return null;
 
   return {
     enabled: true,

@@ -970,9 +970,9 @@ async function processWebhookOrder(
 ) {
   const eventStatus = normalizeEventStatus(normalized);
   const marketplaceOrder = await prisma.marketplaceOrder.upsert({
-    where: { provider_externalOrderId: { provider, externalOrderId: normalized.externalOrderId! } },
+    where: { provider_externalOrderId: { provider, externalOrderId: normalized.externalOrderId! } }, // NOSONAR — externalOrderId is string|undefined per interface; ! narrows it (validated at call site)
     update: { integrationId: integration.id, status: eventStatus, rawPayload: jsonPayload, lastEventId: externalEventId, externalStoreId: normalized.externalStoreId ?? undefined },
-    create: { restaurantId: integration.restaurantId, integrationId: integration.id, provider, externalOrderId: normalized.externalOrderId!, externalStoreId: normalized.externalStoreId, externalCustomerId: normalized.customer.phone ?? normalized.customer.email ?? null, status: eventStatus, rawPayload: jsonPayload, lastEventId: externalEventId },
+    create: { restaurantId: integration.restaurantId, integrationId: integration.id, provider, externalOrderId: normalized.externalOrderId!, externalStoreId: normalized.externalStoreId, externalCustomerId: normalized.customer.phone ?? normalized.customer.email ?? null, status: eventStatus, rawPayload: jsonPayload, lastEventId: externalEventId }, // NOSONAR
   });
 
   let linkedOrderId = marketplaceOrder.orderId;

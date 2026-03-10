@@ -375,16 +375,16 @@ async function diffSourceItemsAgainstTarget(
     if (!existing) {
       toAdd++;
       details.push({ itemName: si.name, action: 'add' });
-    } else if (Number(existing.price) !== Number(si.price)) {
+    } else if (Number(existing.price) === Number(si.price)) {
+      toSkip++;
+      details.push({ itemName: si.name, action: 'skip' });
+    } else {
       conflicts++;
       details.push({
         itemName: si.name,
         action: 'conflict',
-        reason: `Price differs: source $${si.price} vs target $${existing.price}`,
+        reason: `Price differs: source $${Number(si.price)} vs target $${Number(existing.price)}`,
       });
-    } else {
-      toSkip++;
-      details.push({ itemName: si.name, action: 'skip' });
     }
   }
 
@@ -494,10 +494,10 @@ async function syncItemsToTarget(
     }
 
     if (existing) {
-      if (Number(existing.price) !== Number(si.price)) {
-        conflicts++;
-      } else {
+      if (Number(existing.price) === Number(si.price)) {
         skipped++;
+      } else {
+        conflicts++;
       }
     } else {
       await prisma.menuItem.create({

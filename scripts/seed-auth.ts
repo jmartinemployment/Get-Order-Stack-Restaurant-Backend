@@ -7,6 +7,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { toErrorMessage } from '../src/utils/errors';
 
 const prisma = new PrismaClient();
 const SALT_ROUNDS = 12;
@@ -17,6 +18,83 @@ async function hashPassword(password: string): Promise<string> {
 
 async function hashPin(pin: string): Promise<string> {
   return bcrypt.hash(pin, SALT_ROUNDS);
+}
+
+interface StaffPinDef {
+  displayName: string;
+  pin: string;
+  role: string;
+  jobTitle: string;
+  hourlyRate: number;
+  isTipEligible: boolean;
+}
+
+async function resolveOrCreateStaffMember(restaurantId: string, sp: StaffPinDef) {
+  let teamMember = await prisma.teamMember.findFirst({
+    where: {
+      restaurantId,
+      OR: [
+        { displayName: sp.displayName },
+        { displayName: { startsWith: sp.displayName + ' (' } },
+      ],
+    },
+  });
+
+  if (teamMember) {
+    await prisma.teamMember.update({
+      where: { id: teamMember.id },
+      data: { displayName: sp.displayName },
+    });
+  } else {
+    teamMember = await prisma.teamMember.create({
+      data: {
+        displayName: sp.displayName,
+        firstName: sp.displayName,
+        role: sp.role,
+        restaurantId,
+        status: 'active',
+      },
+    });
+  }
+  return teamMember;
+}
+
+async function seedRestaurantStaffPins(restaurantId: string, staffPins: StaffPinDef[]): Promise<void> {
+  const existingMembers = await prisma.teamMember.findMany({
+    where: { restaurantId },
+    select: { id: true },
+  });
+  if (existingMembers.length > 0) {
+    await prisma.teamMemberJob.deleteMany({
+      where: { teamMemberId: { in: existingMembers.map(m => m.id) } },
+    });
+  }
+
+  for (const sp of staffPins) {
+    const teamMember = await resolveOrCreateStaffMember(restaurantId, sp);
+
+    await prisma.teamMemberJob.create({
+      data: {
+        teamMemberId: teamMember.id,
+        jobTitle: sp.jobTitle,
+        hourlyRate: sp.hourlyRate,
+        isTipEligible: sp.isTipEligible,
+        isPrimary: true,
+        overtimeEligible: sp.role === 'staff',
+      },
+    });
+
+    const pinHash = await hashPin(sp.pin);
+    await prisma.staffPin.create({
+      data: {
+        restaurantId,
+        name: sp.displayName,
+        pin: pinHash,
+        role: sp.role,
+        teamMemberId: teamMember.id,
+      },
+    });
+  }
 }
 
 export async function seedAuth() {
@@ -122,70 +200,7 @@ export async function seedAuth() {
   }
 
   for (const r of restaurants) {
-    // Clean up old TeamMemberJob records for this restaurant's staff
-    const existingMembers = await prisma.teamMember.findMany({
-      where: { restaurantId: r.id },
-      select: { id: true },
-    });
-    if (existingMembers.length > 0) {
-      await prisma.teamMemberJob.deleteMany({
-        where: { teamMemberId: { in: existingMembers.map(m => m.id) } },
-      });
-    }
-
-    for (const sp of staffPins) {
-      // Find existing by clean name or old parenthetical name
-      let teamMember = await prisma.teamMember.findFirst({
-        where: {
-          restaurantId: r.id,
-          OR: [
-            { displayName: sp.displayName },
-            { displayName: { startsWith: sp.displayName + ' (' } },
-          ],
-        },
-      });
-
-      if (teamMember) {
-        // Update to clean displayName if it had parenthetical
-        await prisma.teamMember.update({
-          where: { id: teamMember.id },
-          data: { displayName: sp.displayName },
-        });
-      } else {
-        teamMember = await prisma.teamMember.create({
-          data: {
-            displayName: sp.displayName,
-            firstName: sp.displayName,
-            role: sp.role,
-            restaurantId: r.id,
-            status: 'active',
-          },
-        });
-      }
-
-      // Create TeamMemberJob
-      await prisma.teamMemberJob.create({
-        data: {
-          teamMemberId: teamMember.id,
-          jobTitle: sp.jobTitle,
-          hourlyRate: sp.hourlyRate,
-          isTipEligible: sp.isTipEligible,
-          isPrimary: true,
-          overtimeEligible: sp.role === 'staff',
-        },
-      });
-
-      const pinHash = await hashPin(sp.pin);
-      await prisma.staffPin.create({
-        data: {
-          restaurantId: r.id,
-          name: sp.displayName,
-          pin: pinHash,
-          role: sp.role,
-          teamMemberId: teamMember.id,
-        },
-      });
-    }
+    await seedRestaurantStaffPins(r.id, staffPins);
   }
   console.log(`   ✅ ${staffPins.length * restaurants.length} staff PINs created (linked to TeamMembers)`);
 
@@ -221,7 +236,7 @@ if (require.main === module) {
   try {
     await seedAuth();
   } catch (error: unknown) {
-    console.error('Script failed:', error instanceof Error ? error.message : String(error));
+    console.error('Script failed:', toErrorMessage(error));
     process.exit(1);
   } finally {
     await prisma.$disconnect();

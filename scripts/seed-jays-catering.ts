@@ -10,6 +10,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
+import { toErrorMessage } from '../src/utils/errors';
 
 const prisma = new PrismaClient();
 const SALT_ROUNDS = 12;
@@ -1148,7 +1149,7 @@ try {
   console.log('   Login with owner@taipa.com / owner123');
   console.log("   Select 'Jay's Catering' from restaurant picker\n");
 } catch (error: unknown) {
-  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  console.error('Script failed:', toErrorMessage(error));
   process.exit(1);
 } finally {
   await prisma.$disconnect();

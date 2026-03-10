@@ -4,6 +4,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { toErrorMessage } from '../src/utils/errors';
 
 const prisma = new PrismaClient();
 
@@ -18,14 +19,7 @@ try {
     select: { id: true, name: true, slug: true }
   });
 
-  if (!restaurant) {
-    console.log('❌ Restaurant NOT found!');
-    console.log('\nAvailable restaurants:');
-    const restaurants = await prisma.restaurant.findMany({
-      select: { id: true, name: true, slug: true }
-    });
-    restaurants.forEach(r => console.log(`  - ${r.name} (${r.slug}): ${r.id}`));
-  } else {
+  if (restaurant) {
     console.log(`✅ Restaurant found: ${restaurant.name} (${restaurant.slug})`);
 
     console.log('\n🔍 Checking menu item...');
@@ -53,9 +47,16 @@ try {
         items.forEach(i => console.log(`  - ${i.name} ($${i.price}): ${i.id}`));
       }
     }
+  } else {
+    console.log('❌ Restaurant NOT found!');
+    console.log('\nAvailable restaurants:');
+    const restaurants = await prisma.restaurant.findMany({
+      select: { id: true, name: true, slug: true }
+    });
+    restaurants.forEach(r => console.log(`  - ${r.name} (${r.slug}): ${r.id}`));
   }
 } catch (error: unknown) {
-  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  console.error('Script failed:', toErrorMessage(error));
   process.exit(1);
 } finally {
   await prisma.$disconnect();

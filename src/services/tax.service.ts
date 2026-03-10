@@ -66,7 +66,7 @@ export class TaxService {
     }
 
     // 3. Fallback to default
-    console.warn(`[TaxService] Using fallback rate for ZIP ${zip}, ${state}`);
+    console.warn('[TaxService] Using fallback rate (ZIP/state lookup failed)');
     return {
       rate: DEFAULT_RATE,
       state,
@@ -159,7 +159,7 @@ The rate should be a decimal (e.g., 0.07 for 7%). Include the breakdown of state
           verifiedAt: null
         }
       });
-      console.log(`[TaxService] Saved tax rate for ${zip}, ${state}: ${info.rate}`);
+      console.log('[TaxService] Saved tax rate to database');
     } catch (error) {
       console.error('[TaxService] Failed to save tax jurisdiction:', error);
       // Non-fatal - we still have the rate to return

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { toErrorMessage } from '../src/utils/errors';
 
 type Provider = 'doordash_marketplace' | 'ubereats' | 'grubhub';
 type Mode = 'all' | 'contract' | 'e2e';
@@ -689,6 +690,6 @@ try {
     console.log('\n[Phase5] All checks passed.');
   }
 } catch (error: unknown) {
-  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  console.error('Script failed:', toErrorMessage(error));
   process.exit(1);
 }

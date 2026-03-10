@@ -9,6 +9,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { toErrorMessage } from '../src/utils/errors';
 
 const prisma = new PrismaClient();
 
@@ -83,6 +84,87 @@ function buildTransactionTotals(plan: TransactionPlan) {
   return { subtotal, tax, tip, deliveryFee, total };
 }
 
+interface OrderContext {
+  restaurantId: string;
+  deviceId: string;
+  serverId: string | null;
+  tableId: string | null;
+  menuItems: Awaited<ReturnType<typeof prisma.menuItem.findMany>>;
+}
+
+async function createTransactionOrder(
+  ctx: OrderContext,
+  plan: TransactionPlan,
+  orderNumber: string,
+  orderDate: Date,
+): Promise<void> {
+  const totals = buildTransactionTotals(plan);
+  const completedAt = new Date(orderDate.getTime() + 25 * 60000);
+  const itemCount = 2 + Math.floor(Math.random() * 3);
+  const selectedItems = [...ctx.menuItems].sort(() => Math.random() - 0.5).slice(0, itemCount);
+
+  await prisma.order.create({
+    data: {
+      restaurantId: ctx.restaurantId,
+      sourceDeviceId: ctx.deviceId,
+      serverId: ctx.serverId,
+      tableId: plan.orderType === 'dine_in' ? ctx.tableId : null,
+      orderNumber,
+      orderType: plan.orderType,
+      orderSource: 'pos',
+      status: 'completed',
+      ...totals,
+      discount: 0,
+      paymentMethod: plan.paymentMethod,
+      paymentStatus: 'paid',
+      deliveryAddress: plan.orderType === 'delivery' ? '456 Coral Way, Miami, FL 33145' : null,
+      confirmedAt: new Date(orderDate.getTime() + 2 * 60000),
+      preparingAt: new Date(orderDate.getTime() + 5 * 60000),
+      readyAt: new Date(orderDate.getTime() + 18 * 60000),
+      completedAt,
+      createdAt: orderDate,
+      orderItems: {
+        create: selectedItems.map(item => {
+          const qty = Math.random() < 0.3 ? 2 : 1;
+          const unitPrice = Number(item.price);
+          return {
+            menuItemId: item.id,
+            menuItemName: item.name,
+            quantity: qty,
+            unitPrice,
+            modifiersPrice: 0,
+            totalPrice: unitPrice * qty,
+            status: 'completed',
+          };
+        }),
+      },
+    },
+  });
+}
+
+async function seedDeviceTransactions(
+  device: { id: string; deviceName: string },
+  deviceIndex: number,
+  plans: TransactionPlan[],
+  ctx: Omit<OrderContext, 'deviceId'> & { slug: string; slugPrefix: string },
+): Promise<void> {
+  let created = 0;
+  for (let i = 0; i < plans.length; i++) {
+    const plan = plans[i];
+    const orderDate = hoursAgo(plan.hoursAgo);
+    const deviceSuffix = deviceIndex > 0 ? `D${deviceIndex}-` : '';
+    const orderNumber = `TX-${ctx.slugPrefix}${deviceSuffix}${String(i + 1).padStart(3, '0')}`;
+    await createTransactionOrder(
+      { restaurantId: ctx.restaurantId, deviceId: device.id, serverId: ctx.serverId, tableId: ctx.tableId, menuItems: ctx.menuItems },
+      plan,
+      orderNumber,
+      orderDate,
+    );
+    created++;
+  }
+  console.log(`   ✅ Created ${created} transactions for ${ctx.slug} → ${device.deviceName} (${device.id.slice(0, 8)}...)`);
+}
+
 async function seedRestaurantTransactions(restaurant: { id: string; slug: string }): Promise<void> {
   const devices = await ensureBrowserDevice(restaurant.id, restaurant.slug);
   if (devices.length === 0) {
@@ -111,64 +193,14 @@ async function seedRestaurantTransactions(restaurant: { id: string; slug: string
   const slugPrefix = restaurant.slug === 'taipa-kendall' ? 'K' : 'G';
 
   for (let d = 0; d < devices.length; d++) {
-    const device = devices[d];
-    let created = 0;
-
-    for (let i = 0; i < plans.length; i++) {
-      const plan = plans[i];
-      const orderDate = hoursAgo(plan.hoursAgo);
-      const deviceSuffix = d > 0 ? `D${d}-` : '';
-      const orderNumber = `TX-${slugPrefix}${deviceSuffix}${String(i + 1).padStart(3, '0')}`;
-
-      const itemCount = 2 + Math.floor(Math.random() * 3);
-      const shuffled = [...menuItems].sort(() => Math.random() - 0.5);
-      const selectedItems = shuffled.slice(0, itemCount);
-
-      const totals = buildTransactionTotals(plan);
-      const completedAt = new Date(orderDate.getTime() + 25 * 60000);
-
-      await prisma.order.create({
-        data: {
-          restaurantId: restaurant.id,
-          sourceDeviceId: device.id,
-          serverId: server?.id ?? null,
-          tableId: plan.orderType === 'dine_in' && table ? table.id : null,
-          orderNumber,
-          orderType: plan.orderType,
-          orderSource: 'pos',
-          status: 'completed',
-          ...totals,
-          discount: 0,
-          paymentMethod: plan.paymentMethod,
-          paymentStatus: 'paid',
-          deliveryAddress: plan.orderType === 'delivery' ? '456 Coral Way, Miami, FL 33145' : null,
-          confirmedAt: new Date(orderDate.getTime() + 2 * 60000),
-          preparingAt: new Date(orderDate.getTime() + 5 * 60000),
-          readyAt: new Date(orderDate.getTime() + 18 * 60000),
-          completedAt,
-          createdAt: orderDate,
-          orderItems: {
-            create: selectedItems.map(item => {
-              const qty = Math.random() < 0.3 ? 2 : 1;
-              const unitPrice = Number(item.price);
-              return {
-                menuItemId: item.id,
-                menuItemName: item.name,
-                quantity: qty,
-                unitPrice,
-                modifiersPrice: 0,
-                totalPrice: unitPrice * qty,
-                status: 'completed',
-              };
-            }),
-          },
-        },
-      });
-
-      created++;
-    }
-
-    console.log(`   ✅ Created ${created} transactions for ${restaurant.slug} → ${device.deviceName} (${device.id.slice(0, 8)}...)`);
+    await seedDeviceTransactions(devices[d], d, plans, {
+      restaurantId: restaurant.id,
+      slug: restaurant.slug,
+      slugPrefix,
+      serverId: server?.id ?? null,
+      tableId: table?.id ?? null,
+      menuItems,
+    });
   }
 }
 
@@ -206,7 +238,7 @@ try {
     console.log(`   📊 Total paid device-linked orders: ${totalPaid}`);
   }
 } catch (error: unknown) {
-  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  console.error('Script failed:', toErrorMessage(error));
   process.exit(1);
 } finally {
   await prisma.$disconnect();

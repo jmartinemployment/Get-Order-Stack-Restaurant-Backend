@@ -4,6 +4,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { toErrorMessage } from '../src/utils/errors';
 
 const prisma = new PrismaClient();
 
@@ -321,7 +322,7 @@ try {
     console.log(`   Menu Items: ${itemCount}`);
 
 } catch (error: unknown) {
-  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  console.error('Script failed:', toErrorMessage(error));
   process.exit(1);
 } finally {
   await prisma.$disconnect();

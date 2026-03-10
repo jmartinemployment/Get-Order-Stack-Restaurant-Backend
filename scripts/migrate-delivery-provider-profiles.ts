@@ -147,6 +147,122 @@ function modeToBackend(mode: string | null | undefined): ProviderKeyBackend {
   return mode === 'most_secure' ? 'managed_kms' : 'vault_oss';
 }
 
+type PrismaTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+interface MigratedCredentials {
+  doordashApiKeyEncrypted: string | null;
+  doordashSigningSecretEncrypted: string | null;
+  uberClientIdEncrypted: string | null;
+  uberClientSecretEncrypted: string | null;
+  uberCustomerIdEncrypted: string | null;
+  uberWebhookSigningKeyEncrypted: string | null;
+}
+
+async function upsertDoordashProfile(
+  tx: PrismaTx,
+  restaurantId: string,
+  targetBackend: ProviderKeyBackend,
+  migrated: MigratedCredentials,
+  doordashMode: string | null | undefined,
+  actor: string,
+): Promise<void> {
+  const doordashConfigured = Boolean(migrated.doordashApiKeyEncrypted && migrated.doordashSigningSecretEncrypted);
+  const configRefMap = {
+    refs: {
+      apiKey: migrated.doordashApiKeyEncrypted ? 'present' : 'absent',
+      signingSecret: migrated.doordashSigningSecretEncrypted ? 'present' : 'absent',
+    },
+    mode: doordashMode === 'production' ? 'production' : 'test',
+  };
+
+  const profile = await tx.restaurantProviderProfile.upsert({
+    where: { restaurantId_provider: { restaurantId, provider: 'doordash' } },
+    create: {
+      restaurantId,
+      provider: 'doordash',
+      keyBackend: targetBackend,
+      profileVersion: 1,
+      profileState: doordashConfigured ? 'ACTIVE' : 'DISABLED',
+      configRefMap,
+      dekVersion: 1,
+    },
+    update: {
+      keyBackend: targetBackend,
+      profileState: doordashConfigured ? 'ACTIVE' : 'DISABLED',
+      configRefMap,
+      profileVersion: { increment: 1 },
+    },
+  });
+
+  await tx.restaurantProviderProfileEvent.create({
+    data: {
+      restaurantId,
+      profileId: profile.id,
+      provider: 'doordash',
+      action: 'migration_profile_sync',
+      actor,
+      profileVersion: profile.profileVersion,
+      outcome: 'SUCCESS',
+      metadata: { backend: targetBackend },
+    },
+  });
+}
+
+async function upsertUberProfile(
+  tx: PrismaTx,
+  restaurantId: string,
+  targetBackend: ProviderKeyBackend,
+  migrated: MigratedCredentials,
+  actor: string,
+): Promise<void> {
+  const uberConfigured = Boolean(
+    migrated.uberClientIdEncrypted
+    && migrated.uberClientSecretEncrypted
+    && migrated.uberCustomerIdEncrypted
+    && migrated.uberWebhookSigningKeyEncrypted,
+  );
+  const configRefMap = {
+    refs: {
+      clientId: migrated.uberClientIdEncrypted ? 'present' : 'absent',
+      clientSecret: migrated.uberClientSecretEncrypted ? 'present' : 'absent',
+      customerId: migrated.uberCustomerIdEncrypted ? 'present' : 'absent',
+      webhookSigningKey: migrated.uberWebhookSigningKeyEncrypted ? 'present' : 'absent',
+    },
+  };
+
+  const profile = await tx.restaurantProviderProfile.upsert({
+    where: { restaurantId_provider: { restaurantId, provider: 'uber' } },
+    create: {
+      restaurantId,
+      provider: 'uber',
+      keyBackend: targetBackend,
+      profileVersion: 1,
+      profileState: uberConfigured ? 'ACTIVE' : 'DISABLED',
+      configRefMap,
+      dekVersion: 1,
+    },
+    update: {
+      keyBackend: targetBackend,
+      profileState: uberConfigured ? 'ACTIVE' : 'DISABLED',
+      configRefMap,
+      profileVersion: { increment: 1 },
+    },
+  });
+
+  await tx.restaurantProviderProfileEvent.create({
+    data: {
+      restaurantId,
+      profileId: profile.id,
+      provider: 'uber',
+      action: 'migration_profile_sync',
+      actor,
+      profileVersion: profile.profileVersion,
+      outcome: 'SUCCESS',
+      metadata: { backend: targetBackend },
+    },
+  });
+}
+
 try {
   const config = parseConfig();
   console.log(`[Migrate Profiles] dryRun=${config.dryRun} restaurantId=${config.restaurantId ?? 'ALL'}`);
@@ -236,108 +352,10 @@ try {
           where: { id: row.id },
           data: migrated,
         });
-
         updatedRows += 1;
 
-        const ddProfile = await tx.restaurantProviderProfile.upsert({
-          where: {
-            restaurantId_provider: {
-              restaurantId: row.restaurantId,
-              provider: 'doordash',
-            },
-          },
-          create: {
-            restaurantId: row.restaurantId,
-            provider: 'doordash',
-            keyBackend: targetBackend,
-            profileVersion: 1,
-            profileState: doordashConfigured ? 'ACTIVE' : 'DISABLED',
-            configRefMap: {
-              refs: {
-                apiKey: migrated.doordashApiKeyEncrypted ? 'present' : 'absent',
-                signingSecret: migrated.doordashSigningSecretEncrypted ? 'present' : 'absent',
-              },
-              mode: row.doordashMode === 'production' ? 'production' : 'test',
-            },
-            dekVersion: 1,
-          },
-          update: {
-            keyBackend: targetBackend,
-            profileState: doordashConfigured ? 'ACTIVE' : 'DISABLED',
-            configRefMap: {
-              refs: {
-                apiKey: migrated.doordashApiKeyEncrypted ? 'present' : 'absent',
-                signingSecret: migrated.doordashSigningSecretEncrypted ? 'present' : 'absent',
-              },
-              mode: row.doordashMode === 'production' ? 'production' : 'test',
-            },
-            profileVersion: { increment: 1 },
-          },
-        });
-
-        await tx.restaurantProviderProfileEvent.create({
-          data: {
-            restaurantId: row.restaurantId,
-            profileId: ddProfile.id,
-            provider: 'doordash',
-            action: 'migration_profile_sync',
-            actor: config.actor,
-            profileVersion: ddProfile.profileVersion,
-            outcome: 'SUCCESS',
-            metadata: { backend: targetBackend },
-          },
-        });
-
-        const uberProfile = await tx.restaurantProviderProfile.upsert({
-          where: {
-            restaurantId_provider: {
-              restaurantId: row.restaurantId,
-              provider: 'uber',
-            },
-          },
-          create: {
-            restaurantId: row.restaurantId,
-            provider: 'uber',
-            keyBackend: targetBackend,
-            profileVersion: 1,
-            profileState: uberConfigured ? 'ACTIVE' : 'DISABLED',
-            configRefMap: {
-              refs: {
-                clientId: migrated.uberClientIdEncrypted ? 'present' : 'absent',
-                clientSecret: migrated.uberClientSecretEncrypted ? 'present' : 'absent',
-                customerId: migrated.uberCustomerIdEncrypted ? 'present' : 'absent',
-                webhookSigningKey: migrated.uberWebhookSigningKeyEncrypted ? 'present' : 'absent',
-              },
-            },
-            dekVersion: 1,
-          },
-          update: {
-            keyBackend: targetBackend,
-            profileState: uberConfigured ? 'ACTIVE' : 'DISABLED',
-            configRefMap: {
-              refs: {
-                clientId: migrated.uberClientIdEncrypted ? 'present' : 'absent',
-                clientSecret: migrated.uberClientSecretEncrypted ? 'present' : 'absent',
-                customerId: migrated.uberCustomerIdEncrypted ? 'present' : 'absent',
-                webhookSigningKey: migrated.uberWebhookSigningKeyEncrypted ? 'present' : 'absent',
-              },
-            },
-            profileVersion: { increment: 1 },
-          },
-        });
-
-        await tx.restaurantProviderProfileEvent.create({
-          data: {
-            restaurantId: row.restaurantId,
-            profileId: uberProfile.id,
-            provider: 'uber',
-            action: 'migration_profile_sync',
-            actor: config.actor,
-            profileVersion: uberProfile.profileVersion,
-            outcome: 'SUCCESS',
-            metadata: { backend: targetBackend },
-          },
-        });
+        await upsertDoordashProfile(tx, row.restaurantId, targetBackend, migrated, row.doordashMode, config.actor);
+        await upsertUberProfile(tx, row.restaurantId, targetBackend, migrated, config.actor);
 
         migratedProfiles += 2;
       });

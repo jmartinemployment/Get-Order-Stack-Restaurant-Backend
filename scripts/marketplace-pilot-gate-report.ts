@@ -1,3 +1,5 @@
+import { toErrorMessage } from '../src/utils/errors';
+
 type Provider = 'doordash_marketplace' | 'ubereats' | 'grubhub';
 
 interface LoginRestaurant {
@@ -233,6 +235,6 @@ try {
     console.log('\n[Marketplace Pilot] All restaurants passed GO gates.');
   }
 } catch (error: unknown) {
-  console.error('Script failed:', error instanceof Error ? error.message : String(error));
+  console.error('Script failed:', toErrorMessage(error));
   process.exit(1);
 }

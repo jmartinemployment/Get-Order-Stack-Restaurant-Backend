@@ -86,7 +86,7 @@ async function processReminders(): Promise<void> {
       if (!isMilestoneEligible(milestone, threeDaysFromNow)) continue;
 
       const sent = await sendAndMarkMilestone(
-        job as typeof job & { clientEmail: string },
+        job as typeof job & { clientEmail: string }, // NOSONAR — narrows string|null to string (Prisma filter not reflected in type)
         milestone,
         now,
       );

@@ -776,6 +776,58 @@ async function estimateAiCost(
   return {};
 }
 
+async function syncMenuItemModifierGroups(itemId: string, modifierGroupIds: string[]): Promise<void> {
+  await prisma.menuItemModifierGroup.deleteMany({ where: { menuItemId: itemId } });
+  if (modifierGroupIds.length > 0) {
+    await prisma.menuItemModifierGroup.createMany({
+      data: modifierGroupIds.map((groupId: string, index: number) => ({
+        menuItemId: itemId, modifierGroupId: groupId, displayOrder: index,
+      })),
+    });
+  }
+}
+
+interface MenuItemAiUpdates {
+  descriptionEn: string | null | undefined;
+  aiData: Record<string, unknown>;
+}
+
+async function resolveMenuItemAiUpdates(
+  restaurantId: string,
+  currentItem: { name: string; description: string | null; cost: unknown } | null,
+  updates: {
+    name?: string;
+    description?: string;
+    descriptionEn?: string;
+    price?: unknown;
+    cost?: unknown;
+    cuisineType?: string;
+  },
+): Promise<MenuItemAiUpdates> {
+  const { name, description, descriptionEn, price, cost, cuisineType } = updates;
+  const resolvedDescEn: string | null | undefined =
+    (name !== undefined || description !== undefined) && descriptionEn === undefined
+      ? await generateAiDescription(
+          restaurantId,
+          name ?? currentItem?.name ?? '',
+          description ?? currentItem?.description ?? '',
+          cuisineType,
+        )
+      : descriptionEn;
+
+  const aiData = price !== undefined && !cost && !currentItem?.cost
+    ? await estimateAiCost(
+        restaurantId,
+        name ?? currentItem?.name ?? '',
+        description ?? currentItem?.description ?? '',
+        Number(price),
+        cuisineType,
+      )
+    : {};
+
+  return { descriptionEn: resolvedDescEn, aiData };
+}
+
 router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
@@ -804,9 +856,9 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
       ? await generateAiDescription(restaurantId, name, description, cuisineType)
       : descriptionEn;
 
-    const aiData = !cost
-      ? await estimateAiCost(restaurantId, name, description, Number(price), cuisineType)
-      : {};
+    const aiData = cost
+      ? {}
+      : await estimateAiCost(restaurantId, name, description, Number(price), cuisineType);
 
     const maxOrder = await prisma.menuItem.aggregate({
       where: { restaurantId, categoryId },
@@ -839,6 +891,42 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
   }
 });
 
+function buildMenuItemPatch(
+  fields: {
+    categoryId?: unknown; name?: unknown; nameEn?: unknown; description?: unknown;
+    generatedDescEn?: string | null; price?: unknown; cost?: unknown; image?: unknown;
+    available?: unknown; eightySixed?: unknown; eightySixReason?: unknown; popular?: unknown;
+    dietary?: unknown; displayOrder?: unknown; prepTimeMinutes?: unknown; menuType?: unknown;
+    cateringPricingModel?: unknown; cateringPricing?: unknown;
+  },
+  aiData: Record<string, unknown>,
+): Record<string, unknown> {
+  const { categoryId, name, nameEn, description, generatedDescEn, price, cost, image,
+    available, eightySixed, eightySixReason, popular, dietary, displayOrder,
+    prepTimeMinutes, menuType, cateringPricingModel, cateringPricing } = fields;
+  return {
+    ...(categoryId !== undefined && { categoryId }),
+    ...(name !== undefined && { name }),
+    ...(nameEn !== undefined && { nameEn }),
+    ...(description !== undefined && { description }),
+    ...(generatedDescEn !== undefined && { descriptionEn: generatedDescEn }),
+    ...(price !== undefined && { price }),
+    ...(cost !== undefined && { cost }),
+    ...(image !== undefined && { image }),
+    ...(available !== undefined && { available }),
+    ...(eightySixed !== undefined && { eightySixed }),
+    ...(eightySixReason !== undefined && { eightySixReason }),
+    ...(popular !== undefined && { popular }),
+    ...(dietary !== undefined && { dietary }),
+    ...(displayOrder !== undefined && { displayOrder }),
+    ...(prepTimeMinutes !== undefined && { prepTimeMinutes }),
+    ...(menuType !== undefined && { menuType }),
+    ...(cateringPricingModel !== undefined && { cateringPricingModel }),
+    ...(cateringPricing !== undefined && { cateringPricing }),
+    ...aiData,
+  };
+}
+
 router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Response) => {
   try {
     const { restaurantId, itemId } = req.params;
@@ -860,62 +948,24 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
       prisma.restaurant.findUnique({ where: { id: restaurantId } }),
     ]);
 
-    const cuisineType = restaurant?.cuisineType || undefined;
-
-    const generatedDescEn: string | null | undefined =
-      (name !== undefined || description !== undefined) && descriptionEn === undefined
-        ? await generateAiDescription(
-            restaurantId,
-            name || currentItem?.name || '',
-            description || currentItem?.description || '',
-            cuisineType,
-          )
-        : descriptionEn;
-
-    const aiData = price !== undefined && !cost && !currentItem?.cost
-      ? await estimateAiCost(
-          restaurantId,
-          name || currentItem?.name || '',
-          description || currentItem?.description || '',
-          Number(price),
-          cuisineType,
-        )
-      : {};
+    const { descriptionEn: generatedDescEn, aiData } = await resolveMenuItemAiUpdates(
+      restaurantId,
+      currentItem,
+      { name, description, descriptionEn, price, cost, cuisineType: restaurant?.cuisineType ?? undefined },
+    );
 
     if (modifierGroupIds !== undefined) {
-      await prisma.menuItemModifierGroup.deleteMany({ where: { menuItemId: itemId } });
-      if (modifierGroupIds.length > 0) {
-        await prisma.menuItemModifierGroup.createMany({
-          data: modifierGroupIds.map((groupId: string, index: number) => ({
-            menuItemId: itemId, modifierGroupId: groupId, displayOrder: index,
-          })),
-        });
-      }
+      await syncMenuItemModifierGroups(itemId, modifierGroupIds);
     }
 
     const item = await prisma.menuItem.update({
       where: { id: itemId },
-      data: {
-        ...(categoryId !== undefined && { categoryId }),
-        ...(name !== undefined && { name }),
-        ...(nameEn !== undefined && { nameEn }),
-        ...(description !== undefined && { description }),
-        ...(generatedDescEn !== undefined && { descriptionEn: generatedDescEn }),
-        ...(price !== undefined && { price }),
-        ...(cost !== undefined && { cost }),
-        ...(image !== undefined && { image }),
-        ...(available !== undefined && { available }),
-        ...(eightySixed !== undefined && { eightySixed }),
-        ...(eightySixReason !== undefined && { eightySixReason }),
-        ...(popular !== undefined && { popular }),
-        ...(dietary !== undefined && { dietary }),
-        ...(displayOrder !== undefined && { displayOrder }),
-        ...(prepTimeMinutes !== undefined && { prepTimeMinutes }),
-        ...(menuType !== undefined && { menuType }),
-        ...(cateringPricingModel !== undefined && { cateringPricingModel }),
-        ...(cateringPricing !== undefined && { cateringPricing }),
-        ...aiData,
-      },
+      data: buildMenuItemPatch(
+        { categoryId, name, nameEn, description, generatedDescEn, price, cost, image,
+          available, eightySixed, eightySixReason, popular, dietary, displayOrder,
+          prepTimeMinutes, menuType, cateringPricingModel, cateringPricing },
+        aiData,
+      ),
       include: { modifierGroups: { include: { modifierGroup: true } } },
     });
     res.json(item);
@@ -1526,6 +1576,112 @@ router.get('/:merchantId/orders/:orderId', async (req: Request, res: Response) =
   }
 });
 
+type CourseByGuid = ReturnType<typeof parseCourseMap>;
+
+interface OrderItemBuildResult {
+  subtotal: number;
+  orderItemsData: unknown[];
+}
+
+async function buildOrderItemsData(
+  items: Array<{ menuItemId: string; quantity: number; modifiers?: Array<{ modifierId: string }>; specialInstructions?: string; [key: string]: unknown }>,
+  courseByGuid: CourseByGuid,
+  firstCourseSortOrder: number,
+): Promise<OrderItemBuildResult | { error: string }> {
+  let subtotal = 0;
+  const orderItemsData: unknown[] = [];
+
+  for (const item of items) {
+    const menuItem = await prisma.menuItem.findUnique({ where: { id: item.menuItemId } });
+    if (!menuItem) {
+      return { error: `Menu item ${item.menuItemId} not found` };
+    }
+    if (menuItem.eightySixed) {
+      return { error: `${menuItem.name} is currently unavailable` };
+    }
+
+    const { modifiersPrice, modifiersData } = await resolveModifiers(item.modifiers);
+    const itemTotal = (Number(menuItem.price) + modifiersPrice) * item.quantity;
+    subtotal += itemTotal;
+
+    const cf = buildCourseFields(item, courseByGuid, firstCourseSortOrder);
+    orderItemsData.push({
+      menuItem: { connect: { id: menuItem.id } },
+      menuItemName: menuItem.name,
+      quantity: item.quantity,
+      unitPrice: menuItem.price,
+      modifiersPrice,
+      totalPrice: itemTotal,
+      specialInstructions: item.specialInstructions,
+      fulfillmentStatus: cf.fulfillmentStatus,
+      courseGuid: cf.courseGuid ?? null,
+      courseName: cf.courseGuid ? (cf.courseName ?? cf.courseGuid) : null,
+      courseSortOrder: cf.courseGuid ? cf.normalizedCourseSortOrder : null,
+      courseFireStatus: cf.courseFireStatus,
+      courseFiredAt: cf.courseFiredAt,
+      sentToKitchenAt: cf.sentToKitchenAt,
+      modifiers: { create: modifiersData },
+    });
+  }
+
+  return { subtotal, orderItemsData };
+}
+
+function buildOrderCreateData(
+  restaurantId: string,
+  params: {
+    customerId: string | null;
+    tableId: string | null;
+    serverId?: string;
+    sourceDeviceId?: string;
+    orderType: string;
+    orderSource: string;
+    subtotal: number;
+    tax: number;
+    total: number;
+    specialInstructions?: string;
+    scheduledTime?: string;
+    deliveryAddress?: string;
+    deliveryLat?: number;
+    deliveryLng?: number;
+    deliveryInfo?: { address?: string; address2?: string; city?: string; state?: string; zip?: string; deliveryNotes?: string; estimatedDeliveryTime?: string };
+    curbsideInfo?: { vehicleDescription?: string };
+    cateringInfo?: { eventDate?: string; eventTime?: string; headcount?: number; eventType?: string; setupRequired?: boolean; depositAmount?: number; depositPaid?: boolean; specialInstructions?: string };
+    orderItemsData: unknown[];
+  },
+) {
+  const { customerId, tableId, serverId, sourceDeviceId, orderType, orderSource,
+    subtotal, tax, total, specialInstructions, scheduledTime,
+    deliveryAddress, deliveryLat, deliveryLng, deliveryInfo, curbsideInfo, cateringInfo,
+    orderItemsData } = params;
+  return {
+    restaurantId, customerId, tableId, serverId, sourceDeviceId,
+    orderNumber: generateOrderNumber(), orderType, orderSource, status: 'pending',
+    subtotal, tax, total, specialInstructions,
+    deliveryAddress: deliveryInfo?.address ?? deliveryAddress,
+    deliveryLat, deliveryLng,
+    deliveryAddress2: deliveryInfo?.address2,
+    deliveryCity: deliveryInfo?.city,
+    deliveryStateUs: deliveryInfo?.state,
+    deliveryZip: deliveryInfo?.zip,
+    deliveryNotes: deliveryInfo?.deliveryNotes,
+    deliveryStatus: orderType === 'delivery' ? 'PREPARING' : null,
+    deliveryEstimatedAt: deliveryInfo?.estimatedDeliveryTime ? new Date(deliveryInfo.estimatedDeliveryTime) : null,
+    vehicleDescription: curbsideInfo?.vehicleDescription,
+    eventDate: cateringInfo?.eventDate ? new Date(cateringInfo.eventDate) : null,
+    eventTime: cateringInfo?.eventTime,
+    headcount: cateringInfo?.headcount,
+    eventType: cateringInfo?.eventType,
+    setupRequired: cateringInfo?.setupRequired ?? false,
+    depositAmount: cateringInfo?.depositAmount,
+    depositPaid: cateringInfo?.depositPaid ?? false,
+    cateringInstructions: cateringInfo?.specialInstructions,
+    approvalStatus: orderType === 'catering' ? 'NEEDS_APPROVAL' : null,
+    scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
+    orderItems: { create: orderItemsData },
+  };
+}
+
 router.post('/:merchantId/orders', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
@@ -1574,75 +1730,24 @@ router.post('/:merchantId/orders', async (req: Request, res: Response) => {
     const courseByGuid = parseCourseMap(courses);
     const firstCourseSortOrder = findFirstCourseSortOrder(items, courseByGuid);
 
-    let subtotal = 0;
-    const orderItemsData = [];
-
-    for (const item of items) {
-      const menuItem = await prisma.menuItem.findUnique({ where: { id: item.menuItemId } });
-      if (!menuItem) {
-        res.status(400).json({ error: `Menu item ${item.menuItemId} not found` });
-        return;
-      }
-      if (menuItem.eightySixed) {
-        res.status(400).json({ error: `${menuItem.name} is currently unavailable` });
-        return;
-      }
-
-      const { modifiersPrice, modifiersData } = await resolveModifiers(item.modifiers);
-      const itemTotal = (Number(menuItem.price) + modifiersPrice) * item.quantity;
-      subtotal += itemTotal;
-
-      const cf = buildCourseFields(item, courseByGuid, firstCourseSortOrder);
-
-      orderItemsData.push({
-        menuItem: { connect: { id: menuItem.id } },
-        menuItemName: menuItem.name,
-        quantity: item.quantity,
-        unitPrice: menuItem.price,
-        modifiersPrice,
-        totalPrice: itemTotal,
-        specialInstructions: item.specialInstructions,
-        fulfillmentStatus: cf.fulfillmentStatus,
-        courseGuid: cf.courseGuid ?? null,
-        courseName: cf.courseGuid ? (cf.courseName ?? cf.courseGuid) : null,
-        courseSortOrder: cf.courseGuid ? cf.normalizedCourseSortOrder : null,
-        courseFireStatus: cf.courseFireStatus,
-        courseFiredAt: cf.courseFiredAt,
-        sentToKitchenAt: cf.sentToKitchenAt,
-        modifiers: { create: modifiersData },
-      });
+    const itemsResult = await buildOrderItemsData(items, courseByGuid, firstCourseSortOrder);
+    if ('error' in itemsResult) {
+      res.status(400).json({ error: itemsResult.error });
+      return;
     }
 
+    const { subtotal, orderItemsData } = itemsResult;
     const tax = Math.round(subtotal * Number(restaurant.taxRate || 0.07) * 100) / 100;
     const total = subtotal + tax;
 
     const order = await prisma.order.create({
-      data: {
-        restaurantId, customerId, tableId: resolvedTableId, serverId, sourceDeviceId,
-        orderNumber: generateOrderNumber(), orderType, orderSource, status: 'pending',
-        subtotal, tax, total, specialInstructions,
-        deliveryAddress: deliveryInfo?.address ?? deliveryAddress,
-        deliveryLat, deliveryLng,
-        deliveryAddress2: deliveryInfo?.address2,
-        deliveryCity: deliveryInfo?.city,
-        deliveryStateUs: deliveryInfo?.state,
-        deliveryZip: deliveryInfo?.zip,
-        deliveryNotes: deliveryInfo?.deliveryNotes,
-        deliveryStatus: orderType === 'delivery' ? 'PREPARING' : null,
-        deliveryEstimatedAt: deliveryInfo?.estimatedDeliveryTime ? new Date(deliveryInfo.estimatedDeliveryTime) : null,
-        vehicleDescription: curbsideInfo?.vehicleDescription,
-        eventDate: cateringInfo?.eventDate ? new Date(cateringInfo.eventDate) : null,
-        eventTime: cateringInfo?.eventTime,
-        headcount: cateringInfo?.headcount,
-        eventType: cateringInfo?.eventType,
-        setupRequired: cateringInfo?.setupRequired ?? false,
-        depositAmount: cateringInfo?.depositAmount,
-        depositPaid: cateringInfo?.depositPaid ?? false,
-        cateringInstructions: cateringInfo?.specialInstructions,
-        approvalStatus: orderType === 'catering' ? 'NEEDS_APPROVAL' : null,
-        scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
-        orderItems: { create: orderItemsData },
-      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data: buildOrderCreateData(restaurantId, {
+        customerId, tableId: resolvedTableId, serverId, sourceDeviceId,
+        orderType, orderSource, subtotal, tax, total, specialInstructions, scheduledTime,
+        deliveryAddress, deliveryLat, deliveryLng, deliveryInfo, curbsideInfo, cateringInfo,
+        orderItemsData,
+      }) as any,
       include: {
         orderItems: { include: { modifiers: true } },
         customer: true, table: true, marketplaceOrder: true,
