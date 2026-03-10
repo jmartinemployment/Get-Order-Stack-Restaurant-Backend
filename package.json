@@ -20,6 +20,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "seed": "tsx scripts/seed-taipa.ts && tsx scripts/seed-demo-data.ts",
+    "seed:catering": "tsx prisma/seed-catering.ts",
     "seed:auth": "tsx scripts/seed-auth.ts",
     "seed:reset": "prisma db push --force-reset --accept-data-loss && tsx scripts/seed-taipa.ts && tsx scripts/seed-demo-data.ts",
     "postinstall": "prisma generate"

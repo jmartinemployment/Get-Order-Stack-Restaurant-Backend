@@ -55,6 +55,7 @@ const updateTeamMemberSchema = z.object({
   hireDate: z.string().nullable().optional(),
   status: z.enum(['active', 'inactive', 'terminated']).optional(),
   taxInfo: taxInfoSchema.nullable().optional(),
+  jobs: z.array(jobSchema).optional(),
 });
 
 const createPermissionSetSchema = z.object({
@@ -351,6 +352,15 @@ router.patch('/:merchantId/team-members/:id', async (req: Request, res: Response
             where: { teamMemberId: id },
             create: { teamMemberId: id, ...d.taxInfo },
             update: d.taxInfo,
+          });
+        }
+      }
+
+      if (d.jobs !== undefined) {
+        await tx.teamMemberJob.deleteMany({ where: { teamMemberId: id } });
+        if (d.jobs.length > 0) {
+          await tx.teamMemberJob.createMany({
+            data: d.jobs.map(j => ({ teamMemberId: id, ...j })),
           });
         }
       }

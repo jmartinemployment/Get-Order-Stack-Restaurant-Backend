@@ -527,7 +527,7 @@ router.post('/:merchantId/catering/events/:id/proposal', async (req: Request, re
 
     await prisma.cateringEvent.update({
       where: { id },
-      data: { estimateId: token, status: job.status === 'inquiry' ? 'proposal_sent' : job.status },
+      data: { estimateId: token, status: job.status === 'inquiry' ? 'proposal_sent' : job.status, proposalSentAt: new Date() },
     });
 
     // Guard against duplicate activity entries (e.g., rapid double-click or Render cold-start retry)

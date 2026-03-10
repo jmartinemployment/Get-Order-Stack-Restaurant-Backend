@@ -2351,6 +2351,7 @@ model CateringEvent {
   invoiceId              String?   @map("invoice_id")
   contractUrl            String?   @map("contract_url")
   contractSignedAt       DateTime? @map("contract_signed_at")
+  proposalSentAt         DateTime? @map("proposal_sent_at")
 
   // Invoice branding overrides
   brandingLogoUrl        String?   @map("branding_logo_url")
