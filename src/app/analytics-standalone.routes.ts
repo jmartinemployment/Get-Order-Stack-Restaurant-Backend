@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { requireAuth } from '../middleware/auth.middleware';
 import { toErrorMessage } from '../utils/errors';
 
@@ -51,7 +51,7 @@ router.post('/pinned-widgets', requireAuth, async (req: Request, res: Response) 
     await prisma.restaurant.update({
       where: { id: restaurantId },
       data: {
-        merchantProfile: structuredClone({ ...profile, pinnedWidgets: widgets }),
+        merchantProfile: structuredClone({ ...profile, pinnedWidgets: widgets }) as Prisma.InputJsonValue,
       },
     });
 
@@ -84,7 +84,7 @@ router.delete('/pinned-widgets/:widgetId', requireAuth, async (req: Request, res
     await prisma.restaurant.update({
       where: { id: restaurantId },
       data: {
-        merchantProfile: structuredClone({ ...profile, pinnedWidgets: filtered }),
+        merchantProfile: structuredClone({ ...profile, pinnedWidgets: filtered }) as Prisma.InputJsonValue,
       },
     });
 
