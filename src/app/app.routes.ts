@@ -891,6 +891,10 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
   }
 });
 
+function pickDefined(obj: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+}
+
 function buildMenuItemPatch(
   fields: {
     categoryId?: unknown; name?: unknown; nameEn?: unknown; description?: unknown;
@@ -905,24 +909,9 @@ function buildMenuItemPatch(
     available, eightySixed, eightySixReason, popular, dietary, displayOrder,
     prepTimeMinutes, menuType, cateringPricingModel, cateringPricing } = fields;
   return {
-    ...(categoryId !== undefined && { categoryId }),
-    ...(name !== undefined && { name }),
-    ...(nameEn !== undefined && { nameEn }),
-    ...(description !== undefined && { description }),
-    ...(generatedDescEn !== undefined && { descriptionEn: generatedDescEn }),
-    ...(price !== undefined && { price }),
-    ...(cost !== undefined && { cost }),
-    ...(image !== undefined && { image }),
-    ...(available !== undefined && { available }),
-    ...(eightySixed !== undefined && { eightySixed }),
-    ...(eightySixReason !== undefined && { eightySixReason }),
-    ...(popular !== undefined && { popular }),
-    ...(dietary !== undefined && { dietary }),
-    ...(displayOrder !== undefined && { displayOrder }),
-    ...(prepTimeMinutes !== undefined && { prepTimeMinutes }),
-    ...(menuType !== undefined && { menuType }),
-    ...(cateringPricingModel !== undefined && { cateringPricingModel }),
-    ...(cateringPricing !== undefined && { cateringPricing }),
+    ...pickDefined({ categoryId, name, nameEn, description, descriptionEn: generatedDescEn,
+      price, cost, image, available, eightySixed, eightySixReason, popular, dietary,
+      displayOrder, prepTimeMinutes, menuType, cateringPricingModel, cateringPricing }),
     ...aiData,
   };
 }

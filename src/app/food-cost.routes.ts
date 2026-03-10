@@ -674,10 +674,10 @@ function computePriceAlerts(
     const key = li.ingredientName.toLowerCase();
     const cost = Number(li.unitCost);
     const entry = seen.get(key);
-    if (!entry) {
-      seen.set(key, { current: cost, previous: null });
-    } else {
+    if (entry) {
       entry.previous ??= cost;
+    } else {
+      seen.set(key, { current: cost, previous: null });
     }
   }
 

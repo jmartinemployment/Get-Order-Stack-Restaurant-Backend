@@ -98,7 +98,7 @@ function normalize(str: string): string {
     .replaceAll(/[íìïî]/g, 'i')
     .replaceAll(/[óòöô]/g, 'o')
     .replaceAll(/[úùüû]/g, 'u')
-    .replaceAll(/ñ/g, 'n')
+    .replaceAll('ñ', 'n')
     .replaceAll(/[-_\s]+/g, '')
     .replaceAll(/[^a-z0-9]/g, '');
 }

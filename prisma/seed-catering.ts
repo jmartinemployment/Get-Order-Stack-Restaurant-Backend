@@ -15,6 +15,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { toErrorMessage } from '../src/utils/errors';
 
 const prisma = new PrismaClient();
 
@@ -163,16 +164,17 @@ interface PackageEntry {
   quotedTotal?: number;
 }
 
-function pkgEntry(
-  id: string,
-  name: string,
-  tier: string,
-  pricingModel: string,
-  pricePerUnitCents: number,
-  minHeadcount: number,
-  description: string,
-  headcount?: number,
-): PackageEntry {
+function pkgEntry(opts: {
+  id: string;
+  name: string;
+  tier: string;
+  pricingModel: string;
+  pricePerUnitCents: number;
+  minHeadcount: number;
+  description: string;
+  headcount?: number;
+}): PackageEntry {
+  const { id, name, tier, pricingModel, pricePerUnitCents, minHeadcount, description, headcount } = opts;
   const entry: PackageEntry = { id, name, tier, pricingModel, pricePerUnit: pricePerUnitCents, minHeadcount, description };
   if (headcount !== undefined) {
     entry.headcount = headcount;
@@ -445,10 +447,10 @@ async function main(): Promise<void> {
 
   // Job 2 — proposal_sent: Meridian Tech Q2 All-Hands
   const job2Packages: PackageEntry[] = [
-    pkgEntry(PKG_CORPORATE, 'Corporate Lunch Buffet', 'standard', 'per_person', 3800, 20,
-      'A professional lunch buffet ideal for corporate meetings and training days. Includes protein, two sides, salad, and beverages.', 85),
-    pkgEntry(PKG_CUSTOM, 'Custom Event Package', 'custom', 'flat', 480000, 10,
-      'Fully customizable package. Work with our team to select exactly what you need for your unique event.'),
+    pkgEntry({ id: PKG_CORPORATE, name: 'Corporate Lunch Buffet', tier: 'standard', pricingModel: 'per_person', pricePerUnitCents: 3800, minHeadcount: 20,
+      description: 'A professional lunch buffet ideal for corporate meetings and training days. Includes protein, two sides, salad, and beverages.', headcount: 85 }),
+    pkgEntry({ id: PKG_CUSTOM, name: 'Custom Event Package', tier: 'custom', pricingModel: 'flat', pricePerUnitCents: 480000, minHeadcount: 10,
+      description: 'Fully customizable package. Work with our team to select exactly what you need for your unique event.' }),
   ];
   await prisma.cateringEvent.upsert({
     where: { id: JOB_2 },
@@ -479,8 +481,8 @@ async function main(): Promise<void> {
 
   // Job 3 — contract_signed: Rivera Quinceañera
   const job3Packages: PackageEntry[] = [
-    pkgEntry(PKG_WEDDING, 'Wedding Reception Plated', 'premium', 'per_person', 8500, 50,
-      'Elegant plated service for weddings. Choice of two proteins, two sides, salad, dessert, and full beverage service.', 65),
+    pkgEntry({ id: PKG_WEDDING, name: 'Wedding Reception Plated', tier: 'premium', pricingModel: 'per_person', pricePerUnitCents: 8500, minHeadcount: 50,
+      description: 'Elegant plated service for weddings. Choice of two proteins, two sides, salad, dessert, and full beverage service.', headcount: 65 }),
   ];
   await prisma.cateringEvent.upsert({
     where: { id: JOB_3 },
@@ -512,8 +514,8 @@ async function main(): Promise<void> {
 
   // Job 4 — deposit_received: Broward County Bar Association Annual Dinner
   const job4Packages: PackageEntry[] = [
-    pkgEntry(PKG_WEDDING, 'Wedding Reception Plated', 'premium', 'per_person', 8500, 50,
-      'Elegant plated service for weddings. Choice of two proteins, two sides, salad, dessert, and full beverage service.', 200),
+    pkgEntry({ id: PKG_WEDDING, name: 'Wedding Reception Plated', tier: 'premium', pricingModel: 'per_person', pricePerUnitCents: 8500, minHeadcount: 50,
+      description: 'Elegant plated service for weddings. Choice of two proteins, two sides, salad, dessert, and full beverage service.', headcount: 200 }),
   ];
   await prisma.cateringEvent.upsert({
     where: { id: JOB_4 },
@@ -545,12 +547,12 @@ async function main(): Promise<void> {
 
   // Job 5 — in_progress: Palm Beach Charity Gala
   const job5Packages: PackageEntry[] = [
-    pkgEntry(PKG_WEDDING, 'Wedding Reception Plated', 'premium', 'per_person', 8500, 50,
-      'Elegant plated service for weddings. Choice of two proteins, two sides, salad, dessert, and full beverage service.', 150),
-    pkgEntry('feed000f-addon-choc-0000-000000000001', 'Chocolate Fountain with Dippers', 'addon', 'flat', 27500, 1,
-      'Belgian chocolate fountain with dippers. Add-on.'),
-    pkgEntry('feed0006-addon-shrimp-000-000000000001', 'Shrimp Cocktail Display', 'addon', 'flat', 19500, 1,
-      'Large chilled shrimp cocktail display. Add-on.'),
+    pkgEntry({ id: PKG_WEDDING, name: 'Wedding Reception Plated', tier: 'premium', pricingModel: 'per_person', pricePerUnitCents: 8500, minHeadcount: 50,
+      description: 'Elegant plated service for weddings. Choice of two proteins, two sides, salad, dessert, and full beverage service.', headcount: 150 }),
+    pkgEntry({ id: 'feed000f-addon-choc-0000-000000000001', name: 'Chocolate Fountain with Dippers', tier: 'addon', pricingModel: 'flat', pricePerUnitCents: 27500, minHeadcount: 1,
+      description: 'Belgian chocolate fountain with dippers. Add-on.' }),
+    pkgEntry({ id: 'feed0006-addon-shrimp-000-000000000001', name: 'Shrimp Cocktail Display', tier: 'addon', pricingModel: 'flat', pricePerUnitCents: 19500, minHeadcount: 1,
+      description: 'Large chilled shrimp cocktail display. Add-on.' }),
   ];
   await prisma.cateringEvent.upsert({
     where: { id: JOB_5 },
@@ -582,12 +584,12 @@ async function main(): Promise<void> {
 
   // Job 6 — final_payment: Goldstein Bar Mitzvah
   const job6Packages: PackageEntry[] = [
-    pkgEntry(PKG_CUSTOM, 'Custom Event Package', 'custom', 'flat', 0, 10,
-      'Fully customizable package. Work with our team to select exactly what you need for your unique event.'),
-    pkgEntry('feed000f-addon-choc-0000-000000000002', 'Chocolate Fountain with Dippers', 'addon', 'flat', 27500, 1,
-      'Belgian chocolate fountain with dippers. Add-on.'),
-    pkgEntry('feed0011-addon-coffee-000-000000000001', 'Coffee & Tea Service', 'addon', 'per_person', 500, 1,
-      'Full coffee and tea service. Per person.', 90),
+    pkgEntry({ id: PKG_CUSTOM, name: 'Custom Event Package', tier: 'custom', pricingModel: 'flat', pricePerUnitCents: 0, minHeadcount: 10,
+      description: 'Fully customizable package. Work with our team to select exactly what you need for your unique event.' }),
+    pkgEntry({ id: 'feed000f-addon-choc-0000-000000000002', name: 'Chocolate Fountain with Dippers', tier: 'addon', pricingModel: 'flat', pricePerUnitCents: 27500, minHeadcount: 1,
+      description: 'Belgian chocolate fountain with dippers. Add-on.' }),
+    pkgEntry({ id: 'feed0011-addon-coffee-000-000000000001', name: 'Coffee & Tea Service', tier: 'addon', pricingModel: 'per_person', pricePerUnitCents: 500, minHeadcount: 1,
+      description: 'Full coffee and tea service. Per person.', headcount: 90 }),
   ];
   await prisma.cateringEvent.upsert({
     where: { id: JOB_6 },
@@ -619,8 +621,8 @@ async function main(): Promise<void> {
 
   // Job 7 — completed: FPL Executive Offsite Luncheon
   const job7Packages: PackageEntry[] = [
-    pkgEntry(PKG_CORPORATE, 'Corporate Lunch Buffet', 'standard', 'per_person', 3800, 20,
-      'A professional lunch buffet ideal for corporate meetings and training days. Includes protein, two sides, salad, and beverages.', 45),
+    pkgEntry({ id: PKG_CORPORATE, name: 'Corporate Lunch Buffet', tier: 'standard', pricingModel: 'per_person', pricePerUnitCents: 3800, minHeadcount: 20,
+      description: 'A professional lunch buffet ideal for corporate meetings and training days. Includes protein, two sides, salad, and beverages.', headcount: 45 }),
   ];
   await prisma.cateringEvent.upsert({
     where: { id: JOB_7 },
@@ -652,8 +654,8 @@ async function main(): Promise<void> {
 
   // Job 8 — cancelled: Downtown Boca Networking Event
   const job8Packages: PackageEntry[] = [
-    pkgEntry(PKG_CORPORATE, 'Corporate Lunch Buffet', 'standard', 'per_person', 3800, 20,
-      'A professional lunch buffet ideal for corporate meetings and training days. Includes protein, two sides, salad, and beverages.', 60),
+    pkgEntry({ id: PKG_CORPORATE, name: 'Corporate Lunch Buffet', tier: 'standard', pricingModel: 'per_person', pricePerUnitCents: 3800, minHeadcount: 20,
+      description: 'A professional lunch buffet ideal for corporate meetings and training days. Includes protein, two sides, salad, and beverages.', headcount: 60 }),
   ];
   const job8Milestones: Milestone[] = [
     {
@@ -786,11 +788,11 @@ async function main(): Promise<void> {
   console.log('  Total records:          36\n');
 }
 
-main()
-  .catch((err: unknown) => {
-    console.error('❌ Seed failed:', err instanceof Error ? err.message : String(err));
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+try {
+  await main();
+} catch (err: unknown) {
+  console.error('❌ Seed failed:', toErrorMessage(err));
+  process.exit(1);
+} finally {
+  await prisma.$disconnect();
+}
