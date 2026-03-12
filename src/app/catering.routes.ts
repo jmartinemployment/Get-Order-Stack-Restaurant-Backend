@@ -608,7 +608,12 @@ publicRouter.get('/catering/proposal/:token', async (req: Request, res: Response
 publicRouter.post('/catering/proposal/:token/approve', async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
-    const { packageId } = req.body;
+    const { packageId, signatureImage, consentedAt } = req.body;
+
+    if (!signatureImage) {
+      res.status(400).json({ error: 'Signature is required' });
+      return;
+    }
 
     const proposalToken = await prisma.cateringProposalToken.findUnique({
       where: { token },
@@ -661,6 +666,10 @@ publicRouter.post('/catering/proposal/:token/approve', async (req: Request, res:
       amountCents: Math.round(fees.totalCents * m.percent / 100),
     }));
 
+    const signerIp = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim()
+      ?? req.socket.remoteAddress
+      ?? null;
+
     await prisma.cateringEvent.update({
       where: { id: job.id },
       data: {
@@ -673,6 +682,9 @@ publicRouter.post('/catering/proposal/:token/approve', async (req: Request, res:
         milestones,
         status: 'contract_signed',
         contractSignedAt: new Date(),
+        signatureImageUrl: signatureImage,
+        signerIp,
+        signerConsentedAt: consentedAt ? new Date(consentedAt) : new Date(),
       },
     });
 

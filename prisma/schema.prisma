@@ -2353,6 +2353,11 @@ model CateringEvent {
   contractSignedAt       DateTime? @map("contract_signed_at")
   proposalSentAt         DateTime? @map("proposal_sent_at")
 
+  // E-signature
+  signatureImageUrl      String?   @map("signature_image_url") @db.Text
+  signerIp               String?   @map("signer_ip")
+  signerConsentedAt      DateTime? @map("signer_consented_at")
+
   // Invoice branding overrides
   brandingLogoUrl        String?   @map("branding_logo_url")
   brandingColor          String?   @map("branding_color")
