@@ -16,6 +16,7 @@ import { coursePacingService } from '../services/course-pacing.service';
 import { orderThrottlingService } from '../services/order-throttling.service';
 import { authService } from '../services/auth.service';
 import { logger } from '../utils/logger';
+import { toErrorMessage } from '../utils/errors';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -689,7 +690,7 @@ router.get('/:merchantId/menu/items', async (req: Request, res: Response) => {
     });
     res.json(items);
   } catch (error: unknown) {
-    logger.error('Error fetching menu items', { error: error instanceof Error ? error.message : String(error) });
+    logger.error('Error fetching menu items', { error: toErrorMessage(error) });
     res.status(500).json({ error: 'Failed to fetch menu items' });
   }
 });
@@ -716,7 +717,7 @@ router.get('/:merchantId/menu/items/:itemId', async (req: Request, res: Response
     }
     res.json(item);
   } catch (error: unknown) {
-    logger.error('Error fetching menu item', { error: error instanceof Error ? error.message : String(error) });
+    logger.error('Error fetching menu item', { error: toErrorMessage(error) });
     res.status(500).json({ error: 'Failed to fetch menu item' });
   }
 });
@@ -893,7 +894,7 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
     });
     res.status(201).json(item);
   } catch (error: unknown) {
-    logger.error('Error creating menu item', { error: error instanceof Error ? error.message : String(error) });
+    logger.error('Error creating menu item', { error: toErrorMessage(error) });
     res.status(500).json({ error: 'Failed to create menu item' });
   }
 });
@@ -910,19 +911,19 @@ function buildMenuItemPatch(
     dietary?: unknown; displayOrder?: unknown; prepTimeMinutes?: unknown; menuType?: unknown;
     cateringPricingModel?: unknown; cateringPricing?: unknown;
     itemCategory?: unknown; beverageType?: unknown; vendorId?: unknown;
-    allergens?: unknown; dietaryFlags?: unknown;
+    allergens?: unknown; cateringAllergens?: unknown; dietaryFlags?: unknown;
   },
   aiData: Record<string, unknown>,
 ): Record<string, unknown> {
   const { categoryId, name, nameEn, description, generatedDescEn, price, cost, image,
     available, eightySixed, eightySixReason, popular, dietary, displayOrder,
     prepTimeMinutes, menuType, cateringPricingModel, cateringPricing,
-    itemCategory, beverageType, vendorId, allergens, dietaryFlags } = fields;
+    itemCategory, beverageType, vendorId, allergens, cateringAllergens, dietaryFlags } = fields;
   return {
     ...pickDefined({ categoryId, name, nameEn, description, descriptionEn: generatedDescEn,
       price, cost, image, available, eightySixed, eightySixReason, popular, dietary,
       displayOrder, prepTimeMinutes, menuType, cateringPricingModel, cateringPricing,
-      itemCategory, beverageType, vendorId, allergens, dietaryFlags }),
+      itemCategory, beverageType, vendorId, allergens, cateringAllergens, dietaryFlags }),
     ...aiData,
   };
 }
@@ -935,7 +936,7 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
       available, eightySixed, eightySixReason, popular, dietary, displayOrder,
       prepTimeMinutes, modifierGroupIds, cateringPricing,
       menuType, cateringPricingModel,
-      itemCategory, beverageType, vendorId, allergens, dietaryFlags,
+      itemCategory, beverageType, vendorId, allergens, cateringAllergens, dietaryFlags,
     } = req.body;
 
     const typeError = validateMenuTypeFields(menuType, cateringPricingModel);
@@ -959,17 +960,22 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
       await syncMenuItemModifierGroups(itemId, modifierGroupIds);
     }
 
+    const coercedAllergens = allergens === undefined ? undefined : (Array.isArray(allergens) ? allergens : []);
+    const coercedCateringAllergens = cateringAllergens === undefined ? undefined : (Array.isArray(cateringAllergens) ? cateringAllergens : []);
+    const coercedDietaryFlags = dietaryFlags === undefined ? undefined : (Array.isArray(dietaryFlags) ? dietaryFlags : []);
+
     const item = await prisma.menuItem.update({
       where: { id: itemId },
       data: buildMenuItemPatch(
         { categoryId, name, nameEn, description, generatedDescEn, price, cost, image,
           available, eightySixed, eightySixReason, popular, dietary, displayOrder,
           prepTimeMinutes, menuType, cateringPricingModel, cateringPricing,
-          itemCategory: itemCategory !== undefined ? (itemCategory ?? null) : undefined,
-          beverageType: beverageType !== undefined ? (beverageType ?? null) : undefined,
-          vendorId: vendorId !== undefined ? (vendorId ?? null) : undefined,
-          allergens: allergens !== undefined ? (Array.isArray(allergens) ? allergens : []) : undefined,
-          dietaryFlags: dietaryFlags !== undefined ? (Array.isArray(dietaryFlags) ? dietaryFlags : []) : undefined,
+          itemCategory: itemCategory === undefined ? undefined : (itemCategory ?? null),
+          beverageType: beverageType === undefined ? undefined : (beverageType ?? null),
+          vendorId: vendorId === undefined ? undefined : (vendorId ?? null),
+          allergens: coercedAllergens,
+          cateringAllergens: coercedCateringAllergens,
+          dietaryFlags: coercedDietaryFlags,
         },
         aiData,
       ),
@@ -977,7 +983,7 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
     });
     res.json(item);
   } catch (error: unknown) {
-    logger.error('Error updating menu item', { error: error instanceof Error ? error.message : String(error) });
+    logger.error('Error updating menu item', { error: toErrorMessage(error) });
     res.status(500).json({ error: 'Failed to update menu item' });
   }
 });

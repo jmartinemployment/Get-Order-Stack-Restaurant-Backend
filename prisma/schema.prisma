@@ -384,8 +384,9 @@ model MenuItem {
   itemCategory    String?   @map("item_category")
   beverageType    String?   @map("beverage_type")
   vendorId        String?   @map("vendor_id")
-  allergens       String[]  @default([]) @map("allergens")
-  dietaryFlags    String[]  @default([]) @map("dietary_flags")
+  allergens          String[]  @default([]) @map("allergens")
+  cateringAllergens  String[]  @default([]) @map("catering_allergens")
+  dietaryFlags       String[]  @default([]) @map("dietary_flags")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
@@ -2382,6 +2383,9 @@ model CateringEvent {
 
   // Delivery logistics (JSON object, off-site events)
   deliveryDetails        Json?     @map("delivery_details")
+
+  // AI-generated proposal content (JSON object)
+  aiContent              Json?     @map("ai_content")
 
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
