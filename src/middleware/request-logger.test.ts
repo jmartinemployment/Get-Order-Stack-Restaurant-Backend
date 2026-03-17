@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { requestLogger } from './request-logger';
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { EventEmitter } from 'node:events';
 
 vi.mock('../utils/logger', () => ({

@@ -7,7 +7,7 @@
  * - Logs error with method, path, ip, stack via logger.error
  * - Handles errors without stack trace
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { globalErrorHandler } from './error-handler';
 import { Request, Response, NextFunction } from 'express';
 

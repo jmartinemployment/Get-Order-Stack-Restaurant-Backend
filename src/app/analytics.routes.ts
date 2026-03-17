@@ -130,6 +130,210 @@ router.get('/:merchantId/analytics/upsell-suggestions', async (req: Request, res
 
 // ============ Menu Engineering — Advanced Analytics ============
 
+function getConfidence(totalOrders: number): 'low' | 'medium' | 'high' {
+  if (totalOrders >= 30) {
+    return 'high';
+  } else if (totalOrders >= 10) {
+    return 'medium';
+  } else {
+    return 'low';
+  }
+}
+
+function buildWeeklyData(
+  orderItems: Array<{ menuItemId: string | null; quantity: number; unitPrice: unknown; order: { createdAt: Date } }>,
+  windowStart: Date
+): Map<string, Map<number, { totalQty: number; totalRevenue: number; prices: number[] }>> {
+  const itemWeeklyData = new Map<string, Map<number, { totalQty: number; totalRevenue: number; prices: number[] }>>();
+  for (const oi of orderItems) {
+    if (!oi.menuItemId) continue;
+    const weekNum = Math.floor((oi.order.createdAt.getTime() - windowStart.getTime()) / (7 * 24 * 60 * 60 * 1000));
+    const itemMap = itemWeeklyData.get(oi.menuItemId) ?? new Map();
+    const week = itemMap.get(weekNum) ?? { totalQty: 0, totalRevenue: 0, prices: [] };
+    week.totalQty += oi.quantity;
+    week.totalRevenue += Number(oi.unitPrice) * oi.quantity;
+    week.prices.push(Number(oi.unitPrice));
+    itemMap.set(weekNum, week);
+    itemWeeklyData.set(oi.menuItemId, itemMap);
+  }
+  return itemWeeklyData;
+}
+
+function computeItemElasticity(
+  weeklyData: Map<number, { totalQty: number; totalRevenue: number; prices: number[] }>,
+  totalOrders: number
+): { elasticity: number; confidence: 'low' | 'medium' | 'high' } {
+  const allPrices = [...weeklyData.values()].flatMap((w) => w.prices);
+  const uniquePrices = [...new Set(allPrices.map((p) => Math.round(p * 100)))];
+
+  let elasticity = 0;
+  let confidence: 'low' | 'medium' | 'high' = 'low';
+
+  if (uniquePrices.length >= 2) {
+    const sortedPrices = uniquePrices.map((p) => p / 100).sort((a, b) => a - b);
+    const midPrice = sortedPrices[Math.floor(sortedPrices.length / 2)];
+
+    let lowPriceQty = 0, lowPriceWeeks = 0;
+    let highPriceQty = 0, highPriceWeeks = 0;
+    const lowPrice = sortedPrices[0];
+    const highPrice = sortedPrices.at(-1) ?? 0;
+
+    for (const week of weeklyData.values()) {
+      const avgWeekPrice = week.prices.reduce((s, p) => s + p, 0) / week.prices.length;
+      if (avgWeekPrice <= midPrice) {
+        lowPriceQty += week.totalQty;
+        lowPriceWeeks++;
+      } else {
+        highPriceQty += week.totalQty;
+        highPriceWeeks++;
+      }
+    }
+
+    const avgLowVolume = lowPriceWeeks > 0 ? lowPriceQty / lowPriceWeeks : 0;
+    const avgHighVolume = highPriceWeeks > 0 ? highPriceQty / highPriceWeeks : 0;
+
+    if (avgLowVolume > 0 && lowPrice !== highPrice) {
+      const pctVolumeChange = (avgHighVolume - avgLowVolume) / avgLowVolume;
+      const pctPriceChange = (highPrice - lowPrice) / lowPrice;
+      elasticity = pctPriceChange === 0 ? 0 : Math.round((pctVolumeChange / pctPriceChange) * 100) / 100;
+    }
+
+    confidence = getConfidence(totalOrders);
+  }
+
+  return { elasticity, confidence };
+}
+
+async function addElasticityReasoning(
+  results: Array<{
+    itemId: string;
+    itemName: string;
+    currentPrice: number;
+    elasticity: number;
+    recommendation: 'increase' | 'decrease' | 'hold';
+    estimatedRevenueChange: number;
+    confidence: 'low' | 'medium' | 'high';
+    reasoning?: string;
+  }>,
+  restaurantId: string
+): Promise<void> {
+  try {
+    const client = await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'menuEngineering');
+    if (client) {
+      const prompt = `You are a restaurant pricing analyst. For each menu item below, write a 1–2 sentence plain-English explanation of the pricing recommendation. Be specific and actionable. Return ONLY a JSON array.
+
+Items:
+${results.map((i) => JSON.stringify({ itemId: i.itemId, itemName: i.itemName, elasticity: i.elasticity, recommendation: i.recommendation, currentPrice: i.currentPrice, estimatedRevenueChange: i.estimatedRevenueChange, confidence: i.confidence })).join(',\n')}
+
+Return: [{ "itemId": "...", "reasoning": "..." }]`;
+
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1200,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      await aiUsageService.logUsage(restaurantId, 'menuEngineering', response.usage.input_tokens, response.usage.output_tokens);
+
+      const content = response.content[0];
+      if (content.type === 'text') {
+        const jsonMatch = /\[[\s\S]*\]/.exec(content.text);
+        if (jsonMatch) {
+          const reasonings: Array<{ itemId: string; reasoning: string }> = JSON.parse(jsonMatch[0]);
+          const reasoningMap = new Map(reasonings.map((r) => [r.itemId, r.reasoning]));
+          for (const item of results) {
+            item.reasoning = reasoningMap.get(item.itemId);
+          }
+        }
+      }
+    }
+  } catch (aiError: unknown) {
+    logger.warn('Claude reasoning for price elasticity failed, using fallback', { error: toErrorMessage(aiError) });
+  }
+
+  // Fallback reasoning for items without Claude response
+  for (const item of results) {
+    if (!item.reasoning) {
+      const fallbacks: Record<string, string> = {
+        increase: `${item.itemName} shows inelastic demand — a price increase is unlikely to reduce order volume significantly.`,
+        decrease: `${item.itemName} shows high price sensitivity — reducing price may recover lost volume.`,
+        hold: `${item.itemName} pricing appears appropriate for current demand patterns.`,
+      };
+      item.reasoning = fallbacks[item.recommendation];
+    }
+  }
+}
+
+function buildSalesLookup(
+  orderItems: Array<{ menuItemId: string | null; quantity: number; order: { createdAt: Date } }>
+): Map<string, Array<{ date: Date; qty: number }>> {
+  const salesByItem = new Map<string, Array<{ date: Date; qty: number }>>();
+  for (const oi of orderItems) {
+    if (!oi.menuItemId) continue;
+    const arr = salesByItem.get(oi.menuItemId) ?? [];
+    arr.push({ date: oi.order.createdAt, qty: oi.quantity });
+    salesByItem.set(oi.menuItemId, arr);
+  }
+  return salesByItem;
+}
+
+async function addCannibalizationRecs(
+  results: Array<{
+    newItemId: string;
+    newItemName: string;
+    affectedItemId: string;
+    affectedItemName: string;
+    salesDeclinePercent: number;
+    periodStart: string;
+    periodEnd: string;
+    recommendation?: string;
+  }>,
+  restaurantId: string
+): Promise<void> {
+  try {
+    const client = await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'menuEngineering');
+    if (client) {
+      const prompt = `You are a restaurant menu analyst. For each cannibalization pair below, write a 1-sentence recommendation for the operator. Be direct and actionable. Return ONLY a JSON array.
+
+Pairs:
+${results.map((p) => JSON.stringify({ newItemId: p.newItemId, newItemName: p.newItemName, affectedItemId: p.affectedItemId, affectedItemName: p.affectedItemName, salesDeclinePercent: p.salesDeclinePercent })).join(',\n')}
+
+Return: [{ "newItemId": "...", "affectedItemId": "...", "recommendation": "..." }]`;
+
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 800,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      await aiUsageService.logUsage(restaurantId, 'menuEngineering', response.usage.input_tokens, response.usage.output_tokens);
+
+      const content = response.content[0];
+      if (content.type === 'text') {
+        const jsonMatch = /\[[\s\S]*\]/.exec(content.text);
+        if (jsonMatch) {
+          const recs: Array<{ newItemId: string; affectedItemId: string; recommendation: string }> = JSON.parse(jsonMatch[0]);
+          for (const rec of recs) {
+            const match = results.find((r) => r.newItemId === rec.newItemId && r.affectedItemId === rec.affectedItemId);
+            if (match) {
+              match.recommendation = rec.recommendation;
+            }
+          }
+        }
+      }
+    }
+  } catch (aiError: unknown) {
+    logger.warn('Claude recommendation for cannibalization failed, using fallback', { error: toErrorMessage(aiError) });
+  }
+
+  // Fallback for items without Claude response
+  for (const pair of results) {
+    if (!pair.recommendation) {
+      pair.recommendation = `Consider whether ${pair.affectedItemName} and ${pair.newItemName} can be differentiated or whether one should be repositioned.`;
+    }
+  }
+}
+
 /**
  * GET /:merchantId/analytics/menu/price-elasticity?days=90
  * Real price elasticity analysis: measures % volume change / % price change
@@ -162,18 +366,7 @@ router.get('/:merchantId/analytics/menu/price-elasticity', async (req: Request, 
     });
 
     // Group order items by menu item, then by week
-    const itemWeeklyData = new Map<string, Map<number, { totalQty: number; totalRevenue: number; prices: number[] }>>();
-    for (const oi of orderItems) {
-      if (!oi.menuItemId) continue;
-      const weekNum = Math.floor((oi.order.createdAt.getTime() - windowStart.getTime()) / (7 * 24 * 60 * 60 * 1000));
-      const itemMap = itemWeeklyData.get(oi.menuItemId) ?? new Map();
-      const week = itemMap.get(weekNum) ?? { totalQty: 0, totalRevenue: 0, prices: [] };
-      week.totalQty += oi.quantity;
-      week.totalRevenue += Number(oi.unitPrice) * oi.quantity;
-      week.prices.push(Number(oi.unitPrice));
-      itemMap.set(weekNum, week);
-      itemWeeklyData.set(oi.menuItemId, itemMap);
-    }
+    const itemWeeklyData = buildWeeklyData(orderItems, windowStart);
 
     const results: Array<{
       itemId: string;
@@ -193,46 +386,8 @@ router.get('/:merchantId/analytics/menu/price-elasticity', async (req: Request, 
       const totalOrders = [...weeklyData.values()].reduce((sum, w) => sum + w.totalQty, 0);
       if (totalOrders < 5) continue;
 
-      const allPrices = [...weeklyData.values()].flatMap((w) => w.prices);
-      const uniquePrices = [...new Set(allPrices.map((p) => Math.round(p * 100)))];
       const currentPrice = Number(mi.price);
-
-      let elasticity = 0;
-      let confidence: 'low' | 'medium' | 'high' = 'low';
-
-      if (uniquePrices.length >= 2) {
-        // Price has varied — compute elasticity from pre/post price change
-        const sortedPrices = uniquePrices.map((p) => p / 100).sort((a, b) => a - b);
-        const midPrice = sortedPrices[Math.floor(sortedPrices.length / 2)];
-
-        let lowPriceQty = 0, lowPriceWeeks = 0;
-        let highPriceQty = 0, highPriceWeeks = 0;
-        const lowPrice = sortedPrices[0];
-        const highPrice = sortedPrices.at(-1)!;
-
-        for (const week of weeklyData.values()) {
-          const avgWeekPrice = week.prices.reduce((s, p) => s + p, 0) / week.prices.length;
-          if (avgWeekPrice <= midPrice) {
-            lowPriceQty += week.totalQty;
-            lowPriceWeeks++;
-          } else {
-            highPriceQty += week.totalQty;
-            highPriceWeeks++;
-          }
-        }
-
-        const avgLowVolume = lowPriceWeeks > 0 ? lowPriceQty / lowPriceWeeks : 0;
-        const avgHighVolume = highPriceWeeks > 0 ? highPriceQty / highPriceWeeks : 0;
-
-        if (avgLowVolume > 0 && lowPrice !== highPrice) {
-          const pctVolumeChange = (avgHighVolume - avgLowVolume) / avgLowVolume;
-          const pctPriceChange = (highPrice - lowPrice) / lowPrice;
-          elasticity = pctPriceChange !== 0 ? Math.round((pctVolumeChange / pctPriceChange) * 100) / 100 : 0;
-        }
-
-        confidence = totalOrders >= 30 ? 'high' : totalOrders >= 10 ? 'medium' : 'low';
-      }
-      // If price never varied, elasticity stays 0 and confidence stays 'low'
+      const { elasticity, confidence } = computeItemElasticity(weeklyData, totalOrders);
 
       // Determine recommendation
       let recommendation: 'increase' | 'decrease' | 'hold' = 'hold';
@@ -264,51 +419,7 @@ router.get('/:merchantId/analytics/menu/price-elasticity', async (req: Request, 
 
     // Claude reasoning (batch call for all items)
     if (results.length > 0) {
-      try {
-        const client = await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'menuEngineering');
-        if (client) {
-          const prompt = `You are a restaurant pricing analyst. For each menu item below, write a 1–2 sentence plain-English explanation of the pricing recommendation. Be specific and actionable. Return ONLY a JSON array.
-
-Items:
-${results.map((i) => JSON.stringify({ itemId: i.itemId, itemName: i.itemName, elasticity: i.elasticity, recommendation: i.recommendation, currentPrice: i.currentPrice, estimatedRevenueChange: i.estimatedRevenueChange, confidence: i.confidence })).join(',\n')}
-
-Return: [{ "itemId": "...", "reasoning": "..." }]`;
-
-          const response = await client.messages.create({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1200,
-            messages: [{ role: 'user', content: prompt }],
-          });
-
-          await aiUsageService.logUsage(restaurantId, 'menuEngineering', response.usage.input_tokens, response.usage.output_tokens);
-
-          const content = response.content[0];
-          if (content.type === 'text') {
-            const jsonMatch = /\[[\s\S]*\]/.exec(content.text);
-            if (jsonMatch) {
-              const reasonings: Array<{ itemId: string; reasoning: string }> = JSON.parse(jsonMatch[0]);
-              const reasoningMap = new Map(reasonings.map((r) => [r.itemId, r.reasoning]));
-              for (const item of results) {
-                item.reasoning = reasoningMap.get(item.itemId);
-              }
-            }
-          }
-        }
-      } catch (aiError: unknown) {
-        logger.warn('Claude reasoning for price elasticity failed, using fallback', { error: toErrorMessage(aiError) });
-      }
-
-      // Fallback reasoning for items without Claude response
-      for (const item of results) {
-        if (!item.reasoning) {
-          const fallbacks: Record<string, string> = {
-            increase: `${item.itemName} shows inelastic demand — a price increase is unlikely to reduce order volume significantly.`,
-            decrease: `${item.itemName} shows high price sensitivity — reducing price may recover lost volume.`,
-            hold: `${item.itemName} pricing appears appropriate for current demand patterns.`,
-          };
-          item.reasoning = fallbacks[item.recommendation];
-        }
-      }
+      await addElasticityReasoning(results, restaurantId);
     }
 
     res.json(results);
@@ -366,7 +477,7 @@ router.get('/:merchantId/analytics/menu/cannibalization', async (req: Request, r
     }
 
     // Get all relevant order items in a wider window (4 weeks before earliest new item + analysis window)
-    const earliestLaunch = newItems.reduce((min, ni) => ni.createdAt < min ? ni.createdAt : min, newItems[0].createdAt);
+    const earliestLaunch = new Date(newItems.reduce((min, ni) => Math.min(min, ni.createdAt.getTime()), newItems[0].createdAt.getTime()));
     const preWindowStart = new Date(earliestLaunch);
     preWindowStart.setDate(preWindowStart.getDate() - 28); // 4 weeks before
 
@@ -385,13 +496,7 @@ router.get('/:merchantId/analytics/menu/cannibalization', async (req: Request, r
     });
 
     // Build sales lookup: menuItemId -> array of { date, qty }
-    const salesByItem = new Map<string, Array<{ date: Date; qty: number }>>();
-    for (const oi of orderItems) {
-      if (!oi.menuItemId) continue;
-      const arr = salesByItem.get(oi.menuItemId) ?? [];
-      arr.push({ date: oi.order.createdAt, qty: oi.quantity });
-      salesByItem.set(oi.menuItemId, arr);
-    }
+    const salesByItem = buildSalesLookup(orderItems);
 
     const now = new Date();
     const results: Array<{
@@ -414,7 +519,7 @@ router.get('/:merchantId/analytics/menu/cannibalization', async (req: Request, r
       beforeStart.setDate(beforeStart.getDate() - 28);
       const afterEnd = new Date(launchDate);
       afterEnd.setDate(afterEnd.getDate() + 28);
-      const clampedAfterEnd = afterEnd > now ? now : afterEnd;
+      const clampedAfterEnd = new Date(Math.min(afterEnd.getTime(), now.getTime()));
       const afterWeeks = Math.max((clampedAfterEnd.getTime() - launchDate.getTime()) / (7 * 24 * 60 * 60 * 1000), 1);
       const beforeWeeks = 4;
 
@@ -459,48 +564,7 @@ router.get('/:merchantId/analytics/menu/cannibalization', async (req: Request, r
 
     // Claude recommendations (batch call)
     if (results.length > 0) {
-      try {
-        const client = await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'menuEngineering');
-        if (client) {
-          const prompt = `You are a restaurant menu analyst. For each cannibalization pair below, write a 1-sentence recommendation for the operator. Be direct and actionable. Return ONLY a JSON array.
-
-Pairs:
-${results.map((p) => JSON.stringify({ newItemId: p.newItemId, newItemName: p.newItemName, affectedItemId: p.affectedItemId, affectedItemName: p.affectedItemName, salesDeclinePercent: p.salesDeclinePercent })).join(',\n')}
-
-Return: [{ "newItemId": "...", "affectedItemId": "...", "recommendation": "..." }]`;
-
-          const response = await client.messages.create({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 800,
-            messages: [{ role: 'user', content: prompt }],
-          });
-
-          await aiUsageService.logUsage(restaurantId, 'menuEngineering', response.usage.input_tokens, response.usage.output_tokens);
-
-          const content = response.content[0];
-          if (content.type === 'text') {
-            const jsonMatch = /\[[\s\S]*\]/.exec(content.text);
-            if (jsonMatch) {
-              const recs: Array<{ newItemId: string; affectedItemId: string; recommendation: string }> = JSON.parse(jsonMatch[0]);
-              for (const rec of recs) {
-                const match = results.find((r) => r.newItemId === rec.newItemId && r.affectedItemId === rec.affectedItemId);
-                if (match) {
-                  match.recommendation = rec.recommendation;
-                }
-              }
-            }
-          }
-        }
-      } catch (aiError: unknown) {
-        logger.warn('Claude recommendation for cannibalization failed, using fallback', { error: toErrorMessage(aiError) });
-      }
-
-      // Fallback for items without Claude response
-      for (const pair of results) {
-        if (!pair.recommendation) {
-          pair.recommendation = `Consider whether ${pair.affectedItemName} and ${pair.newItemName} can be differentiated or whether one should be repositioned.`;
-        }
-      }
+      await addCannibalizationRecs(results, restaurantId);
     }
 
     res.json(results);
