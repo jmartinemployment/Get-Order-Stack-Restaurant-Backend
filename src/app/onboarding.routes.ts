@@ -94,17 +94,12 @@ router.patch('/:merchantId/merchant-profile', async (req: Request, res: Response
     const restaurantId = req.params.merchantId;
     const updates = req.body;
 
-    const existing = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      select: { merchantProfile: true },
-    });
-
-    if (!existing) {
+    const currentProfile = await loadMerchantProfile(restaurantId);
+    if (currentProfile === null) {
       res.status(404).json({ error: 'Restaurant not found' });
       return;
     }
 
-    const currentProfile = (existing.merchantProfile as Record<string, unknown>) ?? {};
     const merged = { ...currentProfile, ...updates };
 
     const data: Record<string, unknown> = { merchantProfile: merged };
@@ -375,15 +370,12 @@ router.post('/restaurant', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    const street = address?.street?.trim() ?? '';
-    const addrCity = address?.city?.trim() ?? '';
-    const addrState = address?.state?.trim() ?? '';
-    const addrZip = address?.zip?.trim() ?? '';
-
-    if (!street || !addrCity || !addrState || !addrZip) {
+    const parsedAddr = parseAddress(address as Record<string, unknown> | undefined);
+    if (!parsedAddr) {
       res.status(400).json({ error: 'Address, city, state, and zip are required' });
       return;
     }
+    const { street, city: addrCity, state: addrState, zip: addrZip } = parsedAddr;
 
     const teamMemberId = req.user!.teamMemberId;
 
@@ -507,17 +499,12 @@ router.patch('/restaurant/:id', requireAuth, async (req: Request, res: Response)
       return;
     }
 
-    const existing = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      select: { merchantProfile: true },
-    });
-
-    if (!existing) {
+    const currentProfile = await loadMerchantProfile(restaurantId);
+    if (currentProfile === null) {
       res.status(404).json({ error: 'Restaurant not found' });
       return;
     }
 
-    const currentProfile = (existing.merchantProfile as Record<string, unknown>) ?? {};
     const profileUpdates = buildProfileUpdates(req.body as Record<string, unknown>, currentProfile);
     const directUpdates = buildDirectDbUpdates(req.body as Record<string, unknown>);
 
@@ -645,6 +632,28 @@ async function verifyOwnerAccess(teamMemberId: string, restaurantId: string): Pr
     where: { teamMemberId_restaurantId: { teamMemberId, restaurantId } },
   });
   return access?.role === 'owner';
+}
+
+interface ParsedAddress { street: string; city: string; state: string; zip: string }
+
+function parseAddress(address: Record<string, unknown> | undefined): ParsedAddress | null {
+  const street = (address?.street as string | undefined)?.trim() ?? '';
+  const city = (address?.city as string | undefined)?.trim() ?? '';
+  const state = (address?.state as string | undefined)?.trim() ?? '';
+  const zip = (address?.zip as string | undefined)?.trim() ?? '';
+  if (!street || !city || !state || !zip) return null;
+  return { street, city, state, zip };
+}
+
+async function loadMerchantProfile(
+  restaurantId: string,
+): Promise<Record<string, unknown> | null> {
+  const existing = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { merchantProfile: true },
+  });
+  if (!existing) return null;
+  return (existing.merchantProfile as Record<string, unknown>) ?? {};
 }
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
@@ -876,15 +885,12 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    const street = address?.street?.trim() ?? '';
-    const addrCity = address?.city?.trim() ?? '';
-    const addrState = address?.state?.trim() ?? '';
-    const addrZip = address?.zip?.trim() ?? '';
-
-    if (!street || !addrCity || !addrState || !addrZip) {
+    const parsedAddr = parseAddress(address as Record<string, unknown> | undefined);
+    if (!parsedAddr) {
       res.status(400).json({ error: 'Address, city, state, and zip are required' });
       return;
     }
+    const { street, city: addrCity, state: addrState, zip: addrZip } = parsedAddr;
 
     let existingMember: { id: string; email: string | null; firstName: string | null; lastName: string | null } | null = null;
     if (isAuthenticated) {
