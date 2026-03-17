@@ -102,6 +102,7 @@ model Restaurant {
   recurringReservations RecurringReservation[]
   events               Event[]
   customerFeedback     CustomerFeedback[]
+  orderSentiments      OrderSentiment[]
   smartGroups          SmartGroup[]
   messageThreads       MessageThread[]
   messageTemplates     MessageTemplate[]
@@ -2194,6 +2195,27 @@ model CustomerFeedback {
   @@index([restaurantId])
   @@index([restaurantId, rating])
   @@map("customer_feedback")
+}
+
+model OrderSentiment {
+  id           String   @id @default(uuid())
+  orderId      String   @unique @map("order_id")
+  restaurantId String   @map("restaurant_id")
+  orderNumber  String   @map("order_number")
+  tableNumber  String?  @map("table_number")
+  sentiment    String
+  flags        String[]
+  urgency      String   @default("low")
+  summary      String
+  isRead       Boolean  @default(false) @map("is_read")
+  analyzedAt   DateTime @default(now()) @map("analyzed_at")
+
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@index([restaurantId, isRead])
+  @@index([restaurantId, urgency])
+  @@map("order_sentiments")
 }
 
 model SmartGroup {

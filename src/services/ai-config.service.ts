@@ -11,7 +11,8 @@ export type AIFeatureKey =
   | 'laborOptimization'
   | 'inventoryPredictions'
   | 'taxEstimation'
-  | 'aiCateringProposals';
+  | 'aiCateringProposals'
+  | 'sentimentAnalysis';
 
 const VALID_FEATURE_KEYS: readonly AIFeatureKey[] = [
   'aiCostEstimation',
@@ -21,6 +22,7 @@ const VALID_FEATURE_KEYS: readonly AIFeatureKey[] = [
   'inventoryPredictions',
   'taxEstimation',
   'aiCateringProposals',
+  'sentimentAnalysis',
 ];
 
 export function isValidFeatureKey(key: string): key is AIFeatureKey {
@@ -36,6 +38,7 @@ function defaultAiFeatures(): Record<AIFeatureKey, boolean> {
     inventoryPredictions: false,
     taxEstimation: false,
     aiCateringProposals: false,
+    sentimentAnalysis: false,
   };
 }
 
