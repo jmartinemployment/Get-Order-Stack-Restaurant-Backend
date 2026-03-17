@@ -18,6 +18,46 @@ import { aiUsageService } from '../services/ai-usage.service';
 const router = Router();
 const prisma = new PrismaClient();
 
+const RESTAURANT_NOT_FOUND = Symbol('RESTAURANT_NOT_FOUND');
+
+async function getMerchantProfile(
+  restaurantId: string,
+): Promise<Record<string, unknown> | null | typeof RESTAURANT_NOT_FOUND> {
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { merchantProfile: true },
+  });
+  if (!restaurant) return RESTAURANT_NOT_FOUND;
+  return (restaurant.merchantProfile as Record<string, unknown>) ?? null;
+}
+
+async function setMerchantProfileKey(restaurantId: string, key: string, value: unknown): Promise<void> {
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { merchantProfile: true },
+  });
+  const profile = (restaurant?.merchantProfile as Record<string, unknown>) ?? {};
+  profile[key] = value;
+  await prisma.restaurant.update({ where: { id: restaurantId }, data: { merchantProfile: profile as object } });
+}
+
+type ServerSalesStat = { totalSales: number; orderCount: number; totalTips: number };
+
+function accumulateByServer(
+  orders: Array<{ serverId: string | null; total: unknown; tax: unknown; tip: unknown }>,
+): Map<string, ServerSalesStat> {
+  const byServer = new Map<string, ServerSalesStat>();
+  for (const order of orders) {
+    const sid = order.serverId ?? 'unknown';
+    const existing = byServer.get(sid) ?? { totalSales: 0, orderCount: 0, totalTips: 0 };
+    existing.totalSales += Number(order.total) - Number(order.tax);
+    existing.orderCount += 1;
+    existing.totalTips += Number(order.tip);
+    byServer.set(sid, existing);
+  }
+  return byServer;
+}
+
 type Confidence = 'low' | 'medium' | 'high';
 type ElasticityRecommendation = 'increase' | 'decrease' | 'hold';
 
@@ -1216,19 +1256,11 @@ router.patch('/:merchantId/customers/:customerId', async (req: Request, res: Res
  */
 router.get('/:merchantId/analytics/goals', async (req: Request, res: Response) => {
   try {
-    const restaurantId = req.params.merchantId;
-
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      select: { merchantProfile: true },
-    });
-
-    if (!restaurant) {
+    const profile = await getMerchantProfile(req.params.merchantId);
+    if (profile === RESTAURANT_NOT_FOUND) {
       res.status(404).json({ error: 'Restaurant not found' });
       return;
     }
-
-    const profile = restaurant.merchantProfile as Record<string, unknown> | null;
     const goals = (profile?.salesGoals as unknown[]) ?? [];
     res.json(goals);
   } catch (error: unknown) {
@@ -1850,12 +1882,8 @@ router.delete('/:merchantId/bookings/recurring/:id', async (req: Request, res: R
 
 router.get('/:merchantId/waitlist/virtual-config', async (req: Request, res: Response) => {
   try {
-    const restaurantId = req.params.merchantId;
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      select: { merchantProfile: true },
-    });
-    const profile = restaurant?.merchantProfile as Record<string, unknown> | null;
+    const rawProfile = await getMerchantProfile(req.params.merchantId);
+    const profile = rawProfile === RESTAURANT_NOT_FOUND ? null : rawProfile;
     res.json(profile?.virtualWaitlistConfig ?? { enabled: false, estimatedWaitDisplay: true, maxPartySize: 20 });
   } catch (error: unknown) {
     console.error('[Waitlist] Error getting virtual config:', error);
@@ -1865,14 +1893,7 @@ router.get('/:merchantId/waitlist/virtual-config', async (req: Request, res: Res
 
 router.put('/:merchantId/waitlist/virtual-config', async (req: Request, res: Response) => {
   try {
-    const restaurantId = req.params.merchantId;
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      select: { merchantProfile: true },
-    });
-    const profile = (restaurant?.merchantProfile as Record<string, unknown>) ?? {};
-    profile.virtualWaitlistConfig = req.body;
-    await prisma.restaurant.update({ where: { id: restaurantId }, data: { merchantProfile: profile as object } });
+    await setMerchantProfileKey(req.params.merchantId, 'virtualWaitlistConfig', req.body);
     res.json(req.body);
   } catch (error: unknown) {
     console.error('[Waitlist] Error saving virtual config:', error);
@@ -1882,12 +1903,8 @@ router.put('/:merchantId/waitlist/virtual-config', async (req: Request, res: Res
 
 router.get('/:merchantId/waitlist/sms-config', async (req: Request, res: Response) => {
   try {
-    const restaurantId = req.params.merchantId;
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      select: { merchantProfile: true },
-    });
-    const profile = restaurant?.merchantProfile as Record<string, unknown> | null;
+    const rawProfile = await getMerchantProfile(req.params.merchantId);
+    const profile = rawProfile === RESTAURANT_NOT_FOUND ? null : rawProfile;
     res.json(profile?.waitlistSmsConfig ?? { enabled: false, provider: null, notifyOnReady: true, notifyOnCancel: true });
   } catch (error: unknown) {
     console.error('[Waitlist] Error getting SMS config:', error);
@@ -1897,14 +1914,7 @@ router.get('/:merchantId/waitlist/sms-config', async (req: Request, res: Respons
 
 router.put('/:merchantId/waitlist/sms-config', async (req: Request, res: Response) => {
   try {
-    const restaurantId = req.params.merchantId;
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      select: { merchantProfile: true },
-    });
-    const profile = (restaurant?.merchantProfile as Record<string, unknown>) ?? {};
-    profile.waitlistSmsConfig = req.body;
-    await prisma.restaurant.update({ where: { id: restaurantId }, data: { merchantProfile: profile as object } });
+    await setMerchantProfileKey(req.params.merchantId, 'waitlistSmsConfig', req.body);
     res.json(req.body);
   } catch (error: unknown) {
     console.error('[Waitlist] Error saving SMS config:', error);
@@ -1957,12 +1967,8 @@ router.get('/:merchantId/waitlist/analytics', async (req: Request, res: Response
 
 router.get('/:merchantId/calendar/connection', async (req: Request, res: Response) => {
   try {
-    const restaurantId = req.params.merchantId;
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      select: { merchantProfile: true },
-    });
-    const profile = restaurant?.merchantProfile as Record<string, unknown> | null;
+    const rawProfile = await getMerchantProfile(req.params.merchantId);
+    const profile = rawProfile === RESTAURANT_NOT_FOUND ? null : rawProfile;
     res.json(profile?.calendarConnection ?? { provider: null, connected: false, syncEnabled: false });
   } catch (error: unknown) {
     console.error('[Calendar] Error getting connection:', error);
@@ -1972,14 +1978,7 @@ router.get('/:merchantId/calendar/connection', async (req: Request, res: Respons
 
 router.put('/:merchantId/calendar/connection', async (req: Request, res: Response) => {
   try {
-    const restaurantId = req.params.merchantId;
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      select: { merchantProfile: true },
-    });
-    const profile = (restaurant?.merchantProfile as Record<string, unknown>) ?? {};
-    profile.calendarConnection = req.body;
-    await prisma.restaurant.update({ where: { id: restaurantId }, data: { merchantProfile: profile as object } });
+    await setMerchantProfileKey(req.params.merchantId, 'calendarConnection', req.body);
     res.json(req.body);
   } catch (error: unknown) {
     console.error('[Calendar] Error saving connection:', error);
@@ -2282,15 +2281,7 @@ router.get('/:merchantId/analytics/team/sales', async (req: Request, res: Respon
       select: { serverId: true, total: true, tax: true, tip: true },
     });
 
-    const byServer = new Map<string, { totalSales: number; orderCount: number; totalTips: number }>();
-    for (const order of orders) {
-      const sid = order.serverId ?? 'unknown';
-      const existing = byServer.get(sid) ?? { totalSales: 0, orderCount: 0, totalTips: 0 };
-      existing.totalSales += Number(order.total) - Number(order.tax);
-      existing.orderCount += 1;
-      existing.totalTips += Number(order.tip);
-      byServer.set(sid, existing);
-    }
+    const byServer = accumulateByServer(orders);
 
     const results = [...byServer.entries()].map(([serverId, stats]) => ({
       serverId,
@@ -2329,15 +2320,7 @@ router.get('/:merchantId/reports/team-member-sales', async (req: Request, res: R
       select: { serverId: true, total: true, tax: true, tip: true, createdAt: true },
     });
 
-    const byServer = new Map<string, { totalSales: number; orderCount: number; totalTips: number }>();
-    for (const order of orders) {
-      const sid = order.serverId ?? 'unknown';
-      const existing = byServer.get(sid) ?? { totalSales: 0, orderCount: 0, totalTips: 0 };
-      existing.totalSales += Number(order.total) - Number(order.tax);
-      existing.orderCount += 1;
-      existing.totalTips += Number(order.tip);
-      byServer.set(sid, existing);
-    }
+    const byServer = accumulateByServer(orders);
 
     res.json([...byServer.entries()].map(([serverId, stats]) => ({
       serverId,
