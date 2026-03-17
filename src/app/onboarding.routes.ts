@@ -502,12 +502,7 @@ router.patch('/restaurant/:id', requireAuth, async (req: Request, res: Response)
     const restaurantId = req.params.id;
     const teamMemberId = req.user!.teamMemberId;
 
-    // Verify ownership
-    const access = await prisma.userRestaurantAccess.findUnique({
-      where: { teamMemberId_restaurantId: { teamMemberId, restaurantId } },
-    });
-
-    if (access?.role !== 'owner') {
+    if (!await verifyOwnerAccess(teamMemberId, restaurantId)) {
       res.status(403).json({ error: 'Access denied' });
       return;
     }
@@ -544,12 +539,7 @@ router.post('/restaurant/:id/complete', requireAuth, async (req: Request, res: R
     const restaurantId = req.params.id;
     const teamMemberId = req.user!.teamMemberId;
 
-    // Verify ownership
-    const access = await prisma.userRestaurantAccess.findUnique({
-      where: { teamMemberId_restaurantId: { teamMemberId, restaurantId } },
-    });
-
-    if (access?.role !== 'owner') {
+    if (!await verifyOwnerAccess(teamMemberId, restaurantId)) {
       res.status(403).json({ error: 'Access denied' });
       return;
     }
@@ -649,6 +639,13 @@ router.get('/restaurant/:id/status', requireAuth, async (req: Request, res: Resp
 });
 
 // ============ Onboarding Create (Legacy) ============
+
+async function verifyOwnerAccess(teamMemberId: string, restaurantId: string): Promise<boolean> {
+  const access = await prisma.userRestaurantAccess.findUnique({
+    where: { teamMemberId_restaurantId: { teamMemberId, restaurantId } },
+  });
+  return access?.role === 'owner';
+}
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
