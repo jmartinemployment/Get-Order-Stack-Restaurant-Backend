@@ -15,6 +15,7 @@ import { loyaltyService } from '../services/loyalty.service';
 import { coursePacingService } from '../services/course-pacing.service';
 import { orderThrottlingService } from '../services/order-throttling.service';
 import { authService } from '../services/auth.service';
+import { logger } from '../utils/logger';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -687,8 +688,8 @@ router.get('/:merchantId/menu/items', async (req: Request, res: Response) => {
       }
     });
     res.json(items);
-  } catch (error) {
-    console.error('Error fetching menu items:', error);
+  } catch (error: unknown) {
+    logger.error('Error fetching menu items', { error: error instanceof Error ? error.message : String(error) });
     res.status(500).json({ error: 'Failed to fetch menu items' });
   }
 });
@@ -714,8 +715,8 @@ router.get('/:merchantId/menu/items/:itemId', async (req: Request, res: Response
       return;
     }
     res.json(item);
-  } catch (error) {
-    console.error('Error fetching menu item:', error);
+  } catch (error: unknown) {
+    logger.error('Error fetching menu item', { error: error instanceof Error ? error.message : String(error) });
     res.status(500).json({ error: 'Failed to fetch menu item' });
   }
 });
@@ -835,7 +836,8 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
       categoryId, name, nameEn, description, descriptionEn,
       price, cost, image, available = true, dietary = [],
       prepTimeMinutes, modifierGroupIds = [], cateringPricing,
-      menuType = 'standard', cateringPricingModel
+      menuType = 'standard', cateringPricingModel,
+      itemCategory, beverageType, vendorId, allergens, dietaryFlags,
     } = req.body;
 
     const typeError = validateMenuTypeFields(menuType, cateringPricingModel);
@@ -873,6 +875,11 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
         menuType,
         ...(cateringPricingModel !== undefined && { cateringPricingModel }),
         ...(cateringPricing !== undefined && { cateringPricing }),
+        itemCategory: itemCategory ?? null,
+        beverageType: beverageType ?? null,
+        vendorId: vendorId ?? null,
+        allergens: Array.isArray(allergens) ? allergens : [],
+        dietaryFlags: Array.isArray(dietaryFlags) ? dietaryFlags : [],
         displayOrder: (maxOrder._max.displayOrder || 0) + 1,
         ...aiData,
         modifierGroups: {
@@ -885,8 +892,8 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
       include: { modifierGroups: { include: { modifierGroup: true } } },
     });
     res.status(201).json(item);
-  } catch (error) {
-    console.error('Error creating menu item:', error);
+  } catch (error: unknown) {
+    logger.error('Error creating menu item', { error: error instanceof Error ? error.message : String(error) });
     res.status(500).json({ error: 'Failed to create menu item' });
   }
 });
@@ -902,16 +909,20 @@ function buildMenuItemPatch(
     available?: unknown; eightySixed?: unknown; eightySixReason?: unknown; popular?: unknown;
     dietary?: unknown; displayOrder?: unknown; prepTimeMinutes?: unknown; menuType?: unknown;
     cateringPricingModel?: unknown; cateringPricing?: unknown;
+    itemCategory?: unknown; beverageType?: unknown; vendorId?: unknown;
+    allergens?: unknown; dietaryFlags?: unknown;
   },
   aiData: Record<string, unknown>,
 ): Record<string, unknown> {
   const { categoryId, name, nameEn, description, generatedDescEn, price, cost, image,
     available, eightySixed, eightySixReason, popular, dietary, displayOrder,
-    prepTimeMinutes, menuType, cateringPricingModel, cateringPricing } = fields;
+    prepTimeMinutes, menuType, cateringPricingModel, cateringPricing,
+    itemCategory, beverageType, vendorId, allergens, dietaryFlags } = fields;
   return {
     ...pickDefined({ categoryId, name, nameEn, description, descriptionEn: generatedDescEn,
       price, cost, image, available, eightySixed, eightySixReason, popular, dietary,
-      displayOrder, prepTimeMinutes, menuType, cateringPricingModel, cateringPricing }),
+      displayOrder, prepTimeMinutes, menuType, cateringPricingModel, cateringPricing,
+      itemCategory, beverageType, vendorId, allergens, dietaryFlags }),
     ...aiData,
   };
 }
@@ -923,7 +934,8 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
       categoryId, name, nameEn, description, descriptionEn, price, cost, image,
       available, eightySixed, eightySixReason, popular, dietary, displayOrder,
       prepTimeMinutes, modifierGroupIds, cateringPricing,
-      menuType, cateringPricingModel
+      menuType, cateringPricingModel,
+      itemCategory, beverageType, vendorId, allergens, dietaryFlags,
     } = req.body;
 
     const typeError = validateMenuTypeFields(menuType, cateringPricingModel);
@@ -952,14 +964,20 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
       data: buildMenuItemPatch(
         { categoryId, name, nameEn, description, generatedDescEn, price, cost, image,
           available, eightySixed, eightySixReason, popular, dietary, displayOrder,
-          prepTimeMinutes, menuType, cateringPricingModel, cateringPricing },
+          prepTimeMinutes, menuType, cateringPricingModel, cateringPricing,
+          itemCategory: itemCategory !== undefined ? (itemCategory ?? null) : undefined,
+          beverageType: beverageType !== undefined ? (beverageType ?? null) : undefined,
+          vendorId: vendorId !== undefined ? (vendorId ?? null) : undefined,
+          allergens: allergens !== undefined ? (Array.isArray(allergens) ? allergens : []) : undefined,
+          dietaryFlags: dietaryFlags !== undefined ? (Array.isArray(dietaryFlags) ? dietaryFlags : []) : undefined,
+        },
         aiData,
       ),
       include: { modifierGroups: { include: { modifierGroup: true } } },
     });
     res.json(item);
-  } catch (error) {
-    console.error('Error updating menu item:', error);
+  } catch (error: unknown) {
+    logger.error('Error updating menu item', { error: error instanceof Error ? error.message : String(error) });
     res.status(500).json({ error: 'Failed to update menu item' });
   }
 });
