@@ -6,7 +6,7 @@ import { taxService } from '../services/tax.service';
 import { updateOrderStatus, getOrderStatusHistory } from '../services/order-status.service';
 import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
-import { sendOrderEventToDevice, broadcastToSourceAndKDS } from '../services/socket.service';
+import { sendOrderEventToDevice, broadcastToSourceAndKDS, broadcastOrderEvent } from '../services/socket.service';
 import { cloudPrntService } from '../services/cloudprnt.service';
 import { notificationService } from '../services/notification.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
@@ -18,6 +18,7 @@ import { orderThrottlingService } from '../services/order-throttling.service';
 import { authService } from '../services/auth.service';
 import { logger } from '../utils/logger';
 import { toErrorMessage } from '../utils/errors';
+import { analyzeOrderSentiment } from '../services/sentiment-analysis.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -57,6 +58,48 @@ function generateOrderNumber(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = randomBytes(2).toString('hex').toUpperCase();
   return `ORD-${timestamp}-${random}`;
+}
+
+async function analyzeSentimentAndAlert(restaurantId: string, order: any): Promise<void> {
+  const result = await analyzeOrderSentiment(
+    restaurantId,
+    order.id,
+    order.orderNumber,
+    order.specialInstructions,
+    order.table?.tableNumber ?? order.tableNumber,
+  );
+  if (!result) return;
+
+  const record = await prisma.orderSentiment.create({
+    data: {
+      orderId: order.id,
+      restaurantId,
+      orderNumber: order.orderNumber,
+      tableNumber: order.table?.tableNumber ?? order.tableNumber ?? null,
+      sentiment: result.sentiment,
+      flags: result.flags,
+      urgency: result.urgency,
+      summary: result.summary,
+    },
+  });
+
+  if (result.urgency === 'high' || result.urgency === 'critical') {
+    broadcastOrderEvent(restaurantId, 'sentiment_alert', {
+      record: {
+        id: record.id,
+        orderId: record.orderId,
+        orderNumber: record.orderNumber,
+        tableNumber: record.tableNumber,
+        sentiment: record.sentiment,
+        flags: record.flags,
+        urgency: record.urgency,
+        summary: record.summary,
+        analyzedAt: record.analyzedAt.toISOString(),
+        isRead: record.isRead,
+      },
+      restaurantId,
+    });
+  }
 }
 
 // --- Helpers for POST /:merchantId/orders (cognitive complexity reduction) ---
@@ -1793,6 +1836,13 @@ router.post('/:merchantId/orders', async (req: Request, res: Response) => {
 
     const enrichedOrder = enrichOrderResponse(latestOrder ?? order);
     broadcastToSourceAndKDS(restaurantId, order.sourceDeviceId, 'order:new', enrichedOrder);
+
+    if (specialInstructions?.trim()) {
+      analyzeSentimentAndAlert(restaurantId, order).catch((err: unknown) =>
+        logger.error('[sentiment-analysis] Post-order analysis failed', { orderId: order.id, error: toErrorMessage(err) })
+      );
+    }
+
     res.status(201).json(enrichedOrder);
   } catch (error) {
     console.error('Error creating order:', error);

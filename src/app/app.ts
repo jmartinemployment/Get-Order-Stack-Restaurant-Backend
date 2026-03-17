@@ -35,6 +35,7 @@ import onboardingRoutes from './onboarding.routes';
 import paymentConnectRoutes from './payment-connect.routes';
 import subscriptionRoutes from './subscription.routes';
 import analyticsStandaloneRoutes from './analytics-standalone.routes';
+import { sentimentRouter } from '../routes/sentiment.routes';
 import teamManagementRoutes from './team-management.routes';
 import retailRoutes from './retail.routes';
 import cateringRoutes, { publicRouter as cateringPublicRoutes } from './catering.routes';
@@ -410,6 +411,7 @@ app.use('/api/merchant', requireAuth, teamManagementRoutes);  // Team members + 
 app.use('/api/merchant/:merchantId', requireAuth, supplierOrderingRoutes);  // Supplier ordering: credentials, connection test
 app.use('/api/merchant-groups', requireAuth, multiLocationRoutes);  // Multi-location: groups, sync, settings propagation
 app.use('/api/analytics', requireAuth, analyticsStandaloneRoutes);  // Standalone analytics (pinned-widgets, proactive-insights)
+app.use('/api/merchant/:merchantId', requireAuth, sentimentRouter);  // Sentiment analysis + alerts
 app.use('/api/merchant', requireAuth, retailRoutes);  // Retail module CRUD
 app.use('/api', cateringPublicRoutes);                  // Public catering routes (proposal, portal, lead) — no auth
 app.use('/api/merchant', requireAuth, cateringRoutes);  // Catering event + capacity CRUD
