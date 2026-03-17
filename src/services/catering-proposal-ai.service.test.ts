@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { generateProposalContent, type ProposalTone } from './catering-proposal-ai.service';
+import { generateProposalContent } from './catering-proposal-ai.service';
 
 // Mock dependencies
 vi.mock('./ai-usage.service', () => ({
@@ -118,7 +118,7 @@ describe('generateProposalContent', () => {
       expect.objectContaining({ originalCount: 60, truncatedTo: 50 }),
     );
     // Anthropic should have been called with only 50 items
-    const createCall = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const createCall = client.messages.create.mock.calls[0][0];
     expect(createCall.messages[0].content).toContain('50. Menu Item 50');
   });
 

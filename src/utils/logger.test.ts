@@ -62,15 +62,15 @@ describe('logger', () => {
 
   afterEach(() => {
     // Restore original env so other test files are not affected
-    if (originalLogLevel !== undefined) {
-      process.env.LOG_LEVEL = originalLogLevel;
-    } else {
+    if (originalLogLevel === undefined) {
       delete process.env.LOG_LEVEL;
-    }
-    if (originalNodeEnv !== undefined) {
-      process.env.NODE_ENV = originalNodeEnv;
     } else {
+      process.env.LOG_LEVEL = originalLogLevel;
+    }
+    if (originalNodeEnv === undefined) {
       delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
     }
   });
 

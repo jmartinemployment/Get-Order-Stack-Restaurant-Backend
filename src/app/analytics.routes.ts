@@ -248,9 +248,10 @@ Return: [{ "itemId": "...", "reasoning": "..." }]`;
 
       const content = response.content[0];
       if (content.type === 'text') {
-        const jsonMatch = /\[[\s\S]*\]/.exec(content.text);
-        if (jsonMatch) {
-          const reasonings: Array<{ itemId: string; reasoning: string }> = JSON.parse(jsonMatch[0]);
+        const start = content.text.indexOf('[');
+        const end = content.text.lastIndexOf(']');
+        if (start !== -1 && end > start) {
+          const reasonings: Array<{ itemId: string; reasoning: string }> = JSON.parse(content.text.slice(start, end + 1));
           const reasoningMap = new Map(reasonings.map((r) => [r.itemId, r.reasoning]));
           for (const item of results) {
             item.reasoning = reasoningMap.get(item.itemId);
@@ -332,9 +333,10 @@ Return: [{ "newItemId": "...", "affectedItemId": "...", "recommendation": "..." 
 
       const content = response.content[0];
       if (content.type === 'text') {
-        const jsonMatch = /\[[\s\S]*\]/.exec(content.text);
-        if (jsonMatch) {
-          const recs: Array<{ newItemId: string; affectedItemId: string; recommendation: string }> = JSON.parse(jsonMatch[0]);
+        const start = content.text.indexOf('[');
+        const end = content.text.lastIndexOf(']');
+        if (start !== -1 && end > start) {
+          const recs: Array<{ newItemId: string; affectedItemId: string; recommendation: string }> = JSON.parse(content.text.slice(start, end + 1));
           applyCannibalRecs(results, recs);
         }
       }

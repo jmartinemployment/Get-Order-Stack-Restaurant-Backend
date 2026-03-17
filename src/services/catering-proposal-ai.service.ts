@@ -45,13 +45,13 @@ function buildDietaryString(dietaryRequirements: unknown): string {
   if (!dietaryRequirements || typeof dietaryRequirements !== 'object') return '';
   const dr = dietaryRequirements as Record<string, unknown>;
   const items: string[] = [];
-  if (Number(dr.vegetarian) > 0) items.push(`${dr.vegetarian} vegetarian`);
-  if (Number(dr.vegan) > 0) items.push(`${dr.vegan} vegan`);
-  if (Number(dr.glutenFree) > 0) items.push(`${dr.glutenFree} gluten-free`);
-  if (Number(dr.nutAllergy) > 0) items.push(`${dr.nutAllergy} nut allergy`);
-  if (Number(dr.dairyFree) > 0) items.push(`${dr.dairyFree} dairy-free`);
-  if (Number(dr.kosher) > 0) items.push(`${dr.kosher} kosher`);
-  if (Number(dr.halal) > 0) items.push(`${dr.halal} halal`);
+  if (Number(dr.vegetarian) > 0) items.push(`${Number(dr.vegetarian)} vegetarian`);
+  if (Number(dr.vegan) > 0) items.push(`${Number(dr.vegan)} vegan`);
+  if (Number(dr.glutenFree) > 0) items.push(`${Number(dr.glutenFree)} gluten-free`);
+  if (Number(dr.nutAllergy) > 0) items.push(`${Number(dr.nutAllergy)} nut allergy`);
+  if (Number(dr.dairyFree) > 0) items.push(`${Number(dr.dairyFree)} dairy-free`);
+  if (Number(dr.kosher) > 0) items.push(`${Number(dr.kosher)} kosher`);
+  if (Number(dr.halal) > 0) items.push(`${Number(dr.halal)} halal`);
   if (dr.other && typeof dr.other === 'string' && dr.other.trim()) items.push(dr.other.trim());
   return items.join(', ');
 }
@@ -62,15 +62,18 @@ function buildUserPrompt(
   tone: ProposalTone,
   dietaryString: string,
 ): string {
-  const toneInstruction =
-    tone === 'professional'
-      ? 'professional and formal'
-      : tone === 'warm'
-      ? 'warm and personal'
-      : 'casual and friendly';
+  let toneInstruction = 'casual and friendly';
+  if (tone === 'professional') {
+    toneInstruction = 'professional and formal';
+  } else if (tone === 'warm') {
+    toneInstruction = 'warm and personal';
+  }
 
   const menuList = menuItems
-    .map((item, i) => `${i + 1}. ${item.name}${item.description ? ` — ${item.description}` : ''}`)
+    .map((item, i) => {
+      const suffix = item.description ? ` — ${item.description}` : '';
+      return `${i + 1}. ${item.name}${suffix}`;
+    })
     .join('\n');
 
   const dietaryNote = dietaryString ? `\nDietary requirements: ${dietaryString}` : '';
