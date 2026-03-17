@@ -210,6 +210,10 @@ const CUSTOMERS = [
 // HELPERS
 // ============================================================
 
+function randomFloat(): number {
+  return crypto.randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
+}
+
 function futureDate(daysFromNow: number): Date {
   const d = new Date();
   d.setDate(d.getDate() + daysFromNow);
@@ -1040,8 +1044,8 @@ try {
   await prisma.customer.deleteMany({ where: { restaurantId } });
 
   for (const c of CUSTOMERS) {
-    const totalOrders = Math.floor(Math.random() * 8) + 1;
-    const totalSpent = Math.floor(Math.random() * 15000) + 500;
+    const totalOrders = Math.floor(randomFloat() * 8) + 1;
+    const totalSpent = Math.floor(randomFloat() * 15000) + 500;
     await prisma.customer.create({
       data: {
         restaurantId,
@@ -1053,7 +1057,7 @@ try {
         totalOrders,
         totalSpent,
         avgOrderValue: totalOrders > 0 ? totalSpent / totalOrders : 0,
-        lastOrderDate: pastDate(Math.floor(Math.random() * 60)),
+        lastOrderDate: pastDate(Math.floor(randomFloat() * 60)),
       },
     });
   }

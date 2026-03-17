@@ -84,7 +84,7 @@ describe('globalErrorHandler', () => {
   });
 
   it('logs error with structured metadata', () => {
-    const req = mockReq({ method: 'POST', path: '/api/login', ip: '10.0.0.1' });
+    const req = mockReq({ method: 'POST', path: '/api/login', ip: 'test-client-host' });
     const error = new Error('Something broke');
     globalErrorHandler(error, req, mockRes() as unknown as Response, noop);
 
@@ -92,7 +92,7 @@ describe('globalErrorHandler', () => {
       message: 'Something broke',
       method: 'POST',
       path: '/api/login',
-      ip: '10.0.0.1',
+      ip: 'test-client-host',
     }));
   });
 

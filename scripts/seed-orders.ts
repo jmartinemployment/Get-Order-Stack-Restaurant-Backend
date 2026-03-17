@@ -4,10 +4,15 @@
  * Mix of statuses, order types, sources, payment states, and special instructions
  */
 
+import { randomBytes } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { toErrorMessage } from '../src/utils/errors';
 
 const prisma = new PrismaClient();
+
+function randomFloat(): number {
+  return randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
+}
 
 const specialInstructions: string[] = [
   'No onions please',
@@ -31,17 +36,17 @@ const specialInstructions: string[] = [
 function daysAgo(days: number, hour?: number): Date {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  const h = hour ?? (11 + Math.floor(Math.random() * 10)); // 11am-9pm
-  d.setHours(h, Math.floor(Math.random() * 60), Math.floor(Math.random() * 60), 0);
+  const h = hour ?? (11 + Math.floor(randomFloat() * 10)); // 11am-9pm
+  d.setHours(h, Math.floor(randomFloat() * 60), Math.floor(randomFloat() * 60), 0);
   return d;
 }
 
 function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
+  return arr[Math.floor(randomFloat() * arr.length)];
 }
 
 function pickN<T>(arr: T[], n: number): T[] {
-  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  const shuffled = [...arr].sort(() => randomFloat() - 0.5);
   return shuffled.slice(0, n);
 }
 
@@ -62,31 +67,31 @@ interface OrderPlan {
 }
 
 function randomTip(): number {
-  return Math.random() < 0.7 ? Math.floor(Math.random() * 21) : 0;
+  return randomFloat() < 0.7 ? Math.floor(randomFloat() * 21) : 0;
 }
 
 function randomOrderType(): string {
-  const roll = Math.random();
+  const roll = randomFloat();
   if (roll < 0.6) return 'dine_in';
   return roll < 0.85 ? 'pickup' : 'delivery';
 }
 
 function randomOrderSource(): string {
-  const roll = Math.random();
+  const roll = randomFloat();
   if (roll < 0.7) return 'pos';
   return roll < 0.9 ? 'online' : 'kds';
 }
 
 function paymentStatusForOrder(status: string): string {
   if (status === 'pending' || status === 'preparing') return 'pending';
-  if (status === 'cancelled') return Math.random() < 0.5 ? 'refunded' : 'cancelled';
+  if (status === 'cancelled') return randomFloat() < 0.5 ? 'refunded' : 'cancelled';
   return 'paid';
 }
 
 function daysAgoForStatus(status: string): number {
   if (status === 'pending' || status === 'preparing') return 0;
-  if (status === 'cancelled') return Math.floor(Math.random() * 7) + 1;
-  return Math.floor(Math.random() * 14);
+  if (status === 'cancelled') return Math.floor(randomFloat() * 7) + 1;
+  return Math.floor(randomFloat() * 14);
 }
 
 function generateOrderPlans(count: number): OrderPlan[] {
@@ -105,8 +110,8 @@ function generateOrderPlans(count: number): OrderPlan[] {
       orderSource: randomOrderSource(),
       paymentStatus: paymentStatusForOrder(status),
       daysAgo: daysAgoForStatus(status),
-      itemCount: 2 + Math.floor(Math.random() * 4),
-      hasSpecialInstructions: Math.random() < 0.2,
+      itemCount: 2 + Math.floor(randomFloat() * 4),
+      hasSpecialInstructions: randomFloat() < 0.2,
       tipPercent: status === 'cancelled' ? 0 : randomTip(),
     };
   });
@@ -127,7 +132,7 @@ function buildOrderItems(selectedItems: Array<{ id: string; name: string; price:
   const items: OrderItemData[] = [];
 
   for (const item of selectedItems) {
-    const qty = Math.random() < 0.3 ? 2 : 1;
+    const qty = randomFloat() < 0.3 ? 2 : 1;
     const unitPrice = Number(item.price);
     const totalPrice = unitPrice * qty;
     subtotal += totalPrice;
@@ -198,7 +203,7 @@ async function seedRestaurantOrders(
     const timestamps = computeTimestamps(plan.status, createdAt);
 
     const tableId = plan.orderType === 'dine_in' && tables.length > 0 ? pick(tables).id : null;
-    const customerId = customerList.length > 0 && Math.random() < 0.8 ? pick(customerList).id : null;
+    const customerId = customerList.length > 0 && randomFloat() < 0.8 ? pick(customerList).id : null;
 
     await prisma.order.create({
       data: {

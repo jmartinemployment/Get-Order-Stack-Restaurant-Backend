@@ -111,7 +111,7 @@ describe('auditLog', () => {
     it('stores all four opts fields when provided together', async () => {
       await auditLog('signup', {
         userId: 'u-new',
-        ip: '10.0.0.1',
+        ip: 'test-client-host',
         userAgent: 'TestAgent/1.0',
         metadata: { plan: 'free' },
       });
@@ -120,7 +120,7 @@ describe('auditLog', () => {
         data: {
           action: 'signup',
           userId: 'u-new',
-          ipAddress: '10.0.0.1',
+          ipAddress: 'test-client-host',
           userAgent: 'TestAgent/1.0',
           metadata: { plan: 'free' },
         },
@@ -157,7 +157,7 @@ describe('auditLog', () => {
 
   describe('Edge Cases', () => {
     it('creates record with null-equivalent userId when userId is omitted', async () => {
-      await auditLog('login', { ip: '192.168.1.1' });
+      await auditLog('login', { ip: 'test-client-host' });
 
       const call = mockAuditLogCreate.mock.calls[0][0];
       expect(call.data.userId).toBeUndefined();

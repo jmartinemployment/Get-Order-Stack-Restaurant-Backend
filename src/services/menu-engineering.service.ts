@@ -405,12 +405,13 @@ Example format:
         return this.generateBasicInsights(items, quadrants);
       }
 
-      const jsonMatch = content.text.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
+      const start = content.text.indexOf('[');
+      const end = content.text.lastIndexOf(']');
+      if (start === -1 || end <= start) {
         return this.generateBasicInsights(items, quadrants);
       }
 
-      return JSON.parse(jsonMatch[0]);
+      return JSON.parse(content.text.slice(start, end + 1));
     } catch (error) {
       console.error('AI insights generation failed:', error);
       return this.generateBasicInsights(items, quadrants);

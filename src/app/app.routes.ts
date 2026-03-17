@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { aiCostService } from '../services/ai-cost.service';
@@ -54,7 +55,7 @@ async function broadcastUpdatedOrders(orderIds: string[]): Promise<void> {
 
 function generateOrderNumber(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
-  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const random = randomBytes(2).toString('hex').toUpperCase();
   return `ORD-${timestamp}-${random}`;
 }
 

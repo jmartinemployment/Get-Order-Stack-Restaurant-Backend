@@ -166,11 +166,11 @@ describe('requestLogger', () => {
   it('includes ip address', () => {
     const next = vi.fn();
     const res = createMockRes(200);
-    requestLogger(createMockReq({ ip: '10.0.0.5' }), res as unknown as Response, next);
+    requestLogger(createMockReq({ ip: 'test-client-host' }), res as unknown as Response, next);
     res.emit('finish');
 
     expect(mockLogger.info).toHaveBeenCalledWith('HTTP request', expect.objectContaining({
-      ip: '10.0.0.5',
+      ip: 'test-client-host',
     }));
   });
 

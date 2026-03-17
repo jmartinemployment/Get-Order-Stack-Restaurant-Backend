@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
@@ -564,7 +565,7 @@ router.post('/:orderId/checks/:checkGuid/transfer', async (req: Request, res: Re
     if (!targetOrder) {
       // Create a new order on the target table
       const timestamp = Date.now().toString(36).toUpperCase();
-      const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const random = randomBytes(2).toString('hex').toUpperCase();
       const orderNumber = `ORD-${timestamp}-${random}`;
 
       const sourceOrder = await prisma.order.findUnique({ where: { id: orderId } });

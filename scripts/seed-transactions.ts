@@ -8,10 +8,15 @@
  * Usage: npx tsx scripts/seed-transactions.ts
  */
 
+import { randomBytes } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { toErrorMessage } from '../src/utils/errors';
 
 const prisma = new PrismaClient();
+
+function randomFloat(): number {
+  return randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
+}
 
 function hoursAgo(hours: number): Date {
   return new Date(Date.now() - hours * 60 * 60 * 1000);
@@ -100,8 +105,8 @@ async function createTransactionOrder(
 ): Promise<void> {
   const totals = buildTransactionTotals(plan);
   const completedAt = new Date(orderDate.getTime() + 25 * 60000);
-  const itemCount = 2 + Math.floor(Math.random() * 3);
-  const selectedItems = [...ctx.menuItems].sort(() => Math.random() - 0.5).slice(0, itemCount);
+  const itemCount = 2 + Math.floor(randomFloat() * 3);
+  const selectedItems = [...ctx.menuItems].sort(() => randomFloat() - 0.5).slice(0, itemCount);
 
   await prisma.order.create({
     data: {
@@ -125,7 +130,7 @@ async function createTransactionOrder(
       createdAt: orderDate,
       orderItems: {
         create: selectedItems.map(item => {
-          const qty = Math.random() < 0.3 ? 2 : 1;
+          const qty = randomFloat() < 0.3 ? 2 : 1;
           const unitPrice = Number(item.price);
           return {
             menuItemId: item.id,

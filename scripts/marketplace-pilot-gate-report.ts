@@ -44,7 +44,10 @@ const PROVIDER = normalizeProvider(process.env.MARKETPLACE_PILOT_PROVIDER ?? '')
 const RESTAURANT_IDS = normalizeRestaurantIds(process.env.MARKETPLACE_PILOT_RESTAURANT_IDS);
 
 function normalizeApiBase(value: string): string {
-  const trimmed = value.trim().replace(/\/+$/, '');
+  let trimmed = value.trim();
+  while (trimmed.endsWith('/')) {
+    trimmed = trimmed.slice(0, -1);
+  }
   return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
 }
 

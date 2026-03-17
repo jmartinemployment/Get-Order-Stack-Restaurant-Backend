@@ -4,10 +4,15 @@
  * With 3-5 inventory log entries per item over the last 7 days
  */
 
+import { randomBytes } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { toErrorMessage } from '../src/utils/errors';
 
 const prisma = new PrismaClient();
+
+function randomFloat(): number {
+  return randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
+}
 
 interface InventoryDef {
   name: string;
@@ -45,7 +50,7 @@ const inventoryItems: InventoryDef[] = [
 function daysAgo(days: number): Date {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  d.setHours(Math.floor(Math.random() * 12) + 7, Math.floor(Math.random() * 60), 0, 0);
+  d.setHours(Math.floor(randomFloat() * 12) + 7, Math.floor(randomFloat() * 60), 0, 0);
   return d;
 }
 
@@ -67,7 +72,7 @@ async function updateExpirationDates(restaurantId: string): Promise<void> {
 }
 
 async function createInventoryLogs(itemId: string, maxStock: number): Promise<void> {
-  const logCount = 3 + Math.floor(Math.random() * 3);
+  const logCount = 3 + Math.floor(randomFloat() * 3);
   let runningStock = maxStock;
 
   for (let i = 0; i < logCount; i++) {
@@ -75,7 +80,7 @@ async function createInventoryLogs(itemId: string, maxStock: number): Promise<vo
     const isRestock = i === 0;
     const changeAmount = isRestock
       ? Math.round(maxStock * 0.5)
-      : -Math.round(Math.random() * (maxStock * 0.15) + 1);
+      : -Math.round(randomFloat() * (maxStock * 0.15) + 1);
 
     const previousStock = runningStock;
     const newStock = Math.max(0, runningStock + changeAmount);

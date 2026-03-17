@@ -62,10 +62,11 @@ Respond in JSON format only:
       if (content.type !== 'text') return null;
 
       // Parse JSON from response
-      const jsonMatch = content.text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return null;
+      const start = content.text.indexOf('{');
+      const end = content.text.lastIndexOf('}');
+      if (start === -1 || end <= start) return null;
 
-      const result = JSON.parse(jsonMatch[0]) as CostEstimation;
+      const result = JSON.parse(content.text.slice(start, end + 1)) as CostEstimation;
 
       // Recalculate profit margin based on current price
       result.profitMargin = ((currentPrice - result.estimatedCost) / currentPrice) * 100;

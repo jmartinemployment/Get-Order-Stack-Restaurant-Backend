@@ -48,7 +48,10 @@ const EXTERNAL_STORE_ID = process.env.MARKETPLACE_VERIFY_STORE_ID ?? `phase5-sto
 const WEBHOOK_SECRET = process.env.MARKETPLACE_VERIFY_WEBHOOK_SECRET ?? randomString('phase5-secret');
 
 function normalizeApiBase(value: string): string {
-  const trimmed = value.trim().replace(/\/+$/, '');
+  let trimmed = value.trim();
+  while (trimmed.endsWith('/')) {
+    trimmed = trimmed.slice(0, -1);
+  }
   if (trimmed.endsWith('/api')) return trimmed;
   return `${trimmed}/api`;
 }
