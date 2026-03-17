@@ -240,7 +240,8 @@ describe('POST /api/onboarding/create', () => {
     const res = await api.anonymous().post('/api/onboarding/create').send({
       businessName: 'New Restaurant',
       ownerEmail: 'newowner@test.com',
-      ownerPassword: 'password123', // NOSONAR - intentional test credential
+      ownerPassword: 'Password123!', // NOSONAR - intentional test credential
+      address: { street: '123 Main St', city: 'Fort Lauderdale', state: 'FL', zip: '33301' },
     });
     expect(res.status).toBe(201);
     expect(res.body.restaurantId).toBe(RESTAURANT_ID);
@@ -266,6 +267,7 @@ describe('POST /api/onboarding/create', () => {
 
     const res = await api.owner.post('/api/onboarding/create').send({
       businessName: 'Auth Restaurant',
+      address: { street: '456 Oak Ave', city: 'Miami', state: 'FL', zip: '33101' },
     });
     expect(res.status).toBe(201);
     expect(res.body.token).toBeNull(); // Authenticated flow doesn't return new token
@@ -277,7 +279,8 @@ describe('POST /api/onboarding/create', () => {
     const res = await api.anonymous().post('/api/onboarding/create').send({
       businessName: 'Test',
       ownerEmail: 'existing@test.com',
-      ownerPassword: 'password123', // NOSONAR - intentional test credential
+      ownerPassword: 'Password123!', // NOSONAR - intentional test credential
+      address: { street: '789 Pine Rd', city: 'Orlando', state: 'FL', zip: '32801' },
     });
     expect(res.status).toBe(409);
     expect(res.body.error).toContain('already exists');

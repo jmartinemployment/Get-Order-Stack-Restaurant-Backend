@@ -692,7 +692,7 @@ describe('GET /:merchantId/staff/workweek-config', () => {
     prisma.workweekConfig.findUnique.mockResolvedValue(null);
     const res = await api.owner.get(url);
     expect(res.status).toBe(200);
-    expect(res.body.weekStartDay).toBe(0);
+    expect(res.body.startDay).toBe(0);
     expect(res.body.overtimeThresholdHours).toBe(40);
     expect(res.body.overtimeMultiplier).toBe(1.5);
   });
@@ -706,7 +706,7 @@ describe('GET /:merchantId/staff/workweek-config', () => {
     });
     const res = await api.owner.get(url);
     expect(res.status).toBe(200);
-    expect(res.body.weekStartDay).toBe(1);
+    expect(res.body.startDay).toBe(1);
   });
 });
 
@@ -714,8 +714,8 @@ describe('PUT /:merchantId/staff/workweek-config', () => {
   const url = `${BASE_URL}/staff/workweek-config`;
 
   const validConfig = {
-    weekStartDay: 1,
-    dayStartTime: '06:00',
+    startDay: 1,
+    startTime: '06:00',
     overtimeThresholdHours: 40,
     overtimeMultiplier: 1.5,
   };
@@ -730,17 +730,17 @@ describe('PUT /:merchantId/staff/workweek-config', () => {
 
     const res = await api.owner.put(url).send(validConfig);
     expect(res.status).toBe(200);
-    expect(res.body.weekStartDay).toBe(1);
+    expect(res.body.startDay).toBe(1);
   });
 
   it('returns 400 for invalid dayStartTime format', async () => {
-    const res = await api.owner.put(url).send({ ...validConfig, dayStartTime: 'bad' });
+    const res = await api.owner.put(url).send({ ...validConfig, startTime: 'bad' });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Invalid workweek config');
   });
 
   it('returns 400 for weekStartDay out of range', async () => {
-    const res = await api.owner.put(url).send({ ...validConfig, weekStartDay: 10 });
+    const res = await api.owner.put(url).send({ ...validConfig, startDay: 10 });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Invalid workweek config');
   });

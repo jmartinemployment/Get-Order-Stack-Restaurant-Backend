@@ -11,8 +11,8 @@ const prisma = new PrismaClient();
 // Vertical -> enabled modules mapping (must match frontend BUSINESS_VERTICAL_CATALOG in platform.model.ts)
 const VERTICAL_MODULES: Record<string, string[]> = {
   food_and_drink: [
-    'menu_management', 'table_management', 'kds', 'reservations',
-    'online_ordering', 'inventory', 'marketing', 'loyalty',
+    'menu_management', 'table_management', 'kds', 'bookings',
+    'catering', 'online_ordering', 'inventory', 'marketing', 'loyalty',
     'delivery', 'gift_cards', 'staff_scheduling', 'payroll',
     'reports', 'crm', 'multi_location',
   ],
@@ -405,7 +405,7 @@ router.post('/restaurant', requireAuth, async (req: Request, res: Response) => {
 
     for (const access of existingAccess) {
       const profile = access.restaurant.merchantProfile as Record<string, unknown> | null;
-      const isIncomplete = !profile || profile['onboardingComplete'] !== true;
+      const isIncomplete = profile?.['onboardingComplete'] !== true;
       if (isIncomplete) {
         await prisma.restaurant.delete({ where: { id: access.restaurant.id } });
       }
@@ -459,6 +459,43 @@ router.post('/restaurant', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+function buildProfileUpdates(
+  body: Record<string, unknown>,
+  currentProfile: Record<string, unknown>,
+): Record<string, unknown> {
+  const { businessName, primaryVertical, verticals, defaultDeviceMode,
+          taxLocale, businessHours, businessCategory, address, menuTemplateId, ownerPin } = body as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const updates: Record<string, unknown> = {};
+  if (businessName !== undefined) updates['businessName'] = businessName;
+  if (primaryVertical !== undefined) updates['primaryVertical'] = primaryVertical;
+  if (verticals !== undefined) {
+    updates['verticals'] = verticals;
+    updates['enabledModules'] = VERTICAL_MODULES[(primaryVertical ?? currentProfile['primaryVertical']) as string] ?? [];
+  }
+  if (defaultDeviceMode !== undefined) updates['defaultDeviceMode'] = defaultDeviceMode;
+  if (taxLocale !== undefined) updates['taxLocale'] = taxLocale;
+  if (businessHours !== undefined) updates['businessHours'] = businessHours;
+  if (businessCategory !== undefined) updates['businessCategory'] = businessCategory;
+  if (address !== undefined) updates['address'] = address;
+  if (menuTemplateId !== undefined) updates['menuTemplateId'] = menuTemplateId;
+  if (ownerPin !== undefined) updates['ownerPin'] = ownerPin;
+  return updates;
+}
+
+function buildDirectDbUpdates(body: Record<string, unknown>): Record<string, unknown> {
+  const { businessName, address, taxLocale, businessHours } = body as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const direct: Record<string, unknown> = {};
+  if (typeof businessName === 'string' && businessName.trim()) direct['name'] = businessName.trim();
+  if (address?.street) direct['address'] = address.street;
+  if (address?.city) direct['city'] = address.city;
+  if (address?.state) direct['state'] = address.state;
+  if (address?.zip) direct['zip'] = address.zip;
+  if (address?.phone) direct['phone'] = address.phone;
+  if (taxLocale?.taxRate !== undefined) direct['taxRate'] = taxLocale.taxRate / 100;
+  if (businessHours !== undefined) direct['businessHours'] = businessHours;
+  return direct;
+}
+
 // PATCH /api/onboarding/restaurant/:id — Update restaurant fields during wizard
 router.patch('/restaurant/:id', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -470,7 +507,7 @@ router.patch('/restaurant/:id', requireAuth, async (req: Request, res: Response)
       where: { teamMemberId_restaurantId: { teamMemberId, restaurantId } },
     });
 
-    if (!access || access.role !== 'owner') {
+    if (access?.role !== 'owner') {
       res.status(403).json({ error: 'Access denied' });
       return;
     }
@@ -485,48 +522,14 @@ router.patch('/restaurant/:id', requireAuth, async (req: Request, res: Response)
       return;
     }
 
-    const { businessName, address, primaryVertical, verticals, defaultDeviceMode,
-            taxLocale, businessHours, businessCategory, menuTemplateId, ownerPin } = req.body;
-
     const currentProfile = (existing.merchantProfile as Record<string, unknown>) ?? {};
-    const profileUpdates: Record<string, unknown> = {};
+    const profileUpdates = buildProfileUpdates(req.body as Record<string, unknown>, currentProfile);
+    const directUpdates = buildDirectDbUpdates(req.body as Record<string, unknown>);
 
-    if (businessName !== undefined) profileUpdates['businessName'] = businessName;
-    if (primaryVertical !== undefined) profileUpdates['primaryVertical'] = primaryVertical;
-    if (verticals !== undefined) {
-      profileUpdates['verticals'] = verticals;
-      profileUpdates['enabledModules'] = VERTICAL_MODULES[primaryVertical ?? currentProfile['primaryVertical'] as string] ?? [];
-    }
-    if (defaultDeviceMode !== undefined) profileUpdates['defaultDeviceMode'] = defaultDeviceMode;
-    if (taxLocale !== undefined) profileUpdates['taxLocale'] = taxLocale;
-    if (businessHours !== undefined) profileUpdates['businessHours'] = businessHours;
-    if (businessCategory !== undefined) profileUpdates['businessCategory'] = businessCategory;
-    if (address !== undefined) profileUpdates['address'] = address;
-    if (menuTemplateId !== undefined) profileUpdates['menuTemplateId'] = menuTemplateId;
-    if (ownerPin !== undefined) profileUpdates['ownerPin'] = ownerPin;
-
-    const updateData: Record<string, unknown> = {
-      merchantProfile: { ...currentProfile, ...profileUpdates },
-    };
-
-    if (typeof businessName === 'string' && businessName.trim()) {
-      updateData['name'] = businessName.trim();
-    }
-    if (address) {
-      if (address.street) updateData['address'] = address.street;
-      if (address.city) updateData['city'] = address.city;
-      if (address.state) updateData['state'] = address.state;
-      if (address.zip) updateData['zip'] = address.zip;
-      if (address.phone) updateData['phone'] = address.phone;
-    }
-    if (taxLocale?.taxRate !== undefined) {
-      updateData['taxRate'] = (taxLocale.taxRate) / 100;
-    }
-    if (businessHours !== undefined) {
-      updateData['businessHours'] = businessHours;
-    }
-
-    await prisma.restaurant.update({ where: { id: restaurantId }, data: updateData as any }); // eslint-disable-line @typescript-eslint/no-explicit-any
+    await prisma.restaurant.update({
+      where: { id: restaurantId },
+      data: { merchantProfile: { ...currentProfile, ...profileUpdates }, ...directUpdates } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    });
 
     res.json({ success: true });
   } catch (error) {
@@ -546,7 +549,7 @@ router.post('/restaurant/:id/complete', requireAuth, async (req: Request, res: R
       where: { teamMemberId_restaurantId: { teamMemberId, restaurantId } },
     });
 
-    if (!access || access.role !== 'owner') {
+    if (access?.role !== 'owner') {
       res.status(403).json({ error: 'Access denied' });
       return;
     }

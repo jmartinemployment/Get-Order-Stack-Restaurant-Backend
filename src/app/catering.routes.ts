@@ -4,6 +4,9 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
 import { sendProposal } from '../services/email.service';
 import { toErrorMessage } from '../utils/errors';
+import { logger } from '../utils/logger';
+import { aiConfigService } from '../services/ai-config.service';
+import { generateProposalContent, type ProposalAiContent } from '../services/catering-proposal-ai.service';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
@@ -563,6 +566,140 @@ router.post('/:merchantId/catering/events/:id/proposal', async (req: Request, re
   } catch (error: unknown) {
     console.error('[catering] generate proposal error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to generate proposal' });
+  }
+});
+
+// --- AI Proposal Generation ---
+
+const generateProposalSchema = z.object({
+  tone: z.enum(['professional', 'warm', 'casual']).optional().default('professional'),
+});
+
+const patchProposalContentSchema = z.object({
+  intro: z.string(),
+  serviceOverview: z.string(),
+  dietaryStatement: z.string(),
+  closing: z.string(),
+  menuDescriptions: z.array(z.object({
+    itemId: z.string(),
+    itemName: z.string(),
+    description: z.string(),
+  })),
+});
+
+// POST /api/merchant/:merchantId/catering/events/:id/proposal/generate
+router.post('/:merchantId/catering/events/:id/proposal/generate', async (req: Request, res: Response) => {
+  try {
+    const { merchantId, id } = req.params;
+    const parsed = generateProposalSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+    const { tone } = parsed.data;
+
+    const job = await prisma.cateringEvent.findFirst({
+      where: { id, restaurantId: merchantId },
+      include: { restaurant: { select: { name: true } } },
+    });
+    if (!job) {
+      res.status(404).json({ error: 'Catering event not found' });
+      return;
+    }
+
+    const client = await aiConfigService.getAnthropicClientForRestaurant(job.restaurantId, 'aiCateringProposals');
+    if (!client) {
+      res.status(403).json({
+        error: 'AI Catering Proposals is not enabled. Go to Settings > AI to enable it and configure your API key.',
+      });
+      return;
+    }
+
+    const existingContent = job.aiContent as unknown as ProposalAiContent | null;
+    if (existingContent?.generatedAt) {
+      const secondsAgo = Math.floor((Date.now() - new Date(existingContent.generatedAt).getTime()) / 1000);
+      if (secondsAgo < 30) {
+        const retryAfter = 30 - secondsAgo;
+        res.set('Retry-After', String(retryAfter));
+        res.status(429).json({ error: 'Please wait before regenerating', retryAfter });
+        return;
+      }
+    }
+
+    const packages = (job.packages as Array<{ menuItemIds?: string[] }>) ?? [];
+    const rawIds = packages.flatMap(p => p.menuItemIds ?? []);
+    const deduplicatedIds = [...new Set(rawIds)];
+
+    const menuItems = await prisma.menuItem.findMany({
+      where: { id: { in: deduplicatedIds } },
+      select: { id: true, name: true, description: true },
+    });
+
+    const result = await generateProposalContent(client, job, menuItems, tone);
+    const contentToStore: ProposalAiContent & { truncated: boolean; originalItemCount: number } = {
+      ...result,
+      generatedAt: new Date().toISOString(),
+      tone,
+    };
+
+    await prisma.cateringEvent.update({
+      where: { id },
+      data: { aiContent: contentToStore as unknown as Prisma.InputJsonValue },
+    });
+
+    res.status(201).json(contentToStore);
+  } catch (error: unknown) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Validation failed', details: error.issues });
+      return;
+    }
+    logger.error('[catering] AI proposal generate error', { error: toErrorMessage(error) });
+    res.status(500).json({ error: 'Failed to generate AI proposal' });
+  }
+});
+
+// PATCH /api/merchant/:merchantId/catering/events/:id/proposal/content
+router.patch('/:merchantId/catering/events/:id/proposal/content', async (req: Request, res: Response) => {
+  try {
+    const { merchantId, id } = req.params;
+    const parsed = patchProposalContentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+
+    const job = await prisma.cateringEvent.findFirst({
+      where: { id, restaurantId: merchantId },
+    });
+    if (!job) {
+      res.status(404).json({ error: 'Catering event not found' });
+      return;
+    }
+
+    const existing = job.aiContent as unknown as ProposalAiContent | null;
+    if (!existing) {
+      res.status(404).json({ error: 'No AI content to patch. Generate content first.' });
+      return;
+    }
+
+    const merged: ProposalAiContent = {
+      ...existing,
+      intro: parsed.data.intro,
+      serviceOverview: parsed.data.serviceOverview,
+      dietaryStatement: parsed.data.dietaryStatement,
+      closing: parsed.data.closing,
+      menuDescriptions: parsed.data.menuDescriptions,
+    };
+
+    await prisma.cateringEvent.update({
+      where: { id },
+      data: { aiContent: merged as unknown as Prisma.InputJsonValue },
+    });
+
+    res.json(merged);
+  } catch (error: unknown) {
+    logger.error('[catering] AI proposal patch error', { error: toErrorMessage(error) });
+    res.status(500).json({ error: 'Failed to save AI proposal content' });
   }
 });
 

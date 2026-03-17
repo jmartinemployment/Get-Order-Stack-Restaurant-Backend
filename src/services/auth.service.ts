@@ -151,6 +151,33 @@ class AuthService {
 
   // ============ User Authentication (Email/Password) ============
 
+  private async isAccountLocked(email: string): Promise<boolean> {
+    const recentFailures = await prisma.auditLog.count({
+      where: {
+        action: 'login_failed',
+        metadata: { path: ['email'], equals: email.toLowerCase() },
+        createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+      },
+    });
+    return recentFailures >= 10;
+  }
+
+  private checkPasswordValidity(member: Awaited<ReturnType<typeof prisma.teamMember.findUnique>>): AuthResult | null {
+    if (member!.tempPasswordExpiresAt && new Date() > member!.tempPasswordExpiresAt) {
+      return { success: false, error: 'Temporary password expired. Ask your manager to reset it.' };
+    }
+    if (member!.mustChangePassword) {
+      return { success: false, error: 'PASSWORD_CHANGE_REQUIRED', requiresPasswordChange: true };
+    }
+    if (member!.passwordChangedAt && ['admin', 'owner', 'manager', 'super_admin'].includes(member!.role)) {
+      const daysSinceChange = (Date.now() - member!.passwordChangedAt.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceChange > 90) {
+        return { success: false, error: 'PASSWORD_EXPIRED', requiresPasswordChange: true };
+      }
+    }
+    return null;
+  }
+
   async loginUser(email: string, password: string, deviceInfo?: string, ipAddress?: string): Promise<AuthResult> {
     try {
       // Find team member by email (only those with passwordHash can do email/password login)
@@ -181,15 +208,7 @@ class AuthService {
       }
 
       // Account lockout: check for too many recent failed attempts
-      const recentFailures = await prisma.auditLog.count({
-        where: {
-          action: 'login_failed',
-          metadata: { path: ['email'], equals: email.toLowerCase() },
-          createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
-        },
-      });
-
-      if (recentFailures >= 10) {
+      if (await this.isAccountLocked(email)) {
         await auditLog('account_locked', { metadata: { email } });
         return { success: false, error: 'Account locked due to too many failed attempts. Try again in 30 minutes.' };
       }
@@ -201,23 +220,9 @@ class AuthService {
         return { success: false, error: 'Invalid email or password' };
       }
 
-      // Check temp password expiry
-      if (member.tempPasswordExpiresAt && new Date() > member.tempPasswordExpiresAt) {
-        return { success: false, error: 'Temporary password expired. Ask your manager to reset it.' };
-      }
-
-      // Forced change (admin-set or first login)
-      if (member.mustChangePassword) {
-        return { success: false, error: 'PASSWORD_CHANGE_REQUIRED', requiresPasswordChange: true };
-      }
-
-      // 90-day expiration for password-auth users (admin/owner/manager)
-      if (member.passwordChangedAt && ['admin', 'owner', 'manager', 'super_admin'].includes(member.role)) {
-        const daysSinceChange = (Date.now() - member.passwordChangedAt.getTime()) / (1000 * 60 * 60 * 24);
-        if (daysSinceChange > 90) {
-          return { success: false, error: 'PASSWORD_EXPIRED', requiresPasswordChange: true };
-        }
-      }
+      // Check password validity (expiry, forced change, 90-day policy)
+      const validityError = this.checkPasswordValidity(member);
+      if (validityError) return validityError;
 
       // Create session
       const expiresAt = new Date();
@@ -240,7 +245,7 @@ class AuthService {
       });
 
       if (activeSessions.length > 5) {
-        const toRevoke = activeSessions.slice(0, activeSessions.length - 5);
+        const toRevoke = activeSessions.slice(0, -5);
         await prisma.userSession.updateMany({
           where: { id: { in: toRevoke.map(s => s.id) } },
           data: { isActive: false },
@@ -714,7 +719,7 @@ class AuthService {
         include: { teamMember: { select: { id: true, isActive: true } } },
       });
 
-      if (!resetToken || resetToken.usedAt !== null) {
+      if (resetToken?.usedAt !== null) {
         return { success: false, error: 'Invalid or expired reset link. Please request a new one.' };
       }
 

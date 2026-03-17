@@ -960,9 +960,12 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
       await syncMenuItemModifierGroups(itemId, modifierGroupIds);
     }
 
-    const coercedAllergens = allergens === undefined ? undefined : (Array.isArray(allergens) ? allergens : []);
-    const coercedCateringAllergens = cateringAllergens === undefined ? undefined : (Array.isArray(cateringAllergens) ? cateringAllergens : []);
-    const coercedDietaryFlags = dietaryFlags === undefined ? undefined : (Array.isArray(dietaryFlags) ? dietaryFlags : []);
+    const allergenList = Array.isArray(allergens) ? allergens : [];
+    const coercedAllergens = allergens === undefined ? undefined : allergenList;
+    const cateringAllergenList = Array.isArray(cateringAllergens) ? cateringAllergens : [];
+    const coercedCateringAllergens = cateringAllergens === undefined ? undefined : cateringAllergenList;
+    const dietaryFlagList = Array.isArray(dietaryFlags) ? dietaryFlags : [];
+    const coercedDietaryFlags = dietaryFlags === undefined ? undefined : dietaryFlagList;
 
     const item = await prisma.menuItem.update({
       where: { id: itemId },

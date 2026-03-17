@@ -287,7 +287,11 @@ describe('GET /inventory/report', () => {
 describe('GET /inventory/expiring', () => {
   it('returns expiring items (below minimum stock)', async () => {
     prisma.inventoryItem.findMany.mockResolvedValue([
-      { id: 'inv-1', name: 'Flour', currentStock: 2, minStock: 10, active: true, updatedAt: new Date() },
+      {
+        id: 'inv-1', name: 'Flour', unit: 'kg', currentStock: 2, minStock: 10, active: true,
+        expirationDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days from now
+        updatedAt: new Date(),
+      },
     ]);
 
     const res = await api.owner.get(`${BASE_URL}/inventory/expiring`);
@@ -496,9 +500,9 @@ describe('GET /reports/realtime-kpis', () => {
   });
 });
 
-// ============ GET /reservations/turn-time-stats ============
+// ============ GET /bookings/turn-time-stats ============
 
-describe('GET /reservations/turn-time-stats', () => {
+describe('GET /bookings/turn-time-stats', () => {
   it('returns turn time stats', async () => {
     const now = new Date();
     const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
@@ -507,7 +511,7 @@ describe('GET /reservations/turn-time-stats', () => {
       { reservationTime: twoHoursAgo, updatedAt: now, partySize: 4 },
     ]);
 
-    const res = await api.owner.get(`${BASE_URL}/reservations/turn-time-stats`);
+    const res = await api.owner.get(`${BASE_URL}/bookings/turn-time-stats`);
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('overall');
     expect(res.body).toHaveProperty('sampleSize');
@@ -517,7 +521,7 @@ describe('GET /reservations/turn-time-stats', () => {
   it('returns defaults when no completed reservations', async () => {
     prisma.reservation.findMany.mockResolvedValue([]);
 
-    const res = await api.owner.get(`${BASE_URL}/reservations/turn-time-stats`);
+    const res = await api.owner.get(`${BASE_URL}/bookings/turn-time-stats`);
     expect(res.status).toBe(200);
     expect(res.body.overall).toBe(45);
     expect(res.body.sampleSize).toBe(0);
@@ -526,7 +530,7 @@ describe('GET /reservations/turn-time-stats', () => {
   it('returns defaults on error (graceful)', async () => {
     prisma.reservation.findMany.mockRejectedValue(new Error('DB error'));
 
-    const res = await api.owner.get(`${BASE_URL}/reservations/turn-time-stats`);
+    const res = await api.owner.get(`${BASE_URL}/bookings/turn-time-stats`);
     expect(res.status).toBe(200);
     expect(res.body.overall).toBe(45);
   });

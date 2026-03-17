@@ -108,6 +108,11 @@ vi.mock('stripe', () => {
   return { default: MockStripe };
 });
 
+// Mock express-rate-limit — prevents 429 during test runs
+vi.mock('express-rate-limit', () => ({
+  default: vi.fn(() => (_req: unknown, _res: unknown, next: () => void) => next()),
+}));
+
 // Mock socket.io service to prevent real WebSocket connections
 vi.mock('../services/socket.service', () => ({
   initializeSocketServer: vi.fn(),

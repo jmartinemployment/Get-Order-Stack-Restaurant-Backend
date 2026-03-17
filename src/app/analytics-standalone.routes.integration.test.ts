@@ -27,7 +27,7 @@ const BASE_URL = '/api/analytics';
 
 describe('GET /pinned-widgets', () => {
   it('returns 401 without auth', async () => {
-    const res = await api.anonymous().get(`${BASE_URL}/pinned-widgets?restaurantId=${RESTAURANT_ID}`);
+    const res = await api.anonymous().get(`${BASE_URL}/pinned-widgets?merchantId=${RESTAURANT_ID}`);
     expect(res.status).toBe(401);
   });
 
@@ -41,7 +41,7 @@ describe('GET /pinned-widgets', () => {
       merchantProfile: { pinnedWidgets: [{ id: 'w1', type: 'sales' }] },
     });
 
-    const res = await api.owner.get(`${BASE_URL}/pinned-widgets?restaurantId=${RESTAURANT_ID}`);
+    const res = await api.owner.get(`${BASE_URL}/pinned-widgets?merchantId=${RESTAURANT_ID}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([{ id: 'w1', type: 'sales' }]);
   });
@@ -49,7 +49,7 @@ describe('GET /pinned-widgets', () => {
   it('returns empty array when no widgets', async () => {
     prisma.restaurant.findUnique.mockResolvedValue({ merchantProfile: {} });
 
-    const res = await api.owner.get(`${BASE_URL}/pinned-widgets?restaurantId=${RESTAURANT_ID}`);
+    const res = await api.owner.get(`${BASE_URL}/pinned-widgets?merchantId=${RESTAURANT_ID}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
@@ -57,7 +57,7 @@ describe('GET /pinned-widgets', () => {
   it('returns empty array when restaurant not found (graceful)', async () => {
     prisma.restaurant.findUnique.mockResolvedValue(null);
 
-    const res = await api.owner.get(`${BASE_URL}/pinned-widgets?restaurantId=${RESTAURANT_ID}`);
+    const res = await api.owner.get(`${BASE_URL}/pinned-widgets?merchantId=${RESTAURANT_ID}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
@@ -76,7 +76,7 @@ describe('POST /pinned-widgets', () => {
     prisma.restaurant.update.mockResolvedValue({});
 
     const res = await api.owner.post(`${BASE_URL}/pinned-widgets`).send({
-      restaurantId: RESTAURANT_ID,
+      merchantId: RESTAURANT_ID,
       id: 'w1',
       type: 'sales',
     });
@@ -99,7 +99,7 @@ describe('DELETE /pinned-widgets/:widgetId', () => {
     });
     prisma.restaurant.update.mockResolvedValue({});
 
-    const res = await api.owner.delete(`${BASE_URL}/pinned-widgets/w1?restaurantId=${RESTAURANT_ID}`);
+    const res = await api.owner.delete(`${BASE_URL}/pinned-widgets/w1?merchantId=${RESTAURANT_ID}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
@@ -118,7 +118,7 @@ describe('GET /proactive-insights', () => {
       .mockResolvedValueOnce(50)  // today
       .mockResolvedValueOnce(20); // yesterday
 
-    const res = await api.owner.get(`${BASE_URL}/proactive-insights?restaurantId=${RESTAURANT_ID}`);
+    const res = await api.owner.get(`${BASE_URL}/proactive-insights?merchantId=${RESTAURANT_ID}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThan(0);
@@ -131,7 +131,7 @@ describe('GET /proactive-insights', () => {
       .mockResolvedValueOnce(10)  // today
       .mockResolvedValueOnce(50); // yesterday
 
-    const res = await api.owner.get(`${BASE_URL}/proactive-insights?restaurantId=${RESTAURANT_ID}`);
+    const res = await api.owner.get(`${BASE_URL}/proactive-insights?merchantId=${RESTAURANT_ID}`);
     expect(res.status).toBe(200);
     expect(res.body[0].title).toBe('Orders Trending Down');
   });
@@ -141,7 +141,7 @@ describe('GET /proactive-insights', () => {
       .mockResolvedValueOnce(50)  // today
       .mockResolvedValueOnce(50); // yesterday
 
-    const res = await api.owner.get(`${BASE_URL}/proactive-insights?restaurantId=${RESTAURANT_ID}`);
+    const res = await api.owner.get(`${BASE_URL}/proactive-insights?merchantId=${RESTAURANT_ID}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
@@ -151,7 +151,7 @@ describe('GET /proactive-insights', () => {
       .mockResolvedValueOnce(0)
       .mockResolvedValueOnce(0);
 
-    const res = await api.owner.get(`${BASE_URL}/proactive-insights?restaurantId=${RESTAURANT_ID}`);
+    const res = await api.owner.get(`${BASE_URL}/proactive-insights?merchantId=${RESTAURANT_ID}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });

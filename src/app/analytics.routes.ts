@@ -18,6 +18,9 @@ import { aiUsageService } from '../services/ai-usage.service';
 const router = Router();
 const prisma = new PrismaClient();
 
+type Confidence = 'low' | 'medium' | 'high';
+type ElasticityRecommendation = 'increase' | 'decrease' | 'hold';
+
 // ============ Today's Sales Stats (Home Dashboard) ============
 
 /**
@@ -130,7 +133,7 @@ router.get('/:merchantId/analytics/upsell-suggestions', async (req: Request, res
 
 // ============ Menu Engineering — Advanced Analytics ============
 
-function getConfidence(totalOrders: number): 'low' | 'medium' | 'high' {
+function getConfidence(totalOrders: number): Confidence {
   if (totalOrders >= 30) {
     return 'high';
   } else if (totalOrders >= 10) {
@@ -159,36 +162,44 @@ function buildWeeklyData(
   return itemWeeklyData;
 }
 
+type WeekData = { totalQty: number; totalRevenue: number; prices: number[] };
+
+function computeVolumeSplit(
+  weeklyData: Map<number, WeekData>,
+  midPrice: number,
+): { lowPriceQty: number; lowPriceWeeks: number; highPriceQty: number; highPriceWeeks: number } {
+  let lowPriceQty = 0, lowPriceWeeks = 0;
+  let highPriceQty = 0, highPriceWeeks = 0;
+  for (const week of weeklyData.values()) {
+    const avgWeekPrice = week.prices.reduce((s, p) => s + p, 0) / week.prices.length;
+    if (avgWeekPrice <= midPrice) {
+      lowPriceQty += week.totalQty;
+      lowPriceWeeks++;
+    } else {
+      highPriceQty += week.totalQty;
+      highPriceWeeks++;
+    }
+  }
+  return { lowPriceQty, lowPriceWeeks, highPriceQty, highPriceWeeks };
+}
+
 function computeItemElasticity(
-  weeklyData: Map<number, { totalQty: number; totalRevenue: number; prices: number[] }>,
+  weeklyData: Map<number, WeekData>,
   totalOrders: number
-): { elasticity: number; confidence: 'low' | 'medium' | 'high' } {
+): { elasticity: number; confidence: Confidence } {
   const allPrices = [...weeklyData.values()].flatMap((w) => w.prices);
   const uniquePrices = [...new Set(allPrices.map((p) => Math.round(p * 100)))];
 
   let elasticity = 0;
-  let confidence: 'low' | 'medium' | 'high' = 'low';
+  let confidence: Confidence = 'low';
 
   if (uniquePrices.length >= 2) {
     const sortedPrices = uniquePrices.map((p) => p / 100).sort((a, b) => a - b);
     const midPrice = sortedPrices[Math.floor(sortedPrices.length / 2)];
-
-    let lowPriceQty = 0, lowPriceWeeks = 0;
-    let highPriceQty = 0, highPriceWeeks = 0;
     const lowPrice = sortedPrices[0];
     const highPrice = sortedPrices.at(-1) ?? 0;
 
-    for (const week of weeklyData.values()) {
-      const avgWeekPrice = week.prices.reduce((s, p) => s + p, 0) / week.prices.length;
-      if (avgWeekPrice <= midPrice) {
-        lowPriceQty += week.totalQty;
-        lowPriceWeeks++;
-      } else {
-        highPriceQty += week.totalQty;
-        highPriceWeeks++;
-      }
-    }
-
+    const { lowPriceQty, lowPriceWeeks, highPriceQty, highPriceWeeks } = computeVolumeSplit(weeklyData, midPrice);
     const avgLowVolume = lowPriceWeeks > 0 ? lowPriceQty / lowPriceWeeks : 0;
     const avgHighVolume = highPriceWeeks > 0 ? highPriceQty / highPriceWeeks : 0;
 
@@ -210,9 +221,9 @@ async function addElasticityReasoning(
     itemName: string;
     currentPrice: number;
     elasticity: number;
-    recommendation: 'increase' | 'decrease' | 'hold';
+    recommendation: ElasticityRecommendation;
     estimatedRevenueChange: number;
-    confidence: 'low' | 'medium' | 'high';
+    confidence: Confidence;
     reasoning?: string;
   }>,
   restaurantId: string
@@ -277,19 +288,30 @@ function buildSalesLookup(
   return salesByItem;
 }
 
-async function addCannibalizationRecs(
-  results: Array<{
-    newItemId: string;
-    newItemName: string;
-    affectedItemId: string;
-    affectedItemName: string;
-    salesDeclinePercent: number;
-    periodStart: string;
-    periodEnd: string;
-    recommendation?: string;
-  }>,
-  restaurantId: string
-): Promise<void> {
+type CannibalResult = {
+  newItemId: string;
+  newItemName: string;
+  affectedItemId: string;
+  affectedItemName: string;
+  salesDeclinePercent: number;
+  periodStart: string;
+  periodEnd: string;
+  recommendation?: string;
+};
+
+function applyCannibalRecs(
+  results: CannibalResult[],
+  recs: Array<{ newItemId: string; affectedItemId: string; recommendation: string }>,
+): void {
+  for (const rec of recs) {
+    const match = results.find((r) => r.newItemId === rec.newItemId && r.affectedItemId === rec.affectedItemId);
+    if (match) {
+      match.recommendation = rec.recommendation;
+    }
+  }
+}
+
+async function addCannibalizationRecs(results: CannibalResult[], restaurantId: string): Promise<void> {
   try {
     const client = await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'menuEngineering');
     if (client) {
@@ -313,12 +335,7 @@ Return: [{ "newItemId": "...", "affectedItemId": "...", "recommendation": "..." 
         const jsonMatch = /\[[\s\S]*\]/.exec(content.text);
         if (jsonMatch) {
           const recs: Array<{ newItemId: string; affectedItemId: string; recommendation: string }> = JSON.parse(jsonMatch[0]);
-          for (const rec of recs) {
-            const match = results.find((r) => r.newItemId === rec.newItemId && r.affectedItemId === rec.affectedItemId);
-            if (match) {
-              match.recommendation = rec.recommendation;
-            }
-          }
+          applyCannibalRecs(results, recs);
         }
       }
     }
@@ -373,9 +390,9 @@ router.get('/:merchantId/analytics/menu/price-elasticity', async (req: Request, 
       itemName: string;
       currentPrice: number;
       elasticity: number;
-      recommendation: 'increase' | 'decrease' | 'hold';
+      recommendation: ElasticityRecommendation;
       estimatedRevenueChange: number;
-      confidence: 'low' | 'medium' | 'high';
+      confidence: Confidence;
       reasoning?: string;
     }> = [];
 
@@ -390,7 +407,7 @@ router.get('/:merchantId/analytics/menu/price-elasticity', async (req: Request, 
       const { elasticity, confidence } = computeItemElasticity(weeklyData, totalOrders);
 
       // Determine recommendation
-      let recommendation: 'increase' | 'decrease' | 'hold' = 'hold';
+      let recommendation: ElasticityRecommendation = 'hold';
       if (elasticity > -0.5) {
         recommendation = 'increase';
       } else if (elasticity < -1.5) {
@@ -428,6 +445,56 @@ router.get('/:merchantId/analytics/menu/price-elasticity', async (req: Request, 
     res.json([]);
   }
 });
+
+function findCannibalizationPairs(
+  newItem: { id: string; name: string; categoryId: string; createdAt: Date },
+  candidateItems: Array<{ id: string; name: string; categoryId: string }>,
+  salesByItem: Map<string, Array<{ date: Date; qty: number }>>,
+  now: Date,
+): CannibalResult[] {
+  const launchDate = newItem.createdAt;
+  const beforeStart = new Date(launchDate);
+  beforeStart.setDate(beforeStart.getDate() - 28);
+  const afterEnd = new Date(launchDate);
+  afterEnd.setDate(afterEnd.getDate() + 28);
+  const clampedAfterEnd = new Date(Math.min(afterEnd.getTime(), now.getTime()));
+  const afterWeeks = Math.max((clampedAfterEnd.getTime() - launchDate.getTime()) / (7 * 24 * 60 * 60 * 1000), 1);
+  const beforeWeeks = 4;
+
+  const pairs: CannibalResult[] = [];
+  const sameCategoryCandidates = candidateItems.filter((c) => c.categoryId === newItem.categoryId);
+
+  for (const candidate of sameCategoryCandidates) {
+    const sales = salesByItem.get(candidate.id) ?? [];
+    let beforeQty = 0, afterQty = 0;
+    for (const s of sales) {
+      if (s.date >= beforeStart && s.date < launchDate) {
+        beforeQty += s.qty;
+      } else if (s.date >= launchDate && s.date <= clampedAfterEnd) {
+        afterQty += s.qty;
+      }
+    }
+
+    const avgWeeklyBefore = beforeQty / beforeWeeks;
+    if (avgWeeklyBefore === 0) continue;
+
+    const avgWeeklyAfter = afterQty / afterWeeks;
+    const declinePct = Math.round(((avgWeeklyBefore - avgWeeklyAfter) / avgWeeklyBefore) * 1000) / 10;
+
+    if (declinePct >= 15) {
+      pairs.push({
+        newItemId: newItem.id,
+        newItemName: newItem.name,
+        affectedItemId: candidate.id,
+        affectedItemName: candidate.name,
+        salesDeclinePercent: declinePct,
+        periodStart: launchDate.toISOString().split('T')[0],
+        periodEnd: clampedAfterEnd.toISOString().split('T')[0],
+      });
+    }
+  }
+  return pairs;
+}
 
 /**
  * GET /:merchantId/analytics/menu/cannibalization?days=60
@@ -499,64 +566,11 @@ router.get('/:merchantId/analytics/menu/cannibalization', async (req: Request, r
     const salesByItem = buildSalesLookup(orderItems);
 
     const now = new Date();
-    const results: Array<{
-      newItemId: string;
-      newItemName: string;
-      affectedItemId: string;
-      affectedItemName: string;
-      salesDeclinePercent: number;
-      periodStart: string;
-      periodEnd: string;
-      recommendation?: string;
-    }> = [];
+    const results: CannibalResult[] = [];
 
     for (const newItem of newItems) {
       if (!newItem.categoryId) continue;
-      const launchDate = newItem.createdAt;
-
-      // 4 weeks before and after launch
-      const beforeStart = new Date(launchDate);
-      beforeStart.setDate(beforeStart.getDate() - 28);
-      const afterEnd = new Date(launchDate);
-      afterEnd.setDate(afterEnd.getDate() + 28);
-      const clampedAfterEnd = new Date(Math.min(afterEnd.getTime(), now.getTime()));
-      const afterWeeks = Math.max((clampedAfterEnd.getTime() - launchDate.getTime()) / (7 * 24 * 60 * 60 * 1000), 1);
-      const beforeWeeks = 4;
-
-      const sameCategoryCandidates = candidateItems.filter((c) => c.categoryId === newItem.categoryId);
-
-      for (const candidate of sameCategoryCandidates) {
-        const sales = salesByItem.get(candidate.id) ?? [];
-
-        let beforeQty = 0;
-        let afterQty = 0;
-        for (const s of sales) {
-          if (s.date >= beforeStart && s.date < launchDate) {
-            beforeQty += s.qty;
-          } else if (s.date >= launchDate && s.date <= clampedAfterEnd) {
-            afterQty += s.qty;
-          }
-        }
-
-        const avgWeeklyBefore = beforeQty / beforeWeeks;
-        const avgWeeklyAfter = afterQty / afterWeeks;
-
-        if (avgWeeklyBefore === 0) continue;
-
-        const declinePct = Math.round(((avgWeeklyBefore - avgWeeklyAfter) / avgWeeklyBefore) * 1000) / 10;
-
-        if (declinePct >= 15) {
-          results.push({
-            newItemId: newItem.id,
-            newItemName: newItem.name,
-            affectedItemId: candidate.id,
-            affectedItemName: candidate.name,
-            salesDeclinePercent: declinePct,
-            periodStart: launchDate.toISOString().split('T')[0],
-            periodEnd: clampedAfterEnd.toISOString().split('T')[0],
-          });
-        }
-      }
+      results.push(...findCannibalizationPairs(newItem, candidateItems, salesByItem, now));
     }
 
     // Sort by severity

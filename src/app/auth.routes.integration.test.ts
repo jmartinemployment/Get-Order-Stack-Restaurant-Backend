@@ -77,7 +77,7 @@ describe('POST /api/auth/signup', () => {
 
   it('creates account and returns token', async () => {
     const res = await api.anonymous().post(url).send({
-      firstName: 'New', lastName: 'User', email: 'new@example.com', password: 'password123', // NOSONAR - intentional test credential
+      firstName: 'New', lastName: 'User', email: 'new@example.com', password: 'Password123!', // NOSONAR - intentional test credential
     });
     expect(res.status).toBe(201);
     expect(res.body.token).toBeDefined();
@@ -105,13 +105,14 @@ describe('POST /api/auth/signup', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when email already exists', async () => {
+  it('returns 200 with generic message when email already exists (anti-enumeration)', async () => {
     vi.mocked(authService.createUser).mockResolvedValue({ success: false, error: 'Email already registered' });
     const res = await api.anonymous().post(url).send({
-      firstName: 'New', lastName: 'User', email: 'existing@example.com', password: 'password123', // NOSONAR - intentional test credential
+      firstName: 'New', lastName: 'User', email: 'existing@example.com', password: 'Password123!', // NOSONAR - intentional test credential
     });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Email already registered');
+    // FEATURE-15: anti-enumeration — always 200, never expose whether email exists
+    expect(res.status).toBe(200);
+    expect(res.body.message).toContain('If this email is not already registered');
   });
 });
 

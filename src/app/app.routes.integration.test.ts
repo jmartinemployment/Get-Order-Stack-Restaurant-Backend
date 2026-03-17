@@ -241,8 +241,8 @@ describe('POST /api/merchant/:merchantId/auth/validate-pin', () => {
     const res = await api.owner.post(url).send({ pin: '1234', requiredRole: 'manager' });
     expect(res.status).toBe(200);
     expect(res.body.valid).toBe(true);
-    expect(res.body.staffName).toBe('John Manager');
-    expect(res.body.staffRole).toBe('manager');
+    expect(res.body.name).toBe('John Manager');
+    expect(res.body.role).toBe('manager');
   });
 
   it('returns 400 when pin is missing', async () => {
@@ -289,6 +289,9 @@ describe('POST /api/merchant', () => {
     const res = await api.owner.post(url).send({
       slug: 'test-rest',
       name: 'Test Restaurant',
+      email: 'test@restaurant.com',
+      address: '123 Main St',
+      city: 'Fort Lauderdale',
       state: 'FL',
       zip: '33301',
     });
@@ -301,6 +304,9 @@ describe('POST /api/merchant', () => {
 
     const res = await api.owner.post(url).send({
       name: 'Tax Test',
+      email: 'tax@test.com',
+      address: '100 Tax Ave',
+      city: 'Tampa',
       zip: '33301',
       state: 'FL',
     });
@@ -695,7 +701,7 @@ describe('DELETE /api/merchant/:merchantId/tables/:tableId', () => {
 // ============ Reservations ============
 
 describe('GET /api/merchant/:merchantId/reservations', () => {
-  const url = `${R_URL}/reservations`;
+  const url = `${R_URL}/bookings`;
 
   it('returns reservations', async () => {
     prisma.reservation.findMany.mockResolvedValue([MOCK_RESERVATION]);
@@ -735,7 +741,7 @@ describe('GET /api/merchant/:merchantId/reservations', () => {
 });
 
 describe('POST /api/merchant/:merchantId/reservations', () => {
-  const url = `${R_URL}/reservations`;
+  const url = `${R_URL}/bookings`;
 
   it('creates a reservation with valid data', async () => {
     prisma.reservation.create.mockResolvedValue(MOCK_RESERVATION);
@@ -760,7 +766,7 @@ describe('GET /api/merchant/:merchantId/reservations/:reservationId', () => {
   it('returns reservation when found', async () => {
     prisma.reservation.findUnique.mockResolvedValue(MOCK_RESERVATION);
 
-    const res = await api.owner.get(`${R_URL}/reservations/${RESERVATION_ID}`);
+    const res = await api.owner.get(`${R_URL}/bookings/${RESERVATION_ID}`);
     expect(res.status).toBe(200);
     expect(res.body.customerName).toBe('Jane Doe');
   });
@@ -768,7 +774,7 @@ describe('GET /api/merchant/:merchantId/reservations/:reservationId', () => {
   it('returns 404 when not found', async () => {
     prisma.reservation.findUnique.mockResolvedValue(null);
 
-    const res = await api.owner.get(`${R_URL}/reservations/${RESERVATION_ID}`);
+    const res = await api.owner.get(`${R_URL}/bookings/${RESERVATION_ID}`);
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('Reservation not found');
   });
@@ -778,7 +784,7 @@ describe('PATCH /api/merchant/:merchantId/reservations/:reservationId', () => {
   it('updates a reservation', async () => {
     prisma.reservation.update.mockResolvedValue({ ...MOCK_RESERVATION, status: 'seated' });
 
-    const res = await api.owner.patch(`${R_URL}/reservations/${RESERVATION_ID}`).send({ status: 'seated' });
+    const res = await api.owner.patch(`${R_URL}/bookings/${RESERVATION_ID}`).send({ status: 'seated' });
     expect(res.status).toBe(200);
   });
 });
@@ -787,7 +793,7 @@ describe('DELETE /api/merchant/:merchantId/reservations/:reservationId', () => {
   it('deletes a reservation', async () => {
     prisma.reservation.delete.mockResolvedValue(MOCK_RESERVATION);
 
-    const res = await api.owner.delete(`${R_URL}/reservations/${RESERVATION_ID}`);
+    const res = await api.owner.delete(`${R_URL}/bookings/${RESERVATION_ID}`);
     expect(res.status).toBe(204);
   });
 });

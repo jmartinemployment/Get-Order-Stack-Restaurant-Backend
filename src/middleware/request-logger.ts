@@ -14,7 +14,14 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
     const status = res.statusCode;
     const userId = (req as Request & { user?: { teamMemberId?: string } }).user?.teamMemberId;
 
-    const logFn = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
+    let logFn: 'error' | 'warn' | 'info';
+    if (status >= 500) {
+      logFn = 'error';
+    } else if (status >= 400) {
+      logFn = 'warn';
+    } else {
+      logFn = 'info';
+    }
     logger[logFn]('HTTP request', {
       method: req.method,
       path: req.path,

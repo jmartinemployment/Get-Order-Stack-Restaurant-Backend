@@ -74,7 +74,7 @@ router.post('/:merchantId/combos', async (req: Request, res: Response) => {
 
 // PATCH /:merchantId/combos/:comboId
 router.patch('/:merchantId/combos/:comboId', async (req: Request, res: Response) => {
-  const { restaurantId, comboId } = req.params;
+  const { merchantId: restaurantId, comboId } = req.params;
   const parsed = updateComboSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
@@ -99,7 +99,7 @@ router.patch('/:merchantId/combos/:comboId', async (req: Request, res: Response)
 
 // DELETE /:merchantId/combos/:comboId
 router.delete('/:merchantId/combos/:comboId', async (req: Request, res: Response) => {
-  const { restaurantId, comboId } = req.params;
+  const { merchantId: restaurantId, comboId } = req.params;
   try {
     await prisma.combo.delete({
       where: { id: comboId, restaurantId },

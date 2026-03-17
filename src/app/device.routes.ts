@@ -171,7 +171,7 @@ router.post('/:merchantId/devices/register-browser', async (req: Request, res: R
 // Get a single device by UUID
 router.get('/:merchantId/devices/:id', async (req: Request, res: Response) => {
   try {
-    const { restaurantId, id } = req.params;
+    const { merchantId: restaurantId, id } = req.params;
 
     const device = await prisma.device.findFirst({
       where: { id, restaurantId },
@@ -192,7 +192,7 @@ router.get('/:merchantId/devices/:id', async (req: Request, res: Response) => {
 // Update device
 router.patch('/:merchantId/devices/:id', async (req: Request, res: Response) => {
   try {
-    const { restaurantId, id } = req.params;
+    const { merchantId: restaurantId, id } = req.params;
     const parsed = updateDeviceSchema.safeParse(req.body);
 
     if (!parsed.success) {
@@ -225,7 +225,7 @@ router.patch('/:merchantId/devices/:id', async (req: Request, res: Response) => 
 // Delete device
 router.delete('/:merchantId/devices/:id', async (req: Request, res: Response) => {
   try {
-    const { restaurantId, id } = req.params;
+    const { merchantId: restaurantId, id } = req.params;
 
     const existing = await prisma.device.findFirst({
       where: { id, restaurantId },
