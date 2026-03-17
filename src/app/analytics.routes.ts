@@ -7,10 +7,13 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { toErrorMessage } from '../utils/errors';
+import { logger } from '../utils/logger';
 import { menuEngineeringService } from '../services/menu-engineering.service';
 import { salesInsightsService } from '../services/sales-insights.service';
 import { inventoryService } from '../services/inventory.service';
 import { orderProfitService } from '../services/order-profit.service';
+import { aiConfigService } from '../services/ai-config.service';
+import { aiUsageService } from '../services/ai-usage.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -128,12 +131,18 @@ router.get('/:merchantId/analytics/upsell-suggestions', async (req: Request, res
 // ============ Menu Engineering — Advanced Analytics ============
 
 /**
- * GET /:merchantId/analytics/menu/price-elasticity
- * Price vs demand data derived from OrderItem + MenuItem
+ * GET /:merchantId/analytics/menu/price-elasticity?days=90
+ * Real price elasticity analysis: measures % volume change / % price change
+ * per menu item using historical order data. Returns flat PriceElasticityIndicator[].
  */
 router.get('/:merchantId/analytics/menu/price-elasticity', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
+    const days = Number.parseInt(String(req.query.days ?? '90'), 10);
+    const windowStart = new Date();
+    windowStart.setDate(windowStart.getDate() - days);
+
+    const completedStatuses = ['completed', 'delivered', 'ready', 'preparing'];
 
     const menuItems = await prisma.menuItem.findMany({
       where: { restaurantId },
@@ -142,106 +151,362 @@ router.get('/:merchantId/analytics/menu/price-elasticity', async (req: Request, 
 
     const orderItems = await prisma.orderItem.findMany({
       where: {
-        order: { restaurantId, status: { in: ['completed', 'delivered', 'ready', 'preparing'] } },
-      },
-      select: { menuItemId: true, quantity: true, unitPrice: true },
-    });
-
-    const itemStats = new Map<string, { orderCount: number; totalRevenue: number }>();
-    for (const oi of orderItems) {
-      if (!oi.menuItemId) continue;
-      const existing = itemStats.get(oi.menuItemId) ?? { orderCount: 0, totalRevenue: 0 };
-      existing.orderCount += oi.quantity;
-      existing.totalRevenue += Number(oi.unitPrice) * oi.quantity;
-      itemStats.set(oi.menuItemId, existing);
-    }
-
-    const items = menuItems.map((mi) => {
-      const stats = itemStats.get(mi.id) ?? { orderCount: 0, totalRevenue: 0 };
-      return {
-        menuItemId: mi.id,
-        name: mi.name,
-        currentPrice: Number(mi.price),
-        orderCount: stats.orderCount,
-        revenuePerItem: stats.orderCount > 0
-          ? Math.round((stats.totalRevenue / stats.orderCount) * 100) / 100
-          : 0,
-      };
-    });
-
-    res.json({ items });
-  } catch (error: unknown) {
-    console.error('[Analytics] Error fetching price elasticity:', error);
-    res.json({ items: [] });
-  }
-});
-
-/**
- * GET /:merchantId/analytics/menu/cannibalization
- * Items frequently ordered together or competing in the same category
- */
-router.get('/:merchantId/analytics/menu/cannibalization', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = req.params.merchantId;
-
-    const orders = await prisma.order.findMany({
-      where: {
-        restaurantId,
-        status: { in: ['completed', 'delivered', 'ready', 'preparing'] },
-      },
-      select: {
-        orderItems: {
-          select: { menuItemId: true },
+        menuItemId: { not: null },
+        order: {
+          restaurantId,
+          status: { in: completedStatuses },
+          createdAt: { gte: windowStart },
         },
       },
-      take: 1000,
-      orderBy: { createdAt: 'desc' },
+      select: { menuItemId: true, quantity: true, unitPrice: true, order: { select: { createdAt: true } } },
     });
 
-    const menuItems = await prisma.menuItem.findMany({
-      where: { restaurantId },
-      select: { id: true, name: true, categoryId: true },
-    });
+    // Group order items by menu item, then by week
+    const itemWeeklyData = new Map<string, Map<number, { totalQty: number; totalRevenue: number; prices: number[] }>>();
+    for (const oi of orderItems) {
+      if (!oi.menuItemId) continue;
+      const weekNum = Math.floor((oi.order.createdAt.getTime() - windowStart.getTime()) / (7 * 24 * 60 * 60 * 1000));
+      const itemMap = itemWeeklyData.get(oi.menuItemId) ?? new Map();
+      const week = itemMap.get(weekNum) ?? { totalQty: 0, totalRevenue: 0, prices: [] };
+      week.totalQty += oi.quantity;
+      week.totalRevenue += Number(oi.unitPrice) * oi.quantity;
+      week.prices.push(Number(oi.unitPrice));
+      itemMap.set(weekNum, week);
+      itemWeeklyData.set(oi.menuItemId, itemMap);
+    }
 
-    const menuItemMap = new Map(menuItems.map((mi) => [mi.id, mi]));
-    const pairCounts = new Map<string, number>();
+    const results: Array<{
+      itemId: string;
+      itemName: string;
+      currentPrice: number;
+      elasticity: number;
+      recommendation: 'increase' | 'decrease' | 'hold';
+      estimatedRevenueChange: number;
+      confidence: 'low' | 'medium' | 'high';
+      reasoning?: string;
+    }> = [];
 
-    for (const order of orders) {
-      const itemIds = order.orderItems
-        .map((i) => i.menuItemId)
-        .filter((id): id is string => id !== null);
-      const unique = [...new Set(itemIds)];
+    for (const mi of menuItems) {
+      const weeklyData = itemWeeklyData.get(mi.id);
+      if (!weeklyData) continue;
 
-      for (let i = 0; i < unique.length; i++) {
-        for (let j = i + 1; j < unique.length; j++) {
-          const pair: [string, string] = [unique[i], unique[j]];
-          const key = pair.sort((a, b) => a.localeCompare(b)).join('|');
-          pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+      const totalOrders = [...weeklyData.values()].reduce((sum, w) => sum + w.totalQty, 0);
+      if (totalOrders < 5) continue;
+
+      const allPrices = [...weeklyData.values()].flatMap((w) => w.prices);
+      const uniquePrices = [...new Set(allPrices.map((p) => Math.round(p * 100)))];
+      const currentPrice = Number(mi.price);
+
+      let elasticity = 0;
+      let confidence: 'low' | 'medium' | 'high' = 'low';
+
+      if (uniquePrices.length >= 2) {
+        // Price has varied — compute elasticity from pre/post price change
+        const sortedPrices = uniquePrices.map((p) => p / 100).sort((a, b) => a - b);
+        const midPrice = sortedPrices[Math.floor(sortedPrices.length / 2)];
+
+        let lowPriceQty = 0, lowPriceWeeks = 0;
+        let highPriceQty = 0, highPriceWeeks = 0;
+        const lowPrice = sortedPrices[0];
+        const highPrice = sortedPrices.at(-1)!;
+
+        for (const week of weeklyData.values()) {
+          const avgWeekPrice = week.prices.reduce((s, p) => s + p, 0) / week.prices.length;
+          if (avgWeekPrice <= midPrice) {
+            lowPriceQty += week.totalQty;
+            lowPriceWeeks++;
+          } else {
+            highPriceQty += week.totalQty;
+            highPriceWeeks++;
+          }
+        }
+
+        const avgLowVolume = lowPriceWeeks > 0 ? lowPriceQty / lowPriceWeeks : 0;
+        const avgHighVolume = highPriceWeeks > 0 ? highPriceQty / highPriceWeeks : 0;
+
+        if (avgLowVolume > 0 && lowPrice !== highPrice) {
+          const pctVolumeChange = (avgHighVolume - avgLowVolume) / avgLowVolume;
+          const pctPriceChange = (highPrice - lowPrice) / lowPrice;
+          elasticity = pctPriceChange !== 0 ? Math.round((pctVolumeChange / pctPriceChange) * 100) / 100 : 0;
+        }
+
+        confidence = totalOrders >= 30 ? 'high' : totalOrders >= 10 ? 'medium' : 'low';
+      }
+      // If price never varied, elasticity stays 0 and confidence stays 'low'
+
+      // Determine recommendation
+      let recommendation: 'increase' | 'decrease' | 'hold' = 'hold';
+      if (elasticity > -0.5) {
+        recommendation = 'increase';
+      } else if (elasticity < -1.5) {
+        recommendation = 'decrease';
+      }
+
+      // Estimate revenue change for a ±10% price change
+      const weeksInWindow = Math.max(weeklyData.size, 1);
+      const avgWeeklyVolume = totalOrders / weeksInWindow;
+      const priceChangePct = recommendation === 'decrease' ? -0.1 : 0.1;
+      const newPrice = currentPrice * (1 + priceChangePct);
+      const projectedVolume = avgWeeklyVolume * (1 + elasticity * priceChangePct);
+      const weeklyDelta = (newPrice * projectedVolume) - (currentPrice * avgWeeklyVolume);
+      const estimatedRevenueChange = Math.round(weeklyDelta * 4.33 * 100) / 100;
+
+      results.push({
+        itemId: mi.id,
+        itemName: mi.name,
+        currentPrice,
+        elasticity,
+        recommendation,
+        estimatedRevenueChange,
+        confidence,
+      });
+    }
+
+    // Claude reasoning (batch call for all items)
+    if (results.length > 0) {
+      try {
+        const client = await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'menuEngineering');
+        if (client) {
+          const prompt = `You are a restaurant pricing analyst. For each menu item below, write a 1–2 sentence plain-English explanation of the pricing recommendation. Be specific and actionable. Return ONLY a JSON array.
+
+Items:
+${results.map((i) => JSON.stringify({ itemId: i.itemId, itemName: i.itemName, elasticity: i.elasticity, recommendation: i.recommendation, currentPrice: i.currentPrice, estimatedRevenueChange: i.estimatedRevenueChange, confidence: i.confidence })).join(',\n')}
+
+Return: [{ "itemId": "...", "reasoning": "..." }]`;
+
+          const response = await client.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1200,
+            messages: [{ role: 'user', content: prompt }],
+          });
+
+          await aiUsageService.logUsage(restaurantId, 'menuEngineering', response.usage.input_tokens, response.usage.output_tokens);
+
+          const content = response.content[0];
+          if (content.type === 'text') {
+            const jsonMatch = /\[[\s\S]*\]/.exec(content.text);
+            if (jsonMatch) {
+              const reasonings: Array<{ itemId: string; reasoning: string }> = JSON.parse(jsonMatch[0]);
+              const reasoningMap = new Map(reasonings.map((r) => [r.itemId, r.reasoning]));
+              for (const item of results) {
+                item.reasoning = reasoningMap.get(item.itemId);
+              }
+            }
+          }
+        }
+      } catch (aiError: unknown) {
+        logger.warn('Claude reasoning for price elasticity failed, using fallback', { error: toErrorMessage(aiError) });
+      }
+
+      // Fallback reasoning for items without Claude response
+      for (const item of results) {
+        if (!item.reasoning) {
+          const fallbacks: Record<string, string> = {
+            increase: `${item.itemName} shows inelastic demand — a price increase is unlikely to reduce order volume significantly.`,
+            decrease: `${item.itemName} shows high price sensitivity — reducing price may recover lost volume.`,
+            hold: `${item.itemName} pricing appears appropriate for current demand patterns.`,
+          };
+          item.reasoning = fallbacks[item.recommendation];
         }
       }
     }
 
-    const pairs = [...pairCounts.entries()]
-      .filter(([, count]) => count >= 2)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 50)
-      .map(([key, count]) => {
-        const [idA, idB] = key.split('|');
-        const itemA = menuItemMap.get(idA);
-        const itemB = menuItemMap.get(idB);
-        return {
-          itemA: { menuItemId: idA, name: itemA?.name ?? 'Unknown' },
-          itemB: { menuItemId: idB, name: itemB?.name ?? 'Unknown' },
-          coOccurrenceCount: count,
-          sameCategory: itemA?.categoryId !== null
-            && itemA?.categoryId === itemB?.categoryId,
-        };
-      });
-
-    res.json({ pairs });
+    res.json(results);
   } catch (error: unknown) {
-    console.error('[Analytics] Error fetching cannibalization data:', error);
-    res.json({ pairs: [] });
+    logger.error('Error fetching price elasticity', { error: toErrorMessage(error) });
+    res.json([]);
+  }
+});
+
+/**
+ * GET /:merchantId/analytics/menu/cannibalization?days=60
+ * Detects new menu items stealing sales from existing same-category items.
+ * Compares avg weekly sales before vs after a new item's launch.
+ * Returns flat CannibalizationResult[].
+ */
+router.get('/:merchantId/analytics/menu/cannibalization', async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.params.merchantId;
+    const days = Number.parseInt(String(req.query.days ?? '60'), 10);
+    const windowStart = new Date();
+    windowStart.setDate(windowStart.getDate() - days);
+
+    const completedStatuses = ['completed', 'delivered', 'ready', 'preparing'];
+
+    // Find "new items" — menu items created within the analysis window
+    const newItems = await prisma.menuItem.findMany({
+      where: { restaurantId, createdAt: { gte: windowStart } },
+      select: { id: true, name: true, categoryId: true, createdAt: true },
+    });
+
+    if (newItems.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    // Find all menu items in the same categories as new items (candidates for cannibalization)
+    const categoryIds = [...new Set(newItems.map((ni) => ni.categoryId).filter((id): id is string => id !== null))];
+    if (categoryIds.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const candidateItems = await prisma.menuItem.findMany({
+      where: {
+        restaurantId,
+        categoryId: { in: categoryIds },
+        createdAt: { lt: windowStart }, // existed before the window
+      },
+      select: { id: true, name: true, categoryId: true },
+    });
+
+    if (candidateItems.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    // Get all relevant order items in a wider window (4 weeks before earliest new item + analysis window)
+    const earliestLaunch = newItems.reduce((min, ni) => ni.createdAt < min ? ni.createdAt : min, newItems[0].createdAt);
+    const preWindowStart = new Date(earliestLaunch);
+    preWindowStart.setDate(preWindowStart.getDate() - 28); // 4 weeks before
+
+    const allItemIds = [...candidateItems.map((c) => c.id), ...newItems.map((n) => n.id)];
+
+    const orderItems = await prisma.orderItem.findMany({
+      where: {
+        menuItemId: { in: allItemIds },
+        order: {
+          restaurantId,
+          status: { in: completedStatuses },
+          createdAt: { gte: preWindowStart },
+        },
+      },
+      select: { menuItemId: true, quantity: true, order: { select: { createdAt: true } } },
+    });
+
+    // Build sales lookup: menuItemId -> array of { date, qty }
+    const salesByItem = new Map<string, Array<{ date: Date; qty: number }>>();
+    for (const oi of orderItems) {
+      if (!oi.menuItemId) continue;
+      const arr = salesByItem.get(oi.menuItemId) ?? [];
+      arr.push({ date: oi.order.createdAt, qty: oi.quantity });
+      salesByItem.set(oi.menuItemId, arr);
+    }
+
+    const now = new Date();
+    const results: Array<{
+      newItemId: string;
+      newItemName: string;
+      affectedItemId: string;
+      affectedItemName: string;
+      salesDeclinePercent: number;
+      periodStart: string;
+      periodEnd: string;
+      recommendation?: string;
+    }> = [];
+
+    for (const newItem of newItems) {
+      if (!newItem.categoryId) continue;
+      const launchDate = newItem.createdAt;
+
+      // 4 weeks before and after launch
+      const beforeStart = new Date(launchDate);
+      beforeStart.setDate(beforeStart.getDate() - 28);
+      const afterEnd = new Date(launchDate);
+      afterEnd.setDate(afterEnd.getDate() + 28);
+      const clampedAfterEnd = afterEnd > now ? now : afterEnd;
+      const afterWeeks = Math.max((clampedAfterEnd.getTime() - launchDate.getTime()) / (7 * 24 * 60 * 60 * 1000), 1);
+      const beforeWeeks = 4;
+
+      const sameCategoryCandidates = candidateItems.filter((c) => c.categoryId === newItem.categoryId);
+
+      for (const candidate of sameCategoryCandidates) {
+        const sales = salesByItem.get(candidate.id) ?? [];
+
+        let beforeQty = 0;
+        let afterQty = 0;
+        for (const s of sales) {
+          if (s.date >= beforeStart && s.date < launchDate) {
+            beforeQty += s.qty;
+          } else if (s.date >= launchDate && s.date <= clampedAfterEnd) {
+            afterQty += s.qty;
+          }
+        }
+
+        const avgWeeklyBefore = beforeQty / beforeWeeks;
+        const avgWeeklyAfter = afterQty / afterWeeks;
+
+        if (avgWeeklyBefore === 0) continue;
+
+        const declinePct = Math.round(((avgWeeklyBefore - avgWeeklyAfter) / avgWeeklyBefore) * 1000) / 10;
+
+        if (declinePct >= 15) {
+          results.push({
+            newItemId: newItem.id,
+            newItemName: newItem.name,
+            affectedItemId: candidate.id,
+            affectedItemName: candidate.name,
+            salesDeclinePercent: declinePct,
+            periodStart: launchDate.toISOString().split('T')[0],
+            periodEnd: clampedAfterEnd.toISOString().split('T')[0],
+          });
+        }
+      }
+    }
+
+    // Sort by severity
+    results.sort((a, b) => b.salesDeclinePercent - a.salesDeclinePercent);
+
+    // Claude recommendations (batch call)
+    if (results.length > 0) {
+      try {
+        const client = await aiConfigService.getAnthropicClientForRestaurant(restaurantId, 'menuEngineering');
+        if (client) {
+          const prompt = `You are a restaurant menu analyst. For each cannibalization pair below, write a 1-sentence recommendation for the operator. Be direct and actionable. Return ONLY a JSON array.
+
+Pairs:
+${results.map((p) => JSON.stringify({ newItemId: p.newItemId, newItemName: p.newItemName, affectedItemId: p.affectedItemId, affectedItemName: p.affectedItemName, salesDeclinePercent: p.salesDeclinePercent })).join(',\n')}
+
+Return: [{ "newItemId": "...", "affectedItemId": "...", "recommendation": "..." }]`;
+
+          const response = await client.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 800,
+            messages: [{ role: 'user', content: prompt }],
+          });
+
+          await aiUsageService.logUsage(restaurantId, 'menuEngineering', response.usage.input_tokens, response.usage.output_tokens);
+
+          const content = response.content[0];
+          if (content.type === 'text') {
+            const jsonMatch = /\[[\s\S]*\]/.exec(content.text);
+            if (jsonMatch) {
+              const recs: Array<{ newItemId: string; affectedItemId: string; recommendation: string }> = JSON.parse(jsonMatch[0]);
+              for (const rec of recs) {
+                const match = results.find((r) => r.newItemId === rec.newItemId && r.affectedItemId === rec.affectedItemId);
+                if (match) {
+                  match.recommendation = rec.recommendation;
+                }
+              }
+            }
+          }
+        }
+      } catch (aiError: unknown) {
+        logger.warn('Claude recommendation for cannibalization failed, using fallback', { error: toErrorMessage(aiError) });
+      }
+
+      // Fallback for items without Claude response
+      for (const pair of results) {
+        if (!pair.recommendation) {
+          pair.recommendation = `Consider whether ${pair.affectedItemName} and ${pair.newItemName} can be differentiated or whether one should be repositioned.`;
+        }
+      }
+    }
+
+    res.json(results);
+  } catch (error: unknown) {
+    logger.error('Error fetching cannibalization data', { error: toErrorMessage(error) });
+    res.json([]);
   }
 });
 
