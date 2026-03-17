@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'node:crypto';
 import helmet from 'helmet';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { config } from './app.config';
 import menuRoutes from './app.routes';
 import primaryCategoryRoutes from './primary-category.routes';
@@ -43,6 +44,9 @@ import { deliveryService } from '../services/delivery.service';
 import { marketplaceService } from '../services/marketplace.service';
 import publicMenuRoutes from './public-menu.routes';
 import { requireAuth } from '../middleware/auth.middleware';
+import { globalErrorHandler } from '../middleware/error-handler';
+import { requestLogger } from '../middleware/request-logger';
+import { logger } from '../utils/logger';
 
 const app = express();
 
@@ -53,22 +57,51 @@ app.set('trust proxy', 1);
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'none'"],
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'", 'https://api-m.paypal.com', 'https://api-m.sandbox.paypal.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
     },
   },
   crossOriginEmbedderPolicy: false,
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
+
+// Permissions-Policy header
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
 
 // Middleware
 app.use(cors({ origin: config.corsOrigins }));
+
+// General API rate limiter
+const apiRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  limit: 100,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again shortly.' },
+});
+app.use('/api/', apiRateLimiter);
+
+// Request logger (after CORS, before routes)
+app.use(requestLogger);
 
 // Stripe webhook - MUST be before express.json() to get raw body
 app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   const signature = req.headers['stripe-signature'] as string;
 
   if (!signature) {
-    console.error('[Stripe Webhook] Missing stripe-signature header');
+    logger.error('[Stripe Webhook] Missing stripe-signature header');
     res.status(400).json({ error: 'Missing signature' });
     return;
   }
@@ -95,7 +128,7 @@ app.post('/api/webhooks/paypal', express.raw({ type: 'application/json' }), asyn
   try {
     const webhookId = process.env.PAYPAL_WEBHOOK_ID;
     if (!webhookId || webhookId === 'placeholder') {
-      console.error('[PayPal Webhook] Webhook ID not configured — rejecting unverified event');
+      logger.error('[PayPal Webhook] Webhook ID not configured — rejecting unverified event');
       res.status(503).json({ error: 'PayPal webhook verification not configured' });
       return;
     } else {
@@ -121,14 +154,14 @@ app.post('/api/webhooks/paypal', express.raw({ type: 'application/json' }), asyn
       );
 
       if (!verifyResponse.ok) {
-        console.error('[PayPal Webhook] Signature verification request failed');
+        logger.error('[PayPal Webhook] Signature verification request failed');
         res.status(400).json({ error: 'Verification request failed' });
         return;
       }
 
       const verifyData = await verifyResponse.json() as { verification_status: string };
       if (verifyData.verification_status !== 'SUCCESS') {
-        console.error('[PayPal Webhook] Signature verification failed');
+        logger.error('[PayPal Webhook] Signature verification failed');
         res.status(400).json({ error: 'Invalid signature' });
         return;
       }
@@ -144,7 +177,7 @@ app.post('/api/webhooks/paypal', express.raw({ type: 'application/json' }), asyn
 
     res.json({ received: true });
   } catch (error: unknown) {
-    console.error('[PayPal Webhook] Error:', error);
+    logger.error('[PayPal Webhook] Error:', { error });
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
@@ -173,12 +206,12 @@ app.post('/api/webhooks/doordash', express.raw({ type: 'application/json' }), as
         .digest('hex');
 
       if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-        console.error('[DoorDash Webhook] Signature verification failed');
+        logger.error('[DoorDash Webhook] Signature verification failed');
         res.status(400).json({ error: 'Invalid signature' });
         return;
       }
     } else {
-      console.error('[DoorDash Webhook] No signing secret configured for delivery — rejecting unverified event');
+      logger.error('[DoorDash Webhook] No signing secret configured for delivery — rejecting unverified event');
       res.status(503).json({ error: 'DoorDash webhook signing secret not configured' });
       return;
     }
@@ -212,7 +245,7 @@ app.post('/api/webhooks/doordash', express.raw({ type: 'application/json' }), as
 
     res.json({ received: true });
   } catch (error: unknown) {
-    console.error('[DoorDash Webhook] Error:', error);
+    logger.error('[DoorDash Webhook] Error:', { error });
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
@@ -241,12 +274,12 @@ app.post('/api/webhooks/uber', express.raw({ type: 'application/json' }), async 
         .digest('hex');
 
       if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-        console.error('[Uber Webhook] Signature verification failed');
+        logger.error('[Uber Webhook] Signature verification failed');
         res.status(400).json({ error: 'Invalid signature' });
         return;
       }
     } else {
-      console.error('[Uber Webhook] No webhook signing key configured for delivery — rejecting unverified event');
+      logger.error('[Uber Webhook] No webhook signing key configured for delivery — rejecting unverified event');
       res.status(503).json({ error: 'Uber webhook signing key not configured' });
       return;
     }
@@ -279,7 +312,7 @@ app.post('/api/webhooks/uber', express.raw({ type: 'application/json' }), async 
 
     res.json({ received: true });
   } catch (error: unknown) {
-    console.error('[Uber Webhook] Error:', error);
+    logger.error('[Uber Webhook] Error:', { error });
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
@@ -294,7 +327,7 @@ app.post('/api/webhooks/doordash-marketplace', express.raw({ type: 'application/
     );
     res.json({ received: true, ...result });
   } catch (error: unknown) {
-    console.error('[DoorDash Marketplace Webhook] Error:', error);
+    logger.error('[DoorDash Marketplace Webhook] Error:', { error });
     res.status(400).json({ error: error instanceof Error ? error.message : 'Webhook processing failed' });
   }
 });
@@ -309,7 +342,7 @@ app.post('/api/webhooks/ubereats', express.raw({ type: 'application/json' }), as
     );
     res.json({ received: true, ...result });
   } catch (error: unknown) {
-    console.error('[Uber Eats Webhook] Error:', error);
+    logger.error('[Uber Eats Webhook] Error:', { error });
     res.status(400).json({ error: error instanceof Error ? error.message : 'Webhook processing failed' });
   }
 });
@@ -324,7 +357,7 @@ app.post('/api/webhooks/grubhub', express.raw({ type: 'application/json' }), asy
     );
     res.json({ received: true, ...result });
   } catch (error: unknown) {
-    console.error('[Grubhub Webhook] Error:', error);
+    logger.error('[Grubhub Webhook] Error:', { error });
     res.status(400).json({ error: error instanceof Error ? error.message : 'Webhook processing failed' });
   }
 });
@@ -352,6 +385,17 @@ app.use('/api/merchant', requireAuth, loyaltyRoutes);  // Loyalty program endpoi
 app.use('/api/merchant', requireAuth, printerRoutes);  // Printer management API
 app.use('/api/merchant/:merchantId/orders', requireAuth, checkRoutes);  // Check management (POS) endpoints
 app.use('/api/merchant/:merchantId/orders', requireAuth, orderActionRoutes);  // Dining option action endpoints
+
+// Payment-specific rate limiter before payment routes
+const paymentRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many payment requests.' },
+});
+app.use('/api/merchant/:merchantId/payment-connect', paymentRateLimiter);
+
 app.use('/api/merchant/:merchantId/delivery', requireAuth, deliveryRoutes);  // Third-party delivery endpoints
 app.use('/api/merchant', requireAuth, marketplaceRoutes);  // Marketplace integration config endpoints
 app.use('/api/merchant/:merchantId/stations', requireAuth, stationRoutes);  // Station CRUD + category assignment
@@ -380,5 +424,19 @@ app.use('/api/merchant', requireAuth, menuRoutes);
 app.use('/api/merchant', requireAuth, paymentConnectRoutes);  // Stripe Connect + PayPal Partner Referrals
 app.use('/api/merchant', requireAuth, subscriptionRoutes);  // Subscription plan tier CRUD
 app.use('/api/merchant', requireAuth, onboardingRoutes);  // Merchant profile + business hours
+
+// Global error handler — MUST be last middleware
+app.use(globalErrorHandler);
+
+// Unhandled rejection/exception handlers
+process.on('unhandledRejection', (reason: unknown) => {
+  logger.error('Unhandled promise rejection', { reason });
+  process.exit(1);
+});
+
+process.on('uncaughtException', (error: Error) => {
+  logger.error('Uncaught exception', { error });
+  process.exit(1);
+});
 
 export default app;

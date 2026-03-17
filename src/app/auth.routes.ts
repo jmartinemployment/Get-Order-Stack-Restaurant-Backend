@@ -3,6 +3,9 @@ import { PrismaClient } from '@prisma/client';
 import rateLimit from 'express-rate-limit';
 import { authService } from '../services/auth.service';
 import { requireAuth, requireAdmin, requireSuperAdmin, requireMerchantManager } from '../middleware/auth.middleware';
+import { auditLog } from '../utils/audit';
+import { logger } from '../utils/logger';
+import { disableInactiveAccounts } from '../jobs/account-maintenance';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -48,8 +51,12 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    if (password.length < 6) {
-      res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (password.length < 12) {
+      res.status(400).json({ error: 'Password must be at least 12 characters' });
+      return;
+    }
+    if (!/[A-Z]/.exec(password) || !/[a-z]/.exec(password) || !/\d/.exec(password) || !/[^A-Za-z0-9]/.exec(password)) {
+      res.status(400).json({ error: 'Password must contain uppercase, lowercase, number, and special character' });
       return;
     }
 
@@ -90,7 +97,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
       restaurants: loginResult.restaurants,
     });
   } catch (error) {
-    console.error('Signup error:', error);
+    logger.error('Signup error:', { error });
     res.status(500).json({ error: 'Signup failed' });
   }
 });
@@ -111,7 +118,7 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
     const result = await authService.loginUser(email, password, deviceInfo, ipAddress);
 
     if (!result.success) {
-      res.status(401).json({ error: result.error });
+      res.status(401).json({ error: result.error, requiresPasswordChange: result.requiresPasswordChange });
       return;
     }
 
@@ -121,31 +128,50 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
       restaurants: result.restaurants
     });
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error('Login error:', { error });
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
-// Reset password by email (public, rate-limited)
-router.post('/reset-password', authRateLimiter, async (req: Request, res: Response) => {
+// Request password reset — sends email with token link
+router.post('/forgot-password', authRateLimiter, async (req: Request, res: Response) => {
   try {
-    const { email, newPassword } = req.body;
+    const { email } = req.body;
 
-    if (!email || !newPassword) {
-      res.status(400).json({ error: 'Email and new password are required' });
+    if (!email) {
+      res.status(400).json({ error: 'Email is required' });
       return;
     }
 
-    const result = await authService.resetPasswordByEmail(email, newPassword);
+    // Always returns success — anti-enumeration (never reveal if email exists)
+    await authService.requestPasswordReset(email);
+    res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
+  } catch (error) {
+    logger.error('Forgot password error:', { error });
+    res.status(500).json({ error: 'Failed to process request' });
+  }
+});
+
+// Reset password using a token from the email link
+router.post('/reset-password', authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      res.status(400).json({ error: 'Token and new password are required' });
+      return;
+    }
+
+    const result = await authService.resetPasswordWithToken(token, newPassword);
 
     if (!result.success) {
       res.status(400).json({ error: result.error });
       return;
     }
 
-    res.json({ success: true, message: 'Password reset successfully' });
+    res.json({ success: true, message: 'Password reset successfully. Please sign in.' });
   } catch (error) {
-    console.error('Reset password error:', error);
+    logger.error('Reset password error:', { error });
     res.status(500).json({ error: 'Failed to reset password' });
   }
 });
@@ -174,7 +200,7 @@ router.post('/logout', async (req: Request, res: Response) => {
     }
     res.json({ success: true, message: 'Logged out successfully' });
   } catch (error) {
-    console.error('Logout error:', error);
+    logger.error('Logout error:', { error });
     res.status(500).json({ error: 'Logout failed' });
   }
 });
@@ -210,7 +236,7 @@ router.get('/me', async (req: Request, res: Response) => {
         restaurantAccess: {
           include: {
             restaurant: {
-              select: { id: true, name: true, slug: true }
+              select: { id: true, name: true, slug: true, merchantProfile: true }
             }
           }
         }
@@ -223,27 +249,45 @@ router.get('/me', async (req: Request, res: Response) => {
     }
 
     // Get accessible restaurants
-    let restaurants: Array<{ id: string; name: string; slug: string; role: string }> = [];
+    let restaurants: Array<{ id: string; name: string; slug: string; role: string; onboardingComplete: boolean }> = [];
+
+    const extractOnboardingComplete = (merchantProfile: unknown): boolean => {
+      if (!merchantProfile || typeof merchantProfile !== 'object') return false;
+      return (merchantProfile as Record<string, unknown>)['onboardingComplete'] === true;
+    };
 
     if (member.role === 'super_admin') {
       const allRestaurants = await prisma.restaurant.findMany({
         where: { active: true },
-        select: { id: true, name: true, slug: true }
+        select: { id: true, name: true, slug: true, merchantProfile: true }
       });
-      restaurants = allRestaurants.map(r => ({ ...r, role: 'super_admin' }));
+      restaurants = allRestaurants.map(r => ({
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        role: 'super_admin',
+        onboardingComplete: extractOnboardingComplete(r.merchantProfile),
+      }));
     } else if (member.restaurantAccess.length > 0) {
       restaurants = member.restaurantAccess.map(access => ({
         id: access.restaurant.id,
         name: access.restaurant.name,
         slug: access.restaurant.slug,
-        role: access.role
+        role: access.role,
+        onboardingComplete: extractOnboardingComplete(access.restaurant.merchantProfile),
       }));
     } else if (member.restaurantGroupId) {
       const groupRestaurants = await prisma.restaurant.findMany({
         where: { restaurantGroupId: member.restaurantGroupId, active: true },
-        select: { id: true, name: true, slug: true }
+        select: { id: true, name: true, slug: true, merchantProfile: true }
       });
-      restaurants = groupRestaurants.map(r => ({ ...r, role: member.role }));
+      restaurants = groupRestaurants.map(r => ({
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        role: member.role,
+        onboardingComplete: extractOnboardingComplete(r.merchantProfile),
+      }));
     }
 
     res.json({
@@ -258,8 +302,77 @@ router.get('/me', async (req: Request, res: Response) => {
       restaurants
     });
   } catch (error) {
-    console.error('Get current user error:', error);
+    logger.error('Get current user error:', { error });
     res.status(500).json({ error: 'Failed to get user info' });
+  }
+});
+
+// Re-auth: verify current password (for sensitive settings access)
+router.post('/verify-password', requireAuth, authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { password } = req.body;
+    if (!password) {
+      res.status(400).json({ error: 'Password is required' });
+      return;
+    }
+
+    const member = await prisma.teamMember.findUnique({
+      where: { id: req.user!.teamMemberId },
+      select: { passwordHash: true },
+    });
+
+    if (!member?.passwordHash) {
+      res.json({ verified: false });
+      return;
+    }
+
+    const verified = await authService.verifyPassword(password, member.passwordHash);
+    await auditLog(verified ? 'reauth_success' : 'reauth_failed', {
+      userId: req.user!.teamMemberId,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({ verified });
+  } catch (error) {
+    logger.error('Verify password error:', { error });
+    res.status(500).json({ error: 'Failed to verify password' });
+  }
+});
+
+// List active sessions for current user
+router.get('/sessions', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const sessions = await prisma.userSession.findMany({
+      where: { userId: req.user!.teamMemberId, isActive: true },
+      select: { id: true, deviceInfo: true, ipAddress: true, createdAt: true, expiresAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(sessions);
+  } catch (error) {
+    logger.error('List sessions error:', { error });
+    res.status(500).json({ error: 'Failed to list sessions' });
+  }
+});
+
+// Revoke a specific session
+router.delete('/sessions/:sessionId', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { sessionId } = req.params;
+    // Verify session belongs to current user
+    const session = await prisma.userSession.findFirst({
+      where: { id: sessionId, userId: req.user!.teamMemberId },
+    });
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+    await prisma.userSession.update({ where: { id: sessionId }, data: { isActive: false } });
+    await auditLog('session_revoked', { userId: req.user!.teamMemberId, ip: req.ip, metadata: { sessionId } });
+    res.status(204).send();
+  } catch (error) {
+    logger.error('Revoke session error:', { error });
+    res.status(500).json({ error: 'Failed to revoke session' });
   }
 });
 
@@ -305,7 +418,7 @@ router.post('/:merchantId/pin/verify', pinRateLimiter, async (req: Request, res:
       },
     });
   } catch (error) {
-    console.error('PIN verification error:', error);
+    logger.error('PIN verification error:', { error });
     res.status(500).json({ error: 'PIN verification failed' });
   }
 });
@@ -330,7 +443,7 @@ router.get('/:merchantId/pins', requireAuth, requireMerchantManager, async (req:
 
     res.json(pins);
   } catch (error) {
-    console.error('List staff PINs error:', error);
+    logger.error('List staff PINs error:', { error });
     res.status(500).json({ error: 'Failed to list staff PINs' });
   }
 });
@@ -355,7 +468,7 @@ router.post('/:merchantId/pins', requireAuth, requireMerchantManager, async (req
 
     res.status(201).json(result.staffPin);
   } catch (error) {
-    console.error('Create staff PIN error:', error);
+    logger.error('Create staff PIN error:', { error });
     res.status(500).json({ error: 'Failed to create staff PIN' });
   }
 });
@@ -386,7 +499,7 @@ router.patch('/:merchantId/pins/:pinId', requireAuth, requireMerchantManager, as
 
     res.json(updated);
   } catch (error) {
-    console.error('Update staff PIN error:', error);
+    logger.error('Update staff PIN error:', { error });
     res.status(500).json({ error: 'Failed to update staff PIN' });
   }
 });
@@ -403,7 +516,7 @@ router.delete('/:merchantId/pins/:pinId', requireAuth, requireMerchantManager, a
     }
     res.status(204).send();
   } catch (error) {
-    console.error('Delete staff PIN error:', error);
+    logger.error('Delete staff PIN error:', { error });
     res.status(500).json({ error: 'Failed to delete staff PIN' });
   }
 });
@@ -417,7 +530,7 @@ router.get('/users', requireAuth, requireAdmin, async (req: Request, res: Respon
     const users = await authService.listUsers(restaurantGroupId);
     res.json(users);
   } catch (error) {
-    console.error('List users error:', error);
+    logger.error('List users error:', { error });
     res.status(500).json({ error: 'Failed to list users' });
   }
 });
@@ -462,7 +575,7 @@ router.get('/users/:userId', requireAuth, requireAdmin, async (req: Request, res
       }))
     });
   } catch (error) {
-    console.error('Get user error:', error);
+    logger.error('Get user error:', { error });
     res.status(500).json({ error: 'Failed to get user' });
   }
 });
@@ -493,7 +606,7 @@ router.patch('/users/:userId', requireAuth, requireAdmin, async (req: Request, r
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Update user error:', error);
+    logger.error('Update user error:', { error });
     res.status(500).json({ error: 'Failed to update user' });
   }
 });
@@ -517,7 +630,7 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
 
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
-    console.error('Change password error:', error);
+    logger.error('Change password error:', { error });
     res.status(500).json({ error: 'Failed to change password' });
   }
 });
@@ -549,7 +662,7 @@ router.post('/users', requireAuth, requireSuperAdmin, async (req: Request, res: 
 
     res.status(201).json(result.user);
   } catch (error) {
-    console.error('Create user error:', error);
+    logger.error('Create user error:', { error });
     res.status(500).json({ error: 'Failed to create user' });
   }
 });
@@ -576,7 +689,7 @@ router.post('/users/:userId/restaurants/:merchantId', requireAuth, requireAdmin,
 
     res.json(access);
   } catch (error) {
-    console.error('Grant restaurant access error:', error);
+    logger.error('Grant restaurant access error:', { error });
     res.status(500).json({ error: 'Failed to grant restaurant access' });
   }
 });
@@ -594,7 +707,7 @@ router.delete('/users/:userId/restaurants/:merchantId', requireAuth, requireAdmi
 
     res.status(204).send();
   } catch (error) {
-    console.error('Revoke restaurant access error:', error);
+    logger.error('Revoke restaurant access error:', { error });
     res.status(500).json({ error: 'Failed to revoke restaurant access' });
   }
 });
@@ -617,7 +730,7 @@ router.post('/groups', requireAuth, requireSuperAdmin, async (req: Request, res:
 
     res.status(201).json(group);
   } catch (error) {
-    console.error('Create restaurant group error:', error);
+    logger.error('Create restaurant group error:', { error });
     res.status(500).json({ error: 'Failed to create restaurant group' });
   }
 });
@@ -637,8 +750,20 @@ router.get('/groups', requireAuth, requireSuperAdmin, async (req: Request, res: 
 
     res.json(groups);
   } catch (error) {
-    console.error('List restaurant groups error:', error);
+    logger.error('List restaurant groups error:', { error });
     res.status(500).json({ error: 'Failed to list restaurant groups' });
+  }
+});
+
+// ============ Account Maintenance (super_admin only) ============
+
+router.post('/maintenance/disable-inactive', requireAuth, requireSuperAdmin, async (_req: Request, res: Response) => {
+  try {
+    const count = await disableInactiveAccounts();
+    res.json({ success: true, disabledCount: count });
+  } catch (error) {
+    logger.error('Disable inactive accounts error:', { error });
+    res.status(500).json({ error: 'Failed to disable inactive accounts' });
   }
 });
 

@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { MENU_TEMPLATES, type MenuTemplate } from '../data/menu-templates';
 import { DEFAULT_PERMISSION_SETS } from '../data/default-permission-sets';
 import { authService } from '../services/auth.service';
-import { optionalAuth } from '../middleware/auth.middleware';
+import { requireAuth, optionalAuth } from '../middleware/auth.middleware';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -363,7 +363,289 @@ router.get('/:merchantId/business-hours/check', async (req: Request, res: Respon
   }
 });
 
-// ============ Onboarding Create ============
+// ============ New Onboarding Endpoints (Step-by-step) ============
+
+// POST /api/onboarding/restaurant — Create an incomplete restaurant for the authenticated user
+router.post('/restaurant', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { businessName, address, primaryVertical, defaultDeviceMode, businessCategory } = req.body;
+
+    if (!businessName) {
+      res.status(400).json({ error: 'Business name is required' });
+      return;
+    }
+
+    const street = address?.street?.trim() ?? '';
+    const addrCity = address?.city?.trim() ?? '';
+    const addrState = address?.state?.trim() ?? '';
+    const addrZip = address?.zip?.trim() ?? '';
+
+    if (!street || !addrCity || !addrState || !addrZip) {
+      res.status(400).json({ error: 'Address, city, state, and zip are required' });
+      return;
+    }
+
+    const teamMemberId = req.user!.teamMemberId;
+
+    const member = await prisma.teamMember.findUnique({
+      where: { id: teamMemberId },
+      select: { id: true, email: true },
+    });
+
+    if (!member?.email) {
+      res.status(401).json({ error: 'Authenticated user not found' });
+      return;
+    }
+
+    // Clean up any incomplete restaurants this user previously created
+    const existingAccess = await prisma.userRestaurantAccess.findMany({
+      where: { teamMemberId, role: 'owner' },
+      include: { restaurant: { select: { id: true, merchantProfile: true } } },
+    });
+
+    for (const access of existingAccess) {
+      const profile = access.restaurant.merchantProfile as Record<string, unknown> | null;
+      const isIncomplete = !profile || profile['onboardingComplete'] !== true;
+      if (isIncomplete) {
+        await prisma.restaurant.delete({ where: { id: access.restaurant.id } });
+      }
+    }
+
+    const slug = businessName
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9]+/g, '-')
+      .replaceAll(/^-|-$/g, '');
+
+    const vertical = primaryVertical ?? 'food_and_drink';
+    const restaurant = await prisma.restaurant.create({
+      data: {
+        name: businessName,
+        slug: `${slug}-${Date.now().toString(36)}`,
+        email: member.email,
+        address: street,
+        city: addrCity,
+        state: addrState,
+        zip: addrZip,
+        phone: address?.phone ?? '',
+        taxRate: 0,
+        active: true,
+        merchantProfile: {
+          id: crypto.randomUUID(),
+          businessName,
+          address: address ?? null,
+          verticals: [vertical],
+          primaryVertical: vertical,
+          complexity: 'full',
+          enabledModules: VERTICAL_MODULES[vertical] ?? [],
+          defaultDeviceMode: defaultDeviceMode ?? 'full_service',
+          taxLocale: { taxRate: 0, taxInclusive: false, currency: 'USD', defaultLanguage: 'en' },
+          businessHours: [],
+          businessCategory: businessCategory ?? null,
+          onboardingComplete: false,
+          createdAt: new Date().toISOString(),
+        },
+      },
+      select: { id: true, name: true, slug: true },
+    });
+
+    await prisma.userRestaurantAccess.create({
+      data: { teamMemberId, restaurantId: restaurant.id, role: 'owner' },
+    });
+
+    res.status(201).json({ restaurantId: restaurant.id, name: restaurant.name, slug: restaurant.slug });
+  } catch (error) {
+    console.error('Create onboarding restaurant error:', error);
+    res.status(500).json({ error: 'Failed to create restaurant' });
+  }
+});
+
+// PATCH /api/onboarding/restaurant/:id — Update restaurant fields during wizard
+router.patch('/restaurant/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.params.id;
+    const teamMemberId = req.user!.teamMemberId;
+
+    // Verify ownership
+    const access = await prisma.userRestaurantAccess.findUnique({
+      where: { teamMemberId_restaurantId: { teamMemberId, restaurantId } },
+    });
+
+    if (!access || access.role !== 'owner') {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const existing = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { merchantProfile: true },
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: 'Restaurant not found' });
+      return;
+    }
+
+    const { businessName, address, primaryVertical, verticals, defaultDeviceMode,
+            taxLocale, businessHours, businessCategory, menuTemplateId, ownerPin } = req.body;
+
+    const currentProfile = (existing.merchantProfile as Record<string, unknown>) ?? {};
+    const profileUpdates: Record<string, unknown> = {};
+
+    if (businessName !== undefined) profileUpdates['businessName'] = businessName;
+    if (primaryVertical !== undefined) profileUpdates['primaryVertical'] = primaryVertical;
+    if (verticals !== undefined) {
+      profileUpdates['verticals'] = verticals;
+      profileUpdates['enabledModules'] = VERTICAL_MODULES[primaryVertical ?? currentProfile['primaryVertical'] as string] ?? [];
+    }
+    if (defaultDeviceMode !== undefined) profileUpdates['defaultDeviceMode'] = defaultDeviceMode;
+    if (taxLocale !== undefined) profileUpdates['taxLocale'] = taxLocale;
+    if (businessHours !== undefined) profileUpdates['businessHours'] = businessHours;
+    if (businessCategory !== undefined) profileUpdates['businessCategory'] = businessCategory;
+    if (address !== undefined) profileUpdates['address'] = address;
+    if (menuTemplateId !== undefined) profileUpdates['menuTemplateId'] = menuTemplateId;
+    if (ownerPin !== undefined) profileUpdates['ownerPin'] = ownerPin;
+
+    const updateData: Record<string, unknown> = {
+      merchantProfile: { ...currentProfile, ...profileUpdates },
+    };
+
+    if (typeof businessName === 'string' && businessName.trim()) {
+      updateData['name'] = businessName.trim();
+    }
+    if (address) {
+      if (address.street) updateData['address'] = address.street;
+      if (address.city) updateData['city'] = address.city;
+      if (address.state) updateData['state'] = address.state;
+      if (address.zip) updateData['zip'] = address.zip;
+      if (address.phone) updateData['phone'] = address.phone;
+    }
+    if (taxLocale?.taxRate !== undefined) {
+      updateData['taxRate'] = (taxLocale.taxRate) / 100;
+    }
+    if (businessHours !== undefined) {
+      updateData['businessHours'] = businessHours;
+    }
+
+    await prisma.restaurant.update({ where: { id: restaurantId }, data: updateData as any }); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update onboarding restaurant error:', error);
+    res.status(500).json({ error: 'Failed to update restaurant' });
+  }
+});
+
+// POST /api/onboarding/restaurant/:id/complete — Finalize onboarding
+router.post('/restaurant/:id/complete', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.params.id;
+    const teamMemberId = req.user!.teamMemberId;
+
+    // Verify ownership
+    const access = await prisma.userRestaurantAccess.findUnique({
+      where: { teamMemberId_restaurantId: { teamMemberId, restaurantId } },
+    });
+
+    if (!access || access.role !== 'owner') {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { id: true, name: true, slug: true, merchantProfile: true },
+    });
+
+    if (!restaurant) {
+      res.status(404).json({ error: 'Restaurant not found' });
+      return;
+    }
+
+    const currentProfile = (restaurant.merchantProfile as Record<string, unknown>) ?? {};
+    const menuTemplateId = currentProfile['menuTemplateId'] as string | undefined;
+    const ownerPin = currentProfile['ownerPin'] as { pin?: string; displayName?: string } | undefined;
+    const primaryVertical = (currentProfile['primaryVertical'] as string) ?? 'food_and_drink';
+    const defaultDeviceMode = (currentProfile['defaultDeviceMode'] as string) ?? 'full_service';
+
+    await prisma.$transaction(async (tx) => {
+      // Seed default permission sets
+      const createdPermSets = await seedDefaultPermissionSets(tx, restaurantId);
+      const fullAccessSetId = createdPermSets.find(s => s.name === 'Full Access')?.id ?? null;
+
+      // Create owner PIN if provided
+      if (ownerPin?.pin) {
+        const hashedPin = await authService.hashPin(ownerPin.pin);
+        await createOwnerPin(tx, restaurantId, teamMemberId, { pin: hashedPin, displayName: ownerPin.displayName }, fullAccessSetId);
+      }
+
+      // Apply menu template if specified
+      if (menuTemplateId) {
+        await applyMenuTemplate(tx, restaurantId, menuTemplateId);
+      }
+
+      // Mark onboarding complete
+      const finalProfile = {
+        ...currentProfile,
+        onboardingComplete: true,
+        defaultDeviceMode,
+        primaryVertical,
+        verticals: currentProfile['verticals'] ?? [primaryVertical],
+        enabledModules: VERTICAL_MODULES[primaryVertical] ?? [],
+        menuTemplateId: undefined,
+        ownerPin: undefined,
+      };
+      delete finalProfile['menuTemplateId'];
+      delete finalProfile['ownerPin'];
+
+      await tx.restaurant.update({
+        where: { id: restaurantId },
+        data: { merchantProfile: finalProfile as any, active: true }, // eslint-disable-line @typescript-eslint/no-explicit-any
+      });
+    });
+
+    res.status(200).json({ restaurantId: restaurant.id, name: restaurant.name, slug: restaurant.slug });
+  } catch (error) {
+    console.error('Complete onboarding error:', error);
+    res.status(500).json({ error: 'Failed to complete onboarding' });
+  }
+});
+
+// GET /api/onboarding/restaurant/:id/status — Get onboarding status
+router.get('/restaurant/:id/status', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const restaurantId = req.params.id;
+    const teamMemberId = req.user!.teamMemberId;
+
+    const access = await prisma.userRestaurantAccess.findUnique({
+      where: { teamMemberId_restaurantId: { teamMemberId, restaurantId } },
+    });
+
+    if (!access) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { id: true, name: true, merchantProfile: true },
+    });
+
+    if (!restaurant) {
+      res.status(404).json({ error: 'Restaurant not found' });
+      return;
+    }
+
+    const profile = restaurant.merchantProfile as Record<string, unknown> | null;
+    const onboardingComplete = profile?.['onboardingComplete'] === true;
+
+    res.json({ restaurantId: restaurant.id, onboardingComplete, businessName: restaurant.name });
+  } catch (error) {
+    console.error('Get onboarding status error:', error);
+    res.status(500).json({ error: 'Failed to get status' });
+  }
+});
+
+// ============ Onboarding Create (Legacy) ============
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 

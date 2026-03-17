@@ -1,6 +1,10 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { randomBytes, createHash } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
+import { sendPasswordResetEmail } from './email.service';
+import { logger } from '../utils/logger';
+import { auditLog } from '../utils/audit';
 
 const prisma = new PrismaClient();
 
@@ -10,8 +14,8 @@ if (!JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET environment variable is not set. The server cannot start without it.');
 }
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h'; // Admin sessions: 8 hours
-const DEVICE_TOKEN_EXPIRES_IN = '30d'; // Device sessions: 30 days (was 365d — reduced for security)
-const SALT_ROUNDS = 10;
+const DEVICE_TOKEN_EXPIRES_IN = '24h'; // Device sessions: 24 hours
+const SALT_ROUNDS = 12;
 
 export interface TokenPayload {
   teamMemberId: string;
@@ -38,8 +42,10 @@ export interface AuthResult {
     name: string;
     slug: string;
     role: string;
+    onboardingComplete: boolean;
   }>;
   error?: string;
+  requiresPasswordChange?: boolean;
 }
 
 export interface PinAuthResult {
@@ -96,13 +102,50 @@ class AuthService {
       return decoded;
     } catch (error) {
       if (error instanceof jwt.TokenExpiredError) {
-        console.debug('[Auth] Token expired');
+        logger.debug('[Auth] Token expired');
       } else if (error instanceof jwt.JsonWebTokenError) {
-        console.debug('[Auth] Invalid token:', error.message);
+        logger.debug('[Auth] Invalid token:', { message: error.message });
       } else {
-        console.error('[Auth] Unexpected token verification error:', error);
+        logger.error('[Auth] Unexpected token verification error:', { error });
       }
       return null;
+    }
+  }
+
+  // ============ Password Policy ============
+
+  private validatePasswordStrength(password: string): { valid: boolean; error?: string } {
+    if (password.length < 12) return { valid: false, error: 'Password must be at least 12 characters' };
+    if (!/[A-Z]/.exec(password)) return { valid: false, error: 'Password must contain an uppercase letter' };
+    if (!/[a-z]/.exec(password)) return { valid: false, error: 'Password must contain a lowercase letter' };
+    if (!/\d/.exec(password)) return { valid: false, error: 'Password must contain a number' };
+    if (!/[^A-Za-z0-9]/.exec(password)) return { valid: false, error: 'Password must contain a special character' };
+    return { valid: true };
+  }
+
+  // ============ Password History ============
+
+  private async checkPasswordHistory(teamMemberId: string, newPassword: string): Promise<boolean> {
+    const history = await prisma.passwordHistory.findMany({
+      where: { teamMemberId },
+      orderBy: { createdAt: 'desc' },
+      take: 4,
+    });
+    for (const entry of history) {
+      if (await bcrypt.compare(newPassword, entry.passwordHash)) return false;
+    }
+    return true;
+  }
+
+  private async recordPasswordHistory(teamMemberId: string, passwordHash: string): Promise<void> {
+    await prisma.passwordHistory.create({ data: { teamMemberId, passwordHash } });
+    const old = await prisma.passwordHistory.findMany({
+      where: { teamMemberId },
+      orderBy: { createdAt: 'desc' },
+      skip: 12,
+    });
+    if (old.length > 0) {
+      await prisma.passwordHistory.deleteMany({ where: { id: { in: old.map(o => o.id) } } });
     }
   }
 
@@ -118,7 +161,7 @@ class AuthService {
           restaurantAccess: {
             include: {
               restaurant: {
-                select: { id: true, name: true, slug: true }
+                select: { id: true, name: true, slug: true, merchantProfile: true }
               }
             }
           }
@@ -137,15 +180,43 @@ class AuthService {
         return { success: false, error: 'Invalid email or password' };
       }
 
+      // Account lockout: check for too many recent failed attempts
+      const recentFailures = await prisma.auditLog.count({
+        where: {
+          action: 'login_failed',
+          metadata: { path: ['email'], equals: email.toLowerCase() },
+          createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+        },
+      });
+
+      if (recentFailures >= 10) {
+        await auditLog('account_locked', { metadata: { email } });
+        return { success: false, error: 'Account locked due to too many failed attempts. Try again in 30 minutes.' };
+      }
+
       // Verify password
       const isValid = await this.verifyPassword(password, member.passwordHash);
       if (!isValid) {
+        await auditLog('login_failed', { metadata: { email: email.toLowerCase(), reason: 'invalid_password' } });
         return { success: false, error: 'Invalid email or password' };
       }
 
       // Check temp password expiry
       if (member.tempPasswordExpiresAt && new Date() > member.tempPasswordExpiresAt) {
         return { success: false, error: 'Temporary password expired. Ask your manager to reset it.' };
+      }
+
+      // Forced change (admin-set or first login)
+      if (member.mustChangePassword) {
+        return { success: false, error: 'PASSWORD_CHANGE_REQUIRED', requiresPasswordChange: true };
+      }
+
+      // 90-day expiration for password-auth users (admin/owner/manager)
+      if (member.passwordChangedAt && ['admin', 'owner', 'manager', 'super_admin'].includes(member.role)) {
+        const daysSinceChange = (Date.now() - member.passwordChangedAt.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSinceChange > 90) {
+          return { success: false, error: 'PASSWORD_EXPIRED', requiresPasswordChange: true };
+        }
       }
 
       // Create session
@@ -161,6 +232,21 @@ class AuthService {
           expiresAt
         }
       });
+
+      // Enforce concurrent session limit (max 5 active sessions)
+      const activeSessions = await prisma.userSession.findMany({
+        where: { userId: member.id, isActive: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (activeSessions.length > 5) {
+        const toRevoke = activeSessions.slice(0, activeSessions.length - 5);
+        await prisma.userSession.updateMany({
+          where: { id: { in: toRevoke.map(s => s.id) } },
+          data: { isActive: false },
+        });
+        await auditLog('session_limit_enforced', { userId: member.id, metadata: { revokedCount: toRevoke.length } });
+      }
 
       // Generate JWT
       const token = this.generateToken(
@@ -180,31 +266,52 @@ class AuthService {
         data: { lastLoginAt: new Date() }
       });
 
+      // Audit successful login
+      const accessCount = member.restaurantAccess.length;
+      await auditLog('login', {
+        userId: member.id,
+        ip: ipAddress,
+        metadata: { email: email.toLowerCase(), merchantCount: accessCount },
+      });
+
       // Get accessible restaurants
-      let restaurants: Array<{ id: string; name: string; slug: string; role: string }> = [];
+      let restaurants: Array<{ id: string; name: string; slug: string; role: string; onboardingComplete: boolean }> = [];
 
       if (member.role === 'super_admin') {
         // Super admin can access all restaurants
         const allRestaurants = await prisma.restaurant.findMany({
           where: { active: true },
-          select: { id: true, name: true, slug: true }
+          select: { id: true, name: true, slug: true, merchantProfile: true }
         });
-        restaurants = allRestaurants.map(r => ({ ...r, role: 'super_admin' }));
+        restaurants = allRestaurants.map(r => ({
+          id: r.id,
+          name: r.name,
+          slug: r.slug,
+          role: 'super_admin',
+          onboardingComplete: this.extractOnboardingComplete(r.merchantProfile),
+        }));
       } else if (member.restaurantAccess.length > 0) {
         // Member has specific restaurant access
         restaurants = member.restaurantAccess.map(access => ({
           id: access.restaurant.id,
           name: access.restaurant.name,
           slug: access.restaurant.slug,
-          role: access.role
+          role: access.role,
+          onboardingComplete: this.extractOnboardingComplete(access.restaurant.merchantProfile),
         }));
       } else if (member.restaurantGroupId) {
         // Member belongs to a group - can access all restaurants in group
         const groupRestaurants = await prisma.restaurant.findMany({
           where: { restaurantGroupId: member.restaurantGroupId, active: true },
-          select: { id: true, name: true, slug: true }
+          select: { id: true, name: true, slug: true, merchantProfile: true }
         });
-        restaurants = groupRestaurants.map(r => ({ ...r, role: member.role }));
+        restaurants = groupRestaurants.map(r => ({
+          id: r.id,
+          name: r.name,
+          slug: r.slug,
+          role: member.role,
+          onboardingComplete: this.extractOnboardingComplete(r.merchantProfile),
+        }));
       }
 
       return {
@@ -221,7 +328,7 @@ class AuthService {
         restaurants
       };
     } catch (error) {
-      console.error('[Auth] Login error:', error);
+      logger.error('[Auth] Login error:', { error });
       return { success: false, error: 'Login failed' };
     }
   }
@@ -235,14 +342,15 @@ class AuthService {
         where: { restaurantId, isActive: true }
       });
 
-      console.log('[verifyStaffPin] pin check', { type: typeof pin, length: pin.length });
-      console.log('[verifyStaffPin] Found pins', { count: staffPins.length, restaurantId });
+      logger.info('[verifyStaffPin] pin check', { type: typeof pin, length: pin.length });
+      logger.info('[verifyStaffPin] Found pins', { count: staffPins.length, restaurantId });
 
       // Check each PIN (we can't query by hash directly)
       for (const staffPin of staffPins) {
         const isValid = await this.verifyPin(pin, staffPin.pin);
-        console.log(`[verifyStaffPin] ${staffPin.name}: isValid=${isValid}`);
+        logger.info(`[verifyStaffPin] ${staffPin.name}: isValid=${isValid}`);
         if (isValid) {
+          await auditLog('pin_verify', { metadata: { staffName: staffPin.name } });
           return {
             success: true,
             staffPin: {
@@ -255,9 +363,10 @@ class AuthService {
         }
       }
 
+      await auditLog('pin_failed', { metadata: { restaurantId } });
       return { success: false, error: 'Invalid PIN' };
     } catch (error) {
-      console.error('[Auth] PIN verification error:', error);
+      logger.error('[Auth] PIN verification error:', { error });
       return { success: false, error: 'PIN verification failed' };
     }
   }
@@ -266,13 +375,17 @@ class AuthService {
 
   async logout(sessionId: string): Promise<ServiceResult> {
     try {
+      const session = await prisma.userSession.findUnique({ where: { id: sessionId }, select: { userId: true } });
       await prisma.userSession.update({
         where: { id: sessionId },
         data: { isActive: false }
       });
+      if (session) {
+        await auditLog('logout', { userId: session.userId, metadata: { sessionId } });
+      }
       return { success: true };
     } catch (error) {
-      console.error('[Auth] Logout error:', error);
+      logger.error('[Auth] Logout error:', { error });
       return { success: false, error: 'Failed to logout session' };
     }
   }
@@ -283,9 +396,10 @@ class AuthService {
         where: { userId: teamMemberId }, // userId is the Prisma field name on UserSession (mapped to user_id column)
         data: { isActive: false }
       });
+      await auditLog('all_sessions_revoked', { userId: teamMemberId });
       return { success: true };
     } catch (error) {
-      console.error('[Auth] Logout all error:', error);
+      logger.error('[Auth] Logout all error:', { error });
       return { success: false, error: 'Failed to logout all sessions' };
     }
   }
@@ -306,12 +420,13 @@ class AuthService {
           where: { id: sessionId },
           data: { isActive: false }
         });
+        await auditLog('session_expired', { metadata: { sessionId } });
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error('[Auth] Session validation error:', error);
+      logger.error('[Auth] Session validation error:', { error });
       return false;
     }
   }
@@ -337,6 +452,13 @@ class AuthService {
         return { success: false, error: 'Email already registered' };
       }
 
+      if (data.password) {
+        const strengthCheck = this.validatePasswordStrength(data.password);
+        if (!strengthCheck.valid) {
+          return { success: false, error: strengthCheck.error };
+        }
+      }
+
       const passwordHash = await this.hashPassword(data.password);
 
       const member = await prisma.teamMember.create({
@@ -349,8 +471,11 @@ class AuthService {
           role: data.role,
           restaurantGroupId: data.restaurantGroupId,
           restaurantId: data.restaurantId ?? null,
+          passwordChangedAt: new Date(),
         }
       });
+
+      await auditLog('signup', { userId: member.id, metadata: { email: member.email, role: member.role } });
 
       return {
         success: true,
@@ -363,7 +488,7 @@ class AuthService {
         }
       };
     } catch (error) {
-      console.error('[Auth] Create user error:', error);
+      logger.error('[Auth] Create user error:', { error });
       return { success: false, error: 'Failed to create user' };
     }
   }
@@ -409,7 +534,7 @@ class AuthService {
         }
       };
     } catch (error) {
-      console.error('[Auth] Create staff PIN error:', error);
+      logger.error('[Auth] Create staff PIN error:', { error });
       return { success: false, error: 'Failed to create staff PIN' };
     }
   }
@@ -422,7 +547,7 @@ class AuthService {
       });
       return { success: true };
     } catch (error) {
-      console.error('[Auth] Delete staff PIN error:', error);
+      logger.error('[Auth] Delete staff PIN error:', { error });
       return { success: false, error: 'Failed to delete staff PIN' };
     }
   }
@@ -489,14 +614,15 @@ class AuthService {
         data
       });
 
-      // If deactivated, invalidate all sessions
+      // If deactivated, invalidate all sessions and audit
       if (data.isActive === false) {
         await this.logoutAllSessions(teamMemberId);
+        await auditLog('account_deactivated', { metadata: { targetUserId: teamMemberId } });
       }
 
       return { success: true };
     } catch (error: unknown) {
-      console.error('[Auth] Update user error:', error);
+      logger.error('[Auth] Update user error:', { error });
       return { success: false, error: 'Failed to update user' };
     }
   }
@@ -513,43 +639,120 @@ class AuthService {
         return { success: false, error: 'Current password is incorrect' };
       }
 
-      if (newPassword.length < 6) {
-        return { success: false, error: 'New password must be at least 6 characters' };
+      const strengthCheck = this.validatePasswordStrength(newPassword);
+      if (!strengthCheck.valid) {
+        return { success: false, error: strengthCheck.error };
+      }
+
+      const notReused = await this.checkPasswordHistory(teamMemberId, newPassword);
+      if (!notReused) {
+        return { success: false, error: 'Cannot reuse one of your last 4 passwords' };
       }
 
       const passwordHash = await this.hashPassword(newPassword);
       await prisma.teamMember.update({
         where: { id: teamMemberId },
-        data: { passwordHash }
+        data: { passwordHash, passwordChangedAt: new Date(), mustChangePassword: false }
       });
+
+      await this.recordPasswordHistory(teamMemberId, passwordHash);
+      await auditLog('password_change', { userId: teamMemberId, metadata: { method: 'change_password' } });
 
       return { success: true };
     } catch (error: unknown) {
-      console.error('[Auth] Change password error:', error);
+      logger.error('[Auth] Change password error:', { error });
       return { success: false, error: 'Failed to change password' };
     }
   }
 
-  async resetPasswordByEmail(email: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+  async requestPasswordReset(email: string): Promise<{ success: boolean; error?: string }> {
     try {
-      if (newPassword.length < 6) {
-        return { success: false, error: 'New password must be at least 6 characters' };
+      const member = await prisma.teamMember.findUnique({
+        where: { email: email.toLowerCase() },
+        select: { id: true, email: true, firstName: true, isActive: true },
+      });
+
+      if (member?.email && member.isActive) {
+        // Delete any existing unused tokens for this user
+        await prisma.passwordResetToken.deleteMany({
+          where: { teamMemberId: member.id, usedAt: null },
+        });
+
+        const rawToken = randomBytes(32).toString('hex');
+        const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+        await prisma.passwordResetToken.create({
+          data: { teamMemberId: member.id, token: tokenHash, expiresAt },
+        });
+
+        const frontendUrl = process.env['FRONTEND_URL'] ?? 'https://www.getorderstack.com';
+        const resetUrl = `${frontendUrl}/reset-password?token=${rawToken}`; // send raw, store hash
+
+        await sendPasswordResetEmail(member.email, member.firstName, resetUrl);
+        await auditLog('password_reset_requested', { userId: member.id, metadata: { email: member.email } });
       }
 
-      const member = await prisma.teamMember.findUnique({ where: { email: email.toLowerCase() } });
-      if (!member) {
-        return { success: false, error: 'No account found with that email address' };
+      // Always return success — anti-enumeration
+      return { success: true };
+    } catch (error: unknown) {
+      logger.error('[Auth] Request password reset error:', { error });
+      return { success: false, error: 'Failed to process request' };
+    }
+  }
+
+  async resetPasswordWithToken(token: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const strengthCheck = this.validatePasswordStrength(newPassword);
+      if (!strengthCheck.valid) {
+        return { success: false, error: strengthCheck.error };
+      }
+
+      const tokenHash = createHash('sha256').update(token).digest('hex');
+      const resetToken = await prisma.passwordResetToken.findUnique({
+        where: { token: tokenHash },
+        include: { teamMember: { select: { id: true, isActive: true } } },
+      });
+
+      if (!resetToken || resetToken.usedAt !== null) {
+        return { success: false, error: 'Invalid or expired reset link. Please request a new one.' };
+      }
+
+      if (new Date() > resetToken.expiresAt) {
+        return { success: false, error: 'This reset link has expired. Please request a new one.' };
+      }
+
+      if (!resetToken.teamMember.isActive) {
+        return { success: false, error: 'Account is disabled' };
+      }
+
+      const notReused = await this.checkPasswordHistory(resetToken.teamMemberId, newPassword);
+      if (!notReused) {
+        return { success: false, error: 'Cannot reuse one of your last 4 passwords' };
       }
 
       const passwordHash = await this.hashPassword(newPassword);
-      await prisma.teamMember.update({
-        where: { id: member.id },
-        data: { passwordHash }
-      });
+      await prisma.$transaction([
+        prisma.teamMember.update({
+          where: { id: resetToken.teamMemberId },
+          data: { passwordHash, passwordChangedAt: new Date(), mustChangePassword: false },
+        }),
+        prisma.passwordResetToken.update({
+          where: { id: resetToken.id },
+          data: { usedAt: new Date() },
+        }),
+      ]);
+
+      await this.recordPasswordHistory(resetToken.teamMemberId, passwordHash);
+
+      // Invalidate all sessions for security after password reset
+      await this.logoutAllSessions(resetToken.teamMemberId);
+
+      await auditLog('password_change', { userId: resetToken.teamMemberId, metadata: { method: 'reset_token' } });
 
       return { success: true };
     } catch (error: unknown) {
-      console.error('[Auth] Reset password by email error:', error);
+      logger.error('[Auth] Reset password with token error:', { error });
       return { success: false, error: 'Failed to reset password' };
     }
   }
@@ -593,20 +796,21 @@ class AuthService {
 
       return { success: true };
     } catch (error: unknown) {
-      console.error('[Auth] Update staff PIN error:', error);
+      logger.error('[Auth] Update staff PIN error:', { error });
       return { success: false, error: 'Failed to update staff PIN' };
     }
   }
 
   // ============ Helpers ============
 
+  private extractOnboardingComplete(merchantProfile: unknown): boolean {
+    if (!merchantProfile || typeof merchantProfile !== 'object') return false;
+    const profile = merchantProfile as Record<string, unknown>;
+    return profile['onboardingComplete'] === true;
+  }
+
   private generateSessionToken(): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let token = '';
-    for (let i = 0; i < 64; i++) {
-      token += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return token;
+    return randomBytes(32).toString('hex'); // 64 hex chars, cryptographically secure
   }
 
   // Check if team member has access to a specific restaurant
@@ -652,7 +856,7 @@ class AuthService {
 
       return { hasAccess: false };
     } catch (error) {
-      console.error('[Auth] Check access error:', error);
+      logger.error('[Auth] Check access error:', { error });
       // Re-throw to let caller handle - don't silently deny access on DB errors
       throw new Error('Unable to verify restaurant access');
     }
@@ -684,12 +888,12 @@ class AuthService {
       });
 
       if (!staffPin) {
-        console.log('[posLogin] Staff PIN not found', { staffPinId, restaurantId });
+        logger.info('[posLogin] Staff PIN not found', { staffPinId, restaurantId });
         return null;
       }
 
       const isValid = await this.verifyPin(passcode, staffPin.pin);
-      console.log(`[posLogin] Validating PIN for ${staffPin.name}: ${isValid}`);
+      logger.info(`[posLogin] Validating PIN for ${staffPin.name}: ${isValid}`);
 
       if (!isValid) return null;
 
@@ -746,7 +950,7 @@ class AuthService {
         activeTimecardId: activeTimeEntry?.id ?? null,
       };
     } catch (error) {
-      console.error('[Auth] POS login error:', error);
+      logger.error('[Auth] POS login error:', { error });
       return null;
     }
   }

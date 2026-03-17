@@ -1862,6 +1862,9 @@ model TeamMember {
   status              String           @default("active")
   tempPasswordExpiresAt DateTime?      @map("temp_password_expires_at")
   tempPasswordSetBy   String?          @map("temp_password_set_by") // manager's teamMemberId
+  passwordChangedAt   DateTime?        @map("password_changed_at")
+  mustChangePassword  Boolean          @default(false) @map("must_change_password")
+  mfaEnabled          Boolean          @default(false) @map("mfa_enabled")
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
 
@@ -1874,6 +1877,9 @@ model TeamMember {
   restaurantAccess    UserRestaurantAccess[]
   sessions            UserSession[]
   taxInfo             StaffTaxInfo?
+  passwordResetTokens PasswordResetToken[]
+  passwordHistory     PasswordHistory[]
+  mfaSecret           MfaSecret?
 
   @@index([restaurantId])
   @@index([restaurantGroupId])
@@ -2443,4 +2449,59 @@ model CateringPackageTemplate {
 
   @@index([merchantId])
   @@map("catering_package_templates")
+}
+
+model PasswordResetToken {
+  id           String    @id @default(uuid())
+  teamMemberId String    @map("team_member_id")
+  token        String    @unique
+  expiresAt    DateTime  @map("expires_at")
+  usedAt       DateTime? @map("used_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  teamMember   TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@index([teamMemberId])
+  @@map("password_reset_tokens")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  action      String
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model PasswordHistory {
+  id           String     @id @default(uuid())
+  teamMemberId String     @map("team_member_id")
+  passwordHash String     @map("password_hash")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  teamMember   TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@index([teamMemberId, createdAt(sort: Desc)])
+  @@map("password_history")
+}
+
+model MfaSecret {
+  id           String     @id @default(uuid())
+  teamMemberId String     @unique @map("team_member_id")
+  secret       String
+  verified     Boolean    @default(false)
+  backupCodes  String[]   @map("backup_codes")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  teamMember   TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@map("mfa_secrets")
 }

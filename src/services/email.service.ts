@@ -154,3 +154,31 @@ export async function sendMilestoneReminder(
   const html = emailWrapper(null, content);
   await sendEmail(job.clientEmail, subject, html);
 }
+
+export async function sendPasswordResetEmail(
+  toEmail: string,
+  firstName: string | null,
+  resetUrl: string,
+): Promise<void> {
+  const content = `
+    <h2 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 16px;">Reset your password</h2>
+    <p style="color:#374151;font-size:15px;margin:0 0 12px;">Hi ${firstName ?? 'there'},</p>
+    <p style="color:#374151;font-size:15px;margin:0 0 24px;">
+      We received a request to reset your OrderStack password. Click the button below to create a new password.
+    </p>
+    <p style="text-align:center;margin:0 0 24px;">
+      <a href="${resetUrl}"
+         style="background:#006aff;color:#fff;text-decoration:none;padding:12px 28px;
+                border-radius:100px;font-weight:600;font-size:15px;display:inline-block;">
+        Reset Password
+      </a>
+    </p>
+    <p style="color:#6b7280;font-size:14px;margin:0 0 8px;">
+      This link expires in 1 hour. If you didn&rsquo;t request a password reset, you can safely ignore this email.
+    </p>
+    <p style="color:#6b7280;font-size:14px;margin:0;">
+      Or copy and paste this URL: <a href="${resetUrl}" style="color:#006aff;">${resetUrl}</a>
+    </p>`;
+  const html = emailWrapper('#006aff', content);
+  await sendEmail(toEmail, 'Reset your OrderStack password', html);
+}
