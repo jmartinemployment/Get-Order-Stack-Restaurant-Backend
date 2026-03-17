@@ -930,7 +930,7 @@ function buildMenuItemPatch(
 
 router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Response) => {
   try {
-    const { restaurantId, itemId } = req.params;
+    const { merchantId: restaurantId, itemId } = req.params;
     const {
       categoryId, name, nameEn, description, descriptionEn, price, cost, image,
       available, eightySixed, eightySixReason, popular, dietary, displayOrder,
