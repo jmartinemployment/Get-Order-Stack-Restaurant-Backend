@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'node:crypto';
 import helmet from 'helmet';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { config } from './app.config';
 import menuRoutes from './app.routes';
@@ -82,7 +83,8 @@ app.use((_req, res, next) => {
 });
 
 // Middleware
-app.use(cors({ origin: config.corsOrigins }));
+app.use(cors({ origin: config.corsOrigins, credentials: true }));
+app.use(cookieParser());
 
 // General API rate limiter
 const apiRateLimiter = rateLimit({

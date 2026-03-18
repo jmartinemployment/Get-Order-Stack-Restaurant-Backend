@@ -4,6 +4,7 @@ import { MENU_TEMPLATES, type MenuTemplate } from '../data/menu-templates';
 import { DEFAULT_PERMISSION_SETS } from '../data/default-permission-sets';
 import { authService } from '../services/auth.service';
 import { requireAuth, optionalAuth } from '../middleware/auth.middleware';
+import { logger } from '../utils/logger';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -389,16 +390,20 @@ router.post('/restaurant', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    // Clean up any incomplete restaurants this user previously created
+    // Clean up any abandoned in-progress restaurants this user previously created.
+    // Only removes restaurants that are BOTH incomplete AND created within the last 24 hours —
+    // never touches established restaurants whose merchantProfile may lack the onboardingComplete flag.
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const existingAccess = await prisma.userRestaurantAccess.findMany({
       where: { teamMemberId, role: 'owner' },
-      include: { restaurant: { select: { id: true, merchantProfile: true } } },
+      include: { restaurant: { select: { id: true, merchantProfile: true, createdAt: true } } },
     });
 
     for (const access of existingAccess) {
       const profile = access.restaurant.merchantProfile as Record<string, unknown> | null;
       const isIncomplete = profile?.['onboardingComplete'] !== true;
-      if (isIncomplete) {
+      const isRecent = access.restaurant.createdAt > oneDayAgo;
+      if (isIncomplete && isRecent) {
         await prisma.restaurant.delete({ where: { id: access.restaurant.id } });
       }
     }
@@ -409,44 +414,48 @@ router.post('/restaurant', requireAuth, async (req: Request, res: Response) => {
       .replaceAll(/^-|-$/g, '');
 
     const vertical = primaryVertical ?? 'food_and_drink';
-    const restaurant = await prisma.restaurant.create({
-      data: {
-        name: businessName,
-        slug: `${slug}-${Date.now().toString(36)}`,
-        email: member.email,
-        address: street,
-        city: addrCity,
-        state: addrState,
-        zip: addrZip,
-        phone: address?.phone ?? '',
-        taxRate: 0,
-        active: true,
-        merchantProfile: {
-          id: crypto.randomUUID(),
-          businessName,
-          address: address ?? null,
-          verticals: [vertical],
-          primaryVertical: vertical,
-          complexity: 'full',
-          enabledModules: VERTICAL_MODULES[vertical] ?? [],
-          defaultDeviceMode: defaultDeviceMode ?? 'full_service',
-          taxLocale: { taxRate: 0, taxInclusive: false, currency: 'USD', defaultLanguage: 'en' },
-          businessHours: [],
-          businessCategory: businessCategory ?? null,
-          onboardingComplete: false,
-          createdAt: new Date().toISOString(),
+    const restaurant = await prisma.$transaction(async (tx) => {
+      const r = await tx.restaurant.create({
+        data: {
+          name: businessName,
+          slug: `${slug}-${Date.now().toString(36)}`,
+          email: member.email,
+          address: street,
+          city: addrCity,
+          state: addrState,
+          zip: addrZip,
+          phone: address?.phone ?? '',
+          taxRate: 0,
+          active: true,
+          merchantProfile: {
+            id: crypto.randomUUID(),
+            businessName,
+            address: address ?? null,
+            verticals: [vertical],
+            primaryVertical: vertical,
+            complexity: 'full',
+            enabledModules: VERTICAL_MODULES[vertical] ?? [],
+            defaultDeviceMode: defaultDeviceMode ?? 'full_service',
+            taxLocale: { taxRate: 0, taxInclusive: false, currency: 'USD', defaultLanguage: 'en' },
+            businessHours: [],
+            businessCategory: businessCategory ?? null,
+            onboardingComplete: false,
+            createdAt: new Date().toISOString(),
+          },
         },
-      },
-      select: { id: true, name: true, slug: true },
-    });
+        select: { id: true, name: true, slug: true },
+      });
 
-    await prisma.userRestaurantAccess.create({
-      data: { teamMemberId, restaurantId: restaurant.id, role: 'owner' },
+      await tx.userRestaurantAccess.create({
+        data: { teamMemberId, restaurantId: r.id, role: 'owner' },
+      });
+
+      return r;
     });
 
     res.status(201).json({ restaurantId: restaurant.id, name: restaurant.name, slug: restaurant.slug });
   } catch (error) {
-    console.error('Create onboarding restaurant error:', error);
+    logger.error('Create onboarding restaurant error:', { error });
     res.status(500).json({ error: 'Failed to create restaurant' });
   }
 });

@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { calculatePlatformFee } from '../config/platform-fees';
 import { getSecret } from '../utils/secrets';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
@@ -100,7 +101,7 @@ export const paypalService = {
     // Expire 60s early to avoid edge-case rejections
     tokenExpiresAt = Date.now() + (data.expires_in - 60) * 1000;
 
-    console.log('[PayPal] Access token obtained');
+    logger.info('[PayPal] Access token obtained');
     return accessToken;
   },
 
@@ -122,7 +123,7 @@ export const paypalService = {
         try {
           const existing = await paypalService.getOrderStatus(order.paypalOrderId);
           if (existing.success && existing.status !== 'VOIDED') {
-            console.log(`[PayPal] Returning existing order ${order.paypalOrderId} for order ${order.orderNumber}`);
+            logger.info('[PayPal] Returning existing order', { orderId: order.id });
             return { success: true, paypalOrderId: order.paypalOrderId };
           }
         } catch {
@@ -173,7 +174,7 @@ export const paypalService = {
 
       if (!response.ok) {
         const text = await response.text();
-        console.error(`[PayPal] Create order failed (${response.status}):`, text);
+        logger.error('[PayPal] Create order failed', { status: response.status });
         return { success: false, error: `PayPal API error: ${response.status}` };
       }
 
@@ -187,10 +188,10 @@ export const paypalService = {
         },
       });
 
-      console.log(`[PayPal] Created order ${data.id} for order ${order.orderNumber}`);
+      logger.info('[PayPal] Order created', { orderId: order.id });
       return { success: true, paypalOrderId: data.id };
     } catch (error: unknown) {
-      console.error('[PayPal] Error creating order:', error);
+      logger.error('[PayPal] Error creating order', { error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create PayPal order',
@@ -215,7 +216,7 @@ export const paypalService = {
 
       if (!response.ok) {
         const text = await response.text();
-        console.error(`[PayPal] Capture failed (${response.status}):`, text);
+        logger.error('[PayPal] Capture failed', { status: response.status });
         return { success: false, error: `PayPal capture failed: ${response.status}` };
       }
 
@@ -240,10 +241,10 @@ export const paypalService = {
         },
       });
 
-      console.log(`[PayPal] Captured order ${paypalOrderId}, captureId=${captureId}`);
+      logger.info('[PayPal] Order captured');
       return { success: true, captureId: captureId ?? undefined };
     } catch (error: unknown) {
-      console.error('[PayPal] Error capturing order:', error);
+      logger.error('[PayPal] Error capturing order', { error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to capture PayPal order',
@@ -271,7 +272,7 @@ export const paypalService = {
       const data = await response.json() as { id: string; status: string };
       return { success: true, status: data.status, paypalOrderId: data.id };
     } catch (error: unknown) {
-      console.error('[PayPal] Error getting order status:', error);
+      logger.error('[PayPal] Error getting order status', { error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get PayPal order status',
@@ -281,7 +282,7 @@ export const paypalService = {
 
   async cancelOrder(paypalOrderId: string): Promise<{ success: boolean; error?: string }> {
     // PayPal orders auto-expire after 3 hours if not captured — no API call needed
-    console.log(`[PayPal] Cancel requested for order ${paypalOrderId} (auto-expires in 3h)`);
+    logger.info('[PayPal] Cancel requested (auto-expires in 3h)');
     return { success: true };
   },
 
@@ -308,7 +309,7 @@ export const paypalService = {
 
       if (!response.ok) {
         const text = await response.text();
-        console.error(`[PayPal] Refund failed (${response.status}):`, text);
+        logger.error('[PayPal] Refund failed', { status: response.status });
         return { success: false, error: `PayPal refund failed: ${response.status}` };
       }
 
@@ -318,7 +319,7 @@ export const paypalService = {
         amount?: { value: string };
       };
 
-      console.log(`[PayPal] Refund ${data.id} created for capture ${captureId}`);
+      logger.info('[PayPal] Refund created');
       return {
         success: true,
         refundId: data.id,
@@ -326,7 +327,7 @@ export const paypalService = {
         status: data.status,
       };
     } catch (error: unknown) {
-      console.error('[PayPal] Error creating refund:', error);
+      logger.error('[PayPal] Error creating refund', { error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create PayPal refund',
@@ -347,7 +348,7 @@ export const paypalService = {
               where: { id: order.id },
               data: { paymentStatus: 'paid' },
             });
-            console.log(`[PayPal Webhook] Capture completed for order ${order.orderNumber}`);
+            logger.info('[PayPal Webhook] Capture completed', { orderId: order.id });
           }
           break;
         }
@@ -362,18 +363,18 @@ export const paypalService = {
               where: { id: order.id },
               data: { paymentStatus: 'refunded' },
             });
-            console.log(`[PayPal Webhook] Capture refunded for order ${order.orderNumber}`);
+            logger.info('[PayPal Webhook] Capture refunded', { orderId: order.id });
           }
           break;
         }
 
         default:
-          console.log('[PayPal Webhook] Unhandled event type', { eventType });
+          logger.info('[PayPal Webhook] Unhandled event type', { eventType });
       }
 
       return { success: true };
     } catch (error: unknown) {
-      console.error('[PayPal Webhook] Error processing event:', error);
+      logger.error('[PayPal Webhook] Error processing event', { error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to process webhook',

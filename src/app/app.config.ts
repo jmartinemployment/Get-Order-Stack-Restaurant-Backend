@@ -44,8 +44,7 @@ const corsOriginChecker = (origin: string | undefined, callback: (err: Error | n
     return;
   }
 
-  // Reject other origins (return false instead of error to avoid 500)
-  console.log(`CORS rejected origin: ${origin}`);
+  // Reject other origins
   callback(null, false);
 };
 

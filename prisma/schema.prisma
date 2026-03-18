@@ -928,9 +928,10 @@ model UserSession {
   token      String   @unique
   deviceInfo String?  @map("device_info")
   ipAddress  String?  @map("ip_address")
-  isActive   Boolean  @default(true) @map("is_active")
-  expiresAt  DateTime @map("expires_at")
-  createdAt  DateTime @default(now()) @map("created_at")
+  isActive       Boolean  @default(true) @map("is_active")
+  expiresAt      DateTime @map("expires_at")
+  lastActivityAt DateTime @default(now()) @map("last_activity_at")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   teamMember TeamMember @relation(fields: [userId], references: [id], onDelete: Cascade)
 

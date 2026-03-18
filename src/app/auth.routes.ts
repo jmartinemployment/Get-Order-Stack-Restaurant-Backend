@@ -10,6 +10,30 @@ import { disableInactiveAccounts } from '../jobs/account-maintenance';
 const router = Router();
 const prisma = new PrismaClient();
 
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const COOKIE_MAX_AGE_MS = 8 * 60 * 60 * 1000; // 8 hours — matches JWT_EXPIRES_IN
+
+/** Set the HttpOnly auth cookie on the response. PCI DSS 3.4 / 6.5.10. */
+function setAuthCookie(res: Response, token: string): void {
+  res.cookie('os_auth', token, {
+    httpOnly: true,
+    secure: IS_PRODUCTION,
+    sameSite: IS_PRODUCTION ? 'none' : 'lax',
+    path: '/api',
+    maxAge: COOKIE_MAX_AGE_MS,
+  });
+}
+
+/** Clear the auth cookie on logout. */
+function clearAuthCookie(res: Response): void {
+  res.clearCookie('os_auth', {
+    httpOnly: true,
+    secure: IS_PRODUCTION,
+    sameSite: IS_PRODUCTION ? 'none' : 'lax',
+    path: '/api',
+  });
+}
+
 // Rate limit auth endpoints to prevent brute-force attacks
 const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -91,6 +115,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
       return;
     }
 
+    setAuthCookie(res, loginResult.token!);
     res.status(201).json({
       token: loginResult.token,
       user: loginResult.user,
@@ -122,6 +147,7 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
       return;
     }
 
+    setAuthCookie(res, result.token!);
     res.json({
       token: result.token,
       user: result.user,
@@ -198,6 +224,7 @@ router.post('/logout', async (req: Request, res: Response) => {
       res.status(500).json({ error: result.error });
       return;
     }
+    clearAuthCookie(res);
     res.json({ success: true, message: 'Logged out successfully' });
   } catch (error) {
     logger.error('Logout error:', { error });
@@ -348,6 +375,7 @@ router.get('/sessions', requireAuth, async (req: Request, res: Response) => {
       select: { id: true, deviceInfo: true, ipAddress: true, createdAt: true, expiresAt: true },
       orderBy: { createdAt: 'desc' },
     });
+    await auditLog('sessions_viewed', { userId: req.user!.teamMemberId, ip: req.ip });
     res.json(sessions);
   } catch (error) {
     logger.error('List sessions error:', { error });
@@ -628,6 +656,7 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
       return;
     }
 
+    await auditLog('password_change', { userId: req.user!.teamMemberId, ip: req.ip, metadata: { method: 'change_password' } });
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
     logger.error('Change password error:', { error });
@@ -686,7 +715,7 @@ router.post('/users/:userId/restaurants/:merchantId', requireAuth, requireAdmin,
         role
       }
     });
-
+    await auditLog('restaurant_access_granted', { userId: req.user!.teamMemberId, ip: req.ip, metadata: { targetUserId: userId, restaurantId, role } });
     res.json(access);
   } catch (error) {
     logger.error('Grant restaurant access error:', { error });
@@ -704,7 +733,7 @@ router.delete('/users/:userId/restaurants/:merchantId', requireAuth, requireAdmi
         teamMemberId_restaurantId: { teamMemberId: userId, restaurantId }
       }
     });
-
+    await auditLog('restaurant_access_revoked', { userId: req.user!.teamMemberId, ip: req.ip, metadata: { targetUserId: userId, restaurantId } });
     res.status(204).send();
   } catch (error) {
     logger.error('Revoke restaurant access error:', { error });

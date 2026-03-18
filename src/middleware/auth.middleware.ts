@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService, TokenPayload } from '../services/auth.service';
 import { PrismaClient } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
@@ -22,14 +23,15 @@ declare global {
 // Require valid JWT token
 export const requireAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    // Read token from HttpOnly cookie first (PCI DSS), fall back to Authorization header
+    const cookieToken = req.cookies?.os_auth as string | undefined;
     const authHeader = req.headers.authorization;
+    const token = cookieToken ?? (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined);
 
-    if (!authHeader?.startsWith('Bearer ')) {
+    if (!token) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
-
-    const token = authHeader.substring(7);
     const payload = authService.verifyToken(token);
 
     if (!payload) {
@@ -44,11 +46,37 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
       return;
     }
 
+    // Server-side inactivity timeout (15 minutes) — PCI DSS 8.1.8
+    const session = await prisma.userSession.findUnique({
+      where: { id: payload.sessionId },
+      select: { lastActivityAt: true },
+    });
+    if (session?.lastActivityAt) {
+      const inactiveMs = Date.now() - session.lastActivityAt.getTime();
+      if (inactiveMs > 15 * 60 * 1000) {
+        await prisma.userSession.update({
+          where: { id: payload.sessionId },
+          data: { isActive: false },
+        });
+        res.status(401).json({ error: 'Session expired due to inactivity' });
+        return;
+      }
+    }
+
+    // Update last activity (skip if < 60s since last update to reduce DB writes)
+    const lastActivity = session?.lastActivityAt?.getTime() ?? 0;
+    if (Date.now() - lastActivity > 60_000) {
+      await prisma.userSession.update({
+        where: { id: payload.sessionId },
+        data: { lastActivityAt: new Date() },
+      }).catch(() => undefined); // non-critical — don't fail the request
+    }
+
     // Attach user to request
     req.user = payload;
     next();
   } catch (error) {
-    console.error('[Auth Middleware] Error:', error);
+    logger.error('[Auth Middleware] Error', { error });
     res.status(500).json({ error: 'Authentication error' });
   }
 };
@@ -56,10 +84,11 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
 // Optional auth - attach user if token present, but don't require it
 export const optionalAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const cookieToken = req.cookies?.os_auth as string | undefined;
     const authHeader = req.headers.authorization;
+    const token = cookieToken ?? (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined);
 
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
+    if (token) {
       const payload = authService.verifyToken(token);
 
       if (payload) {
@@ -74,7 +103,7 @@ export const optionalAuth = async (req: Request, res: Response, next: NextFuncti
   } catch (error) {
     // Don't fail on optional auth errors, just continue without user
     // But log for debugging visibility
-    console.debug('[Auth Middleware] Optional auth error (continuing without user):', error);
+    logger.debug('[Auth Middleware] Optional auth error (continuing without user)', { error });
     next();
   }
 };
@@ -137,7 +166,7 @@ export const requireMerchantAccess = async (req: Request, res: Response, next: N
     req.merchantAccess = access;
     next();
   } catch (error) {
-    console.error('[Auth Middleware] Merchant access error:', error);
+    logger.error('[Auth Middleware] Merchant access error', { error });
     res.status(500).json({ error: 'Authorization error' });
   }
 };
@@ -174,7 +203,7 @@ export const requireMerchantManager = async (req: Request, res: Response, next: 
     req.merchantAccess = access;
     next();
   } catch (error) {
-    console.error('[Auth Middleware] Merchant manager access error:', error);
+    logger.error('[Auth Middleware] Merchant manager access error', { error });
     res.status(500).json({ error: 'Authorization error' });
   }
 };
@@ -211,7 +240,7 @@ export const requireMerchantOwner = async (req: Request, res: Response, next: Ne
     req.merchantAccess = access;
     next();
   } catch (error) {
-    console.error('[Auth Middleware] Merchant owner access error:', error);
+    logger.error('[Auth Middleware] Merchant owner access error', { error });
     res.status(500).json({ error: 'Authorization error' });
   }
 };
@@ -243,7 +272,7 @@ export const requireDeviceAuth = async (req: Request, res: Response, next: NextF
     (req as any).device = device;
     next();
   } catch (error) {
-    console.error('[Auth Middleware] Device auth error:', error);
+    logger.error('[Auth Middleware] Device auth error', { error });
     res.status(500).json({ error: 'Device authentication error' });
   }
 };

@@ -126,10 +126,10 @@ class AuthService {
   // ============ Password History ============
 
   private async checkPasswordHistory(teamMemberId: string, newPassword: string): Promise<boolean> {
+    // Check ALL retained history (up to 12) — PCI DSS 8.2.5
     const history = await prisma.passwordHistory.findMany({
       where: { teamMemberId },
       orderBy: { createdAt: 'desc' },
-      take: 4,
     });
     for (const entry of history) {
       if (await bcrypt.compare(newPassword, entry.passwordHash)) return false;
@@ -210,7 +210,7 @@ class AuthService {
       // Account lockout: check for too many recent failed attempts
       if (await this.isAccountLocked(email)) {
         await auditLog('account_locked', { metadata: { email } });
-        return { success: false, error: 'Account locked due to too many failed attempts. Try again in 30 minutes.' };
+        return { success: false, error: 'Account locked due to too many failed attempts. Try again in 15 minutes.' };
       }
 
       // Verify password
@@ -317,6 +317,22 @@ class AuthService {
           role: member.role,
           onboardingComplete: this.extractOnboardingComplete(r.merchantProfile),
         }));
+      } else if (member.restaurantId) {
+        // Fallback: member has a direct restaurantId (e.g. created during onboarding
+        // but UserRestaurantAccess entry is missing)
+        const directRestaurant = await prisma.restaurant.findUnique({
+          where: { id: member.restaurantId },
+          select: { id: true, name: true, slug: true, merchantProfile: true, active: true },
+        });
+        if (directRestaurant?.active) {
+          restaurants = [{
+            id: directRestaurant.id,
+            name: directRestaurant.name,
+            slug: directRestaurant.slug,
+            role: member.role,
+            onboardingComplete: this.extractOnboardingComplete(directRestaurant.merchantProfile),
+          }];
+        }
       }
 
       return {
@@ -347,25 +363,27 @@ class AuthService {
         where: { restaurantId, isActive: true }
       });
 
-      logger.info('[verifyStaffPin] pin check', { type: typeof pin, length: pin.length });
-      logger.info('[verifyStaffPin] Found pins', { count: staffPins.length, restaurantId });
-
-      // Check each PIN (we can't query by hash directly)
+      // Check each PIN (we can't query by hash directly).
+      // Compare ALL PINs even after finding a match to avoid timing side-channels.
+      let matchedPin: typeof staffPins[0] | null = null;
       for (const staffPin of staffPins) {
         const isValid = await this.verifyPin(pin, staffPin.pin);
-        logger.info(`[verifyStaffPin] ${staffPin.name}: isValid=${isValid}`);
-        if (isValid) {
-          await auditLog('pin_verify', { metadata: { staffName: staffPin.name } });
-          return {
-            success: true,
-            staffPin: {
-              id: staffPin.id,
-              name: staffPin.name,
-              role: staffPin.role,
-              restaurantId: staffPin.restaurantId
-            }
-          };
+        if (isValid && !matchedPin) {
+          matchedPin = staffPin;
         }
+      }
+
+      if (matchedPin) {
+        await auditLog('pin_verify', { metadata: { restaurantId } });
+        return {
+          success: true,
+          staffPin: {
+            id: matchedPin.id,
+            name: matchedPin.name,
+            role: matchedPin.role,
+            restaurantId: matchedPin.restaurantId,
+          },
+        };
       }
 
       await auditLog('pin_failed', { metadata: { restaurantId } });
