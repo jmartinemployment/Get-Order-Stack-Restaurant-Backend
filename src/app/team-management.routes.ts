@@ -5,6 +5,8 @@ import { authService } from '../services/auth.service';
 import { DEFAULT_PERMISSION_SETS, LEGACY_SET_RENAME } from '../data/default-permission-sets';
 import { toErrorMessage } from '../utils/errors';
 import { logger } from '../utils/logger';
+import { auditLog } from '../utils/audit';
+import { auditCtx } from '../utils/audit-context';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -243,6 +245,7 @@ router.post('/:merchantId/team-members', async (req: Request, res: Response) => 
       });
     });
 
+    await auditLog('team_member_created', { ...auditCtx(req), metadata: { teamMemberId: member.id, merchantId: restaurantId } });
     res.status(201).json(formatTeamMember(member));
   } catch (error: unknown) {
     const message = toErrorMessage(error);
@@ -374,6 +377,7 @@ router.patch('/:merchantId/team-members/:id', async (req: Request, res: Response
       });
     });
 
+    await auditLog('team_member_updated', { ...auditCtx(req), metadata: { teamMemberId: id, merchantId: req.params.merchantId } });
     res.json(formatTeamMember(member));
   } catch (error: unknown) {
     const message = toErrorMessage(error);
@@ -401,6 +405,7 @@ router.delete('/:merchantId/team-members/:id', async (req: Request, res: Respons
       await tx.teamMember.delete({ where: { id } });
     });
 
+    await auditLog('team_member_deleted', { ...auditCtx(req), metadata: { teamMemberId: id, merchantId: req.params.merchantId } });
     res.json({ success: true });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
@@ -430,6 +435,7 @@ router.post('/:merchantId/team-members/:memberId/jobs', async (req: Request, res
       res.status(404).json({ error: 'Team member not found' });
       return;
     }
+    await auditLog('team_member_job_created', { ...auditCtx(req), metadata: { teamMemberId: memberId, merchantId: req.params.merchantId } });
     res.status(201).json(formatTeamMember(member));
   } catch (error: unknown) {
     const message = toErrorMessage(error);
@@ -450,6 +456,7 @@ router.patch('/:merchantId/team-members/:memberId/jobs/:jobId', async (req: Requ
       where: { id: jobId },
       data: parsed.data,
     });
+    await auditLog('team_member_job_updated', { ...auditCtx(req), metadata: { jobId, teamMemberId: req.params.memberId, merchantId: req.params.merchantId } });
     res.json({ success: true });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
@@ -534,6 +541,7 @@ router.post('/:merchantId/permission-sets/seed-defaults', async (req: Request, r
       orderBy: { name: 'asc' },
     });
 
+    await auditLog('permission_sets_seeded', { ...auditCtx(req), metadata: { merchantId: req.params.merchantId, seeded: result.created, renamed: result.renamed } });
     res.json({
       seeded: result.created,
       renamed: result.renamed,
@@ -578,6 +586,7 @@ router.post('/:merchantId/permission-sets', async (req: Request, res: Response) 
         isDefault: isDefault ?? false,
       },
     });
+    await auditLog('permission_set_created', { ...auditCtx(req), metadata: { permissionSetId: set.id, merchantId: restaurantId } });
     res.status(201).json(set);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
@@ -602,6 +611,7 @@ router.patch('/:merchantId/permission-sets/:id', async (req: Request, res: Respo
       where: { id },
       data: updateData,
     });
+    await auditLog('permission_set_updated', { ...auditCtx(req), metadata: { permissionSetId: id, merchantId: req.params.merchantId } });
     res.json(set);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
@@ -614,6 +624,7 @@ router.delete('/:merchantId/permission-sets/:id', async (req: Request, res: Resp
   try {
     const { id } = req.params;
     await prisma.permissionSet.delete({ where: { id } });
+    await auditLog('permission_set_deleted', { ...auditCtx(req), metadata: { permissionSetId: id, merchantId: req.params.merchantId } });
     res.json({ success: true });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
@@ -645,10 +656,12 @@ router.post('/:merchantId/pos/login', async (req: Request, res: Response) => {
     logger.info(`[POS Login] result=${result ? 'success' : 'null (no match)'}`);
 
     if (!result) {
+      await auditLog('pos_login_failed', { ...auditCtx(req), metadata: { staffPinId, merchantId: restaurantId } });
       res.status(401).json({ error: 'Invalid passcode' });
       return;
     }
 
+    await auditLog('pos_login_success', { ...auditCtx(req), metadata: { staffPinId, merchantId: restaurantId } });
     res.json(result);
   } catch (error: unknown) {
     const message = toErrorMessage(error);

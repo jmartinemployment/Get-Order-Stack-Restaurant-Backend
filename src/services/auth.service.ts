@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import { sendPasswordResetEmail } from './email.service';
 import { logger } from '../utils/logger';
 import { auditLog } from '../utils/audit';
+import { trackLoginFailed, trackAccountLocked, trackPasswordResetRequest, trackMfaFailed } from './security-alert.service';
 
 const prisma = new PrismaClient();
 
@@ -47,6 +48,8 @@ export interface AuthResult {
   error?: string;
   requiresPasswordChange?: boolean;
   mfaRequired?: boolean;
+  mfaEnrollmentRequired?: boolean;
+  mfaGraceDeadline?: string;
 }
 
 export interface PinAuthResult {
@@ -211,6 +214,7 @@ class AuthService {
       // Account lockout: check for too many recent failed attempts
       if (await this.isAccountLocked(email)) {
         await auditLog('account_locked', { metadata: { email } });
+        trackAccountLocked(email, ipAddress);
         return { success: false, error: 'Account locked due to too many failed attempts. Try again in 15 minutes.' };
       }
 
@@ -218,6 +222,7 @@ class AuthService {
       const isValid = await this.verifyPassword(password, member.passwordHash);
       if (!isValid) {
         await auditLog('login_failed', { metadata: { email: email.toLowerCase(), reason: 'invalid_password' } });
+        trackLoginFailed(ipAddress ?? 'unknown', email);
         return { success: false, error: 'Invalid email or password' };
       }
 
@@ -257,6 +262,32 @@ class AuthService {
           },
           mfaRequired: true,
         };
+      }
+
+      // PCI DSS 8.4.2: MFA enrollment enforcement for privileged roles.
+      // Admin/owner/manager accounts MUST enable MFA. A 7-day grace period is
+      // granted on first login; after that, login is blocked until MFA is set up.
+      const MFA_REQUIRED_ROLES = ['super_admin', 'owner', 'manager'];
+      if (MFA_REQUIRED_ROLES.includes(member.role) && !member.mfaEnabled) {
+        const now = new Date();
+
+        if (!member.mfaGraceDeadline) {
+          // First login without MFA — start 7-day grace period
+          const graceDeadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+          await prisma.teamMember.update({
+            where: { id: member.id },
+            data: { mfaGraceDeadline: graceDeadline },
+          });
+          await auditLog('mfa_grace_started', { userId: member.id, ip: ipAddress, metadata: { deadline: graceDeadline.toISOString() } });
+          // Allow login but signal that enrollment is required
+          // (handled below — mfaEnrollmentRequired is set on the result)
+          (member as { mfaGraceDeadline: Date }).mfaGraceDeadline = graceDeadline;
+        } else if (now > member.mfaGraceDeadline) {
+          // Grace period expired — block login
+          await auditLog('mfa_enrollment_blocked', { userId: member.id, ip: ipAddress });
+          return { success: false, error: 'MFA_ENROLLMENT_REQUIRED' };
+        }
+        // Within grace period — allow login, frontend shows enrollment banner
       }
 
       // Create session
@@ -370,7 +401,7 @@ class AuthService {
         }
       }
 
-      return {
+      const result: AuthResult = {
         success: true,
         token,
         user: {
@@ -381,8 +412,16 @@ class AuthService {
           role: member.role,
           restaurantGroupId: member.restaurantGroupId,
         },
-        restaurants
+        restaurants,
       };
+
+      // Signal MFA enrollment requirement for privileged roles within grace period
+      if (member.mfaGraceDeadline && !member.mfaEnabled) {
+        result.mfaEnrollmentRequired = true;
+        result.mfaGraceDeadline = member.mfaGraceDeadline.toISOString();
+      }
+
+      return result;
     } catch (error) {
       logger.error('[Auth] Login error:', { error });
       return { success: false, error: 'Login failed' };
@@ -772,7 +811,7 @@ class AuthService {
         include: { teamMember: { select: { id: true, isActive: true } } },
       });
 
-      if (resetToken?.usedAt !== null) {
+      if (!resetToken || resetToken.usedAt !== null) {
         return { success: false, error: 'Invalid or expired reset link. Please request a new one.' };
       }
 

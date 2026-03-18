@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
+import { auditLog } from '../utils/audit';
+import { auditCtx } from '../utils/audit-context';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
@@ -127,6 +129,7 @@ router.post('/:merchantId/invoices', async (req: Request, res: Response) => {
       return inv;
     });
 
+    await auditLog('invoice_created', { ...auditCtx(req), metadata: { invoiceId: invoice.id, merchantId: restaurantId, invoiceNumber } });
     res.status(201).json(invoice);
   } catch (error: unknown) {
     logger.error('[Invoice] Create error:', error);
@@ -154,6 +157,7 @@ router.patch('/:merchantId/invoices/:invoiceId', async (req: Request, res: Respo
       data,
       include: { lineItems: true },
     });
+    await auditLog('invoice_updated', { ...auditCtx(req), metadata: { invoiceId, merchantId: restaurantId } });
     res.json(invoice);
   } catch (error: unknown) {
     if ((error as { code?: string }).code === 'P2025') {
@@ -174,6 +178,7 @@ router.post('/:merchantId/invoices/:invoiceId/send', async (req: Request, res: R
       data: { status: 'sent', sentAt: new Date() },
       include: { lineItems: true },
     });
+    await auditLog('invoice_sent', { ...auditCtx(req), metadata: { invoiceId, merchantId: restaurantId } });
     res.json(invoice);
   } catch (error: unknown) {
     if ((error as { code?: string }).code === 'P2025') {
@@ -226,6 +231,7 @@ router.post('/:merchantId/invoices/:invoiceId/payment', async (req: Request, res
       return updated;
     });
 
+    await auditLog('invoice_payment_recorded', { ...auditCtx(req), metadata: { invoiceId, merchantId: restaurantId, amount: parsed.data.amount } });
     res.json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Payment failed';
@@ -246,6 +252,7 @@ router.delete('/:merchantId/invoices/:invoiceId', async (req: Request, res: Resp
       where: { id: invoiceId, restaurantId },
       data: { status: 'cancelled' },
     });
+    await auditLog('invoice_cancelled', { ...auditCtx(req), metadata: { invoiceId, merchantId: restaurantId } });
     res.json(invoice);
   } catch (error: unknown) {
     if ((error as { code?: string }).code === 'P2025') {
@@ -290,6 +297,7 @@ router.post('/:merchantId/house-accounts', async (req: Request, res: Response) =
         ...parsed.data,
       },
     });
+    await auditLog('house_account_created', { ...auditCtx(req), metadata: { accountId: account.id, merchantId: restaurantId } });
     res.status(201).json(account);
   } catch (error: unknown) {
     logger.error('[HouseAccount] Create error:', error);
@@ -311,6 +319,7 @@ router.patch('/:merchantId/house-accounts/:accountId', async (req: Request, res:
       where: { id: accountId, restaurantId },
       data: parsed.data,
     });
+    await auditLog('house_account_updated', { ...auditCtx(req), metadata: { accountId, merchantId: restaurantId } });
     res.json(account);
   } catch (error: unknown) {
     if ((error as { code?: string }).code === 'P2025') {
@@ -330,6 +339,7 @@ router.delete('/:merchantId/house-accounts/:accountId', async (req: Request, res
       where: { id: accountId, restaurantId },
       data: { status: 'closed' },
     });
+    await auditLog('house_account_closed', { ...auditCtx(req), metadata: { accountId, merchantId: restaurantId } });
     res.json(account);
   } catch (error: unknown) {
     if ((error as { code?: string }).code === 'P2025') {

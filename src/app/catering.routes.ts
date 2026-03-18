@@ -5,6 +5,8 @@ import crypto from 'node:crypto';
 import { sendProposal } from '../services/email.service';
 import { toErrorMessage } from '../utils/errors';
 import { logger } from '../utils/logger';
+import { auditLog } from '../utils/audit';
+import { auditCtx } from '../utils/audit-context';
 import { aiConfigService } from '../services/ai-config.service';
 import { generateProposalContent, type ProposalAiContent } from '../services/catering-proposal-ai.service';
 
@@ -297,6 +299,8 @@ router.post('/:merchantId/catering/events', async (req: Request, res: Response) 
 
     await logActivity(event.id, 'created', `Job "${event.title}" created`, 'operator');
 
+    await auditLog('catering_event_created', { ...auditCtx(req), metadata: { eventId: event.id, merchantId } });
+
     res.status(201).json(event);
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
@@ -359,6 +363,8 @@ router.patch('/:merchantId/catering/events/:id', async (req: Request, res: Respo
       });
     }
 
+    await auditLog('catering_event_updated', { ...auditCtx(req), metadata: { eventId: id, merchantId } });
+
     res.json(updated);
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
@@ -384,6 +390,9 @@ router.delete('/:merchantId/catering/events/:id', async (req: Request, res: Resp
     }
 
     await prisma.cateringEvent.delete({ where: { id } });
+
+    await auditLog('catering_event_deleted', { ...auditCtx(req), metadata: { eventId: id, merchantId } });
+
     res.status(204).send();
   } catch (error: unknown) {
     logger.error('[catering] DELETE event error:', toErrorMessage(error));
@@ -427,6 +436,8 @@ router.patch('/:merchantId/catering/events/:id/milestones/:milestoneId/pay', asy
       milestoneId,
       amountCents: milestone.amountCents,
     });
+
+    await auditLog('catering_milestone_paid', { ...auditCtx(req), metadata: { eventId: id, milestoneId, merchantId, amountCents: milestone.amountCents } });
 
     res.json(updated);
   } catch (error: unknown) {
@@ -498,6 +509,8 @@ router.post('/:merchantId/catering/events/:id/clone', async (req: Request, res: 
 
     await logActivity(clone.id, 'created', `Job cloned from "${source.title}"`, 'operator', { sourceJobId: id });
 
+    await auditLog('catering_event_cloned', { ...auditCtx(req), metadata: { eventId: clone.id, sourceEventId: id, merchantId } });
+
     res.status(201).json(clone);
   } catch (error: unknown) {
     logger.error('[catering] clone event error:', toErrorMessage(error));
@@ -561,6 +574,8 @@ router.post('/:merchantId/catering/events/:id/proposal', async (req: Request, re
         logger.error('[Catering] Failed to send proposal email:', toErrorMessage(emailError));
       }
     }
+
+    await auditLog('catering_proposal_sent', { ...auditCtx(req), metadata: { eventId: id, merchantId, token } });
 
     res.status(201).json({ token, url: `/catering/proposal/${token}`, expiresAt: proposalToken.expiresAt });
   } catch (error: unknown) {
@@ -647,6 +662,8 @@ router.post('/:merchantId/catering/events/:id/proposal/generate', async (req: Re
       data: { aiContent: contentToStore as unknown as Prisma.InputJsonValue },
     });
 
+    await auditLog('catering_proposal_ai_generated', { ...auditCtx(req), metadata: { eventId: id, merchantId, tone } });
+
     res.status(201).json(contentToStore);
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
@@ -695,6 +712,8 @@ router.patch('/:merchantId/catering/events/:id/proposal/content', async (req: Re
       where: { id },
       data: { aiContent: merged as unknown as Prisma.InputJsonValue },
     });
+
+    await auditLog('catering_proposal_content_updated', { ...auditCtx(req), metadata: { eventId: id, merchantId } });
 
     res.json(merged);
   } catch (error: unknown) {
@@ -837,6 +856,8 @@ publicRouter.post('/catering/proposal/:token/approve', async (req: Request, res:
       totalCents: fees.totalCents,
     });
 
+    await auditLog('catering_proposal_approved', { ...auditCtx(req), metadata: { eventId: job.id, token, packageId, totalCents: fees.totalCents } });
+
     res.json({ success: true, packageName: selectedPkg.name, totalCents: fees.totalCents });
   } catch (error: unknown) {
     logger.error('[catering] approve proposal error:', toErrorMessage(error));
@@ -934,6 +955,8 @@ router.post('/:merchantId/catering/events/:id/contract', async (req: Request, re
     });
 
     await logActivity(id, 'contract_uploaded', 'Contract document uploaded', 'operator');
+
+    await auditLog('catering_contract_uploaded', { ...auditCtx(req), metadata: { eventId: id, merchantId } });
 
     res.json(updated);
   } catch (error: unknown) {
@@ -1198,6 +1221,8 @@ publicRouter.post('/catering/lead/:merchantSlug', async (req: Request, res: Resp
 
     await logActivity(event.id, 'lead_submitted', `New inquiry submitted by ${parsed.clientName}`, 'client');
 
+    await auditLog('catering_lead_created', { ...auditCtx(req), metadata: { eventId: event.id, merchantId: restaurant.id, merchantSlug } });
+
     res.status(201).json({ success: true, eventId: event.id });
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
@@ -1248,6 +1273,9 @@ router.put('/:merchantId/catering/capacity', async (req: Request, res: Response)
         conflictAlertsEnabled: parsed.conflictAlertsEnabled,
       },
     });
+
+    await auditLog('catering_capacity_updated', { ...auditCtx(req), metadata: { merchantId, maxEventsPerDay: parsed.maxEventsPerDay, maxHeadcountPerDay: parsed.maxHeadcountPerDay } });
+
     res.json(settings);
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
@@ -1301,6 +1329,9 @@ router.post('/:merchantId/catering/packages', async (req, res) => {
         menuItemIds: parsed.menuItemIds,
       },
     });
+
+    await auditLog('catering_package_created', { ...auditCtx(req), metadata: { packageId: template.id, merchantId } });
+
     res.status(201).json(template);
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
@@ -1320,6 +1351,9 @@ router.patch('/:merchantId/catering/packages/:templateId', async (req, res) => {
       where: { id: templateId, merchantId },
       data: parsed,
     });
+
+    await auditLog('catering_package_updated', { ...auditCtx(req), metadata: { packageId: templateId, merchantId } });
+
     res.json(template);
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
@@ -1338,6 +1372,9 @@ router.delete('/:merchantId/catering/packages/:templateId', async (req, res) => 
       where: { id: templateId, merchantId },
       data: { isActive: false },
     });
+
+    await auditLog('catering_package_deleted', { ...auditCtx(req), metadata: { packageId: templateId, merchantId } });
+
     res.status(204).send();
   } catch (error: unknown) {
     logger.error('[catering] DELETE package template error:', toErrorMessage(error));

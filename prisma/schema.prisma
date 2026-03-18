@@ -1873,6 +1873,7 @@ model TeamMember {
   passwordChangedAt   DateTime?        @map("password_changed_at")
   mustChangePassword  Boolean          @default(false) @map("must_change_password")
   mfaEnabled          Boolean          @default(false) @map("mfa_enabled")
+  mfaGraceDeadline    DateTime?        @map("mfa_grace_deadline")
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
 

@@ -6,6 +6,8 @@ import { authService } from '../services/auth.service';
 import { broadcastToSourceAndKDS } from '../services/socket.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
 import { logger } from '../utils/logger';
+import { auditLog } from '../utils/audit';
+import { auditCtx } from '../utils/audit-context';
 
 const router = Router({ mergeParams: true });
 const prisma = new PrismaClient();
@@ -239,6 +241,7 @@ router.post('/:orderId/checks', async (req: Request, res: Response) => {
     });
 
     await fetchAndBroadcast(orderId, restaurantId);
+    await auditLog('check_created', { ...auditCtx(req), metadata: { orderId, checkId: check.id, restaurantId } });
     res.status(201).json(check);
   } catch (error: unknown) {
     logger.error('[Check] Error creating check:', error);
@@ -325,6 +328,7 @@ router.post('/:orderId/checks/:checkGuid/items', async (req: Request, res: Respo
     await recalculateOrderTotals(orderId);
     await fetchAndBroadcast(orderId, restaurantId);
 
+    await auditLog('check_item_added', { ...auditCtx(req), metadata: { orderId, checkId: checkGuid, itemId: item.id, menuItemName: data.menuItemName, quantity: data.quantity, totalPrice } });
     res.status(201).json(item);
   } catch (error: unknown) {
     logger.error('[Check] Error adding item:', error);
@@ -466,6 +470,7 @@ router.patch('/:orderId/checks/:checkGuid/split', async (req: Request, res: Resp
     await recalculateOrderTotals(orderId);
 
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
+    await auditLog('check_split', { ...auditCtx(req), metadata: { orderId, checkId: checkGuid, mode: data.mode } });
     res.json(enriched);
   } catch (error: unknown) {
     logger.error('[Check] Error splitting check:', error);
@@ -524,6 +529,7 @@ router.post('/:orderId/checks/:checkGuid/merge', async (req: Request, res: Respo
     await recalculateOrderTotals(orderId);
 
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
+    await auditLog('checks_merged', { ...auditCtx(req), metadata: { orderId, survivorCheckId: survivorId, mergedCheckIds: sourceIds } });
     res.json(enriched);
   } catch (error: unknown) {
     logger.error('[Check] Error merging checks:', error);
@@ -621,6 +627,7 @@ router.post('/:orderId/checks/:checkGuid/transfer', async (req: Request, res: Re
     await fetchAndBroadcast(orderId, restaurantId);
     const enriched = await fetchAndBroadcast(targetOrder.id, restaurantId);
 
+    await auditLog('check_transferred', { ...auditCtx(req), metadata: { orderId, checkId: checkGuid, targetOrderId: targetOrder.id, targetTableId } });
     res.json({ sourceOrderId: orderId, targetOrderId: targetOrder.id, enriched });
   } catch (error: unknown) {
     logger.error('[Check] Error transferring check:', error);
@@ -705,6 +712,7 @@ router.patch('/:orderId/checks/:checkGuid/items/:itemGuid/void', async (req: Req
     }
 
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
+    await auditLog('check_item_voided', { ...auditCtx(req), metadata: { orderId, checkId: checkGuid, itemId: itemGuid, menuItemName: item.menuItemName, reason, voidedBy, managerApproval } });
     res.json(enriched);
   } catch (error: unknown) {
     logger.error('[Check] Error voiding item:', error);
@@ -759,6 +767,7 @@ router.patch('/:orderId/checks/:checkGuid/items/:itemGuid/comp', async (req: Req
     await recalculateOrderTotals(orderId);
 
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
+    await auditLog('check_item_comped', { ...auditCtx(req), metadata: { orderId, checkId: checkGuid, itemId: itemGuid, menuItemName: item.menuItemName, reason, compBy, compApprovedBy } });
     res.json(enriched);
   } catch (error: unknown) {
     logger.error('[Check] Error comping item:', error);
@@ -814,6 +823,7 @@ router.post('/:orderId/checks/:checkGuid/discount', async (req: Request, res: Re
     await recalculateOrderTotals(orderId);
 
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
+    await auditLog('check_discount_applied', { ...auditCtx(req), metadata: { orderId, checkId: checkGuid, type, value, reason, appliedBy, approvedBy } });
     res.json(enriched);
   } catch (error: unknown) {
     logger.error('[Check] Error applying discount:', error);
@@ -852,6 +862,7 @@ router.post('/:orderId/preauth', async (req: Request, res: Response) => {
     });
 
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
+    await auditLog('tab_opened', { ...auditCtx(req), metadata: { orderId, checkId: checkGuid, tabName, preauthId } });
     res.json(enriched);
   } catch (error: unknown) {
     logger.error('[Check] Error opening tab:', error);
@@ -889,6 +900,7 @@ router.post('/:orderId/close-tab', async (req: Request, res: Response) => {
     });
 
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
+    await auditLog('tab_closed', { ...auditCtx(req), metadata: { orderId, checkId: checkGuid } });
     res.json(enriched);
   } catch (error: unknown) {
     logger.error('[Check] Error closing tab:', error);

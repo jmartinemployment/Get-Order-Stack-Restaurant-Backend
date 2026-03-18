@@ -5,6 +5,8 @@ import { DEFAULT_PERMISSION_SETS } from '../data/default-permission-sets';
 import { authService } from '../services/auth.service';
 import { requireAuth, optionalAuth } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
+import { auditLog } from '../utils/audit';
+import { auditCtx } from '../utils/audit-context';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -114,6 +116,7 @@ router.patch('/:merchantId/merchant-profile', async (req: Request, res: Response
       select: { merchantProfile: true, name: true },
     });
 
+    await auditLog('merchant_profile_updated', { ...auditCtx(req), metadata: { restaurantId } });
     res.json(restaurant.merchantProfile);
   } catch (error) {
     logger.error('Failed to save merchant profile:', error);
@@ -231,6 +234,7 @@ router.post('/:merchantId/apply-menu-template', async (req: Request, res: Respon
       }
     });
 
+    await auditLog('menu_template_applied', { ...auditCtx(req), metadata: { restaurantId, templateId } });
     res.json({ success: true, categoriesCreated: template.categories.length, itemsCreated: template.itemCount });
   } catch (error) {
     logger.error('Failed to apply menu template:', error);
@@ -266,6 +270,7 @@ router.post('/:merchantId/business-hours', async (req: Request, res: Response) =
       data: { businessHours: hours },
     });
 
+    await auditLog('business_hours_updated', { ...auditCtx(req), metadata: { restaurantId } });
     res.json({ success: true });
   } catch (error) {
     logger.error('Failed to save business hours:', error);
@@ -453,6 +458,7 @@ router.post('/restaurant', requireAuth, async (req: Request, res: Response) => {
       return r;
     });
 
+    await auditLog('onboarding_restaurant_created', { ...auditCtx(req), metadata: { restaurantId: restaurant.id, teamMemberId } });
     res.status(201).json({ restaurantId: restaurant.id, name: restaurant.name, slug: restaurant.slug });
   } catch (error) {
     logger.error('Create onboarding restaurant error:', { error });
@@ -522,6 +528,7 @@ router.patch('/restaurant/:id', requireAuth, async (req: Request, res: Response)
       data: { merchantProfile: { ...currentProfile, ...profileUpdates }, ...directUpdates } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     });
 
+    await auditLog('onboarding_restaurant_updated', { ...auditCtx(req), metadata: { restaurantId } });
     res.json({ success: true });
   } catch (error) {
     logger.error('Update onboarding restaurant error:', error);
@@ -592,6 +599,7 @@ router.post('/restaurant/:id/complete', requireAuth, async (req: Request, res: R
       });
     });
 
+    await auditLog('onboarding_completed', { ...auditCtx(req), metadata: { restaurantId, menuTemplateId: menuTemplateId ?? null } });
     res.status(200).json({ restaurantId: restaurant.id, name: restaurant.name, slug: restaurant.slug });
   } catch (error) {
     logger.error('Complete onboarding error:', error);
@@ -967,6 +975,8 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
 
       return { restaurant, teamMemberId, device };
     });
+
+    await auditLog('onboarding_completed', { ...auditCtx(req), metadata: { restaurantId: result.restaurant.id, teamMemberId: result.teamMemberId, deviceId: result.device.id } });
 
     if (isAuthenticated) {
       res.status(201).json(buildOnboardingResponse(result.restaurant, result.device.id, null));

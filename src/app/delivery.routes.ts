@@ -5,6 +5,8 @@ import { deliveryCredentialsService } from '../services/delivery-credentials.ser
 import { requireAuth, requireMerchantManager } from '../middleware/auth.middleware';
 import { toErrorMessage } from '../utils/errors';
 import { logger } from '../utils/logger';
+import { auditLog } from '../utils/audit';
+import { auditCtx } from '../utils/audit-context';
 
 const router = Router({ mergeParams: true });
 
@@ -102,6 +104,7 @@ router.put('/credentials/security-profile', requireAuth, requireMerchantManager,
       parsed.data.mode,
       req.user?.teamMemberId ?? null,
     );
+    await auditLog('delivery_security_profile_updated', { ...auditCtx(req), metadata: { merchantId: restaurantId, mode: parsed.data.mode } });
     res.json(profile);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to update credential security profile';
@@ -128,6 +131,7 @@ router.put('/credentials/doordash', requireAuth, requireMerchantManager, async (
       parsed.data,
       req.user?.teamMemberId ?? null,
     );
+    await auditLog('delivery_doordash_credentials_saved', { ...auditCtx(req), metadata: { merchantId: restaurantId, provider: 'doordash' } });
     res.json(summary);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to save DoorDash credentials';
@@ -147,6 +151,7 @@ router.delete('/credentials/doordash', requireAuth, requireMerchantManager, asyn
       restaurantId,
       req.user?.teamMemberId ?? null,
     );
+    await auditLog('delivery_doordash_credentials_deleted', { ...auditCtx(req), metadata: { merchantId: restaurantId, provider: 'doordash' } });
     res.json(summary);
   } catch (error: unknown) {
     logger.error('[Delivery] Delete DoorDash credentials error:', error);
@@ -168,6 +173,7 @@ router.put('/credentials/uber', requireAuth, requireMerchantManager, async (req:
       parsed.data,
       req.user?.teamMemberId ?? null,
     );
+    await auditLog('delivery_uber_credentials_saved', { ...auditCtx(req), metadata: { merchantId: restaurantId, provider: 'uber' } });
     res.json(summary);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to save Uber credentials';
@@ -187,6 +193,7 @@ router.delete('/credentials/uber', requireAuth, requireMerchantManager, async (r
       restaurantId,
       req.user?.teamMemberId ?? null,
     );
+    await auditLog('delivery_uber_credentials_deleted', { ...auditCtx(req), metadata: { merchantId: restaurantId, provider: 'uber' } });
     res.json(summary);
   } catch (error: unknown) {
     logger.error('[Delivery] Delete Uber credentials error:', error);
@@ -205,6 +212,7 @@ router.post('/quote', async (req: Request, res: Response) => {
 
     const { orderId, provider } = parsed.data;
     const quote = await deliveryService.requestQuote(orderId, provider);
+    await auditLog('delivery_quote_requested', { ...auditCtx(req), metadata: { merchantId: req.params.merchantId, orderId, provider } });
     res.json(quote);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to get delivery quote';
@@ -231,6 +239,7 @@ router.post('/dispatch', async (req: Request, res: Response) => {
 
     const { orderId, quoteId } = parsed.data;
     const result = await deliveryService.acceptQuote(orderId, quoteId);
+    await auditLog('delivery_dispatched', { ...auditCtx(req), metadata: { merchantId: req.params.merchantId, orderId, quoteId } });
     res.json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to dispatch delivery';
@@ -275,6 +284,7 @@ router.post('/:orderId/cancel', async (req: Request, res: Response) => {
       return;
     }
 
+    await auditLog('delivery_cancelled', { ...auditCtx(req), metadata: { merchantId: req.params.merchantId, orderId } });
     res.json({ success: true });
   } catch (error: unknown) {
     logger.error('[Delivery] Cancel error:', error);

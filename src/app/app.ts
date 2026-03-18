@@ -47,7 +47,7 @@ import publicMenuRoutes from './public-menu.routes';
 import { requireAuth } from '../middleware/auth.middleware';
 import { globalErrorHandler } from '../middleware/error-handler';
 import { requestLogger } from '../middleware/request-logger';
-import { csrfProtection } from '../middleware/csrf.middleware';
+import { csrfProtection, csrfGenerateToken, requireJsonContentType } from '../middleware/csrf.middleware';
 import { logger } from '../utils/logger';
 
 const app = express();
@@ -342,7 +342,14 @@ app.post('/api/webhooks/grubhub', express.raw({ type: 'application/json' }), asy
 app.use(express.json());
 
 // CSRF protection — after JSON parser, before routes (PCI DSS 6.5.9)
+app.use('/api/', requireJsonContentType);
 app.use('/api/', csrfProtection);
+
+// CSRF token endpoint — clients call this to get a token for state-changing requests
+app.get('/api/csrf-token', (req, res) => {
+  const token = csrfGenerateToken(req, res);
+  res.json({ csrfToken: token });
+});
 
 // Health check
 app.get('/health', (_req, res) => {

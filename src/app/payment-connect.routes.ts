@@ -1,20 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import Stripe from 'stripe';
 import { getSecret } from '../utils/secrets';
 import { logger } from '../utils/logger';
+import { auditLog } from '../utils/audit';
+import { auditCtx } from '../utils/audit-context';
 
 const router = Router({ mergeParams: true });
 const prisma = new PrismaClient();
-
-const stripeKey = getSecret('STRIPE_SECRET_KEY');
-if (!stripeKey) {
-  logger.warn('[Stripe Connect] STRIPE_SECRET_KEY is not set — Stripe Connect operations will fail');
-}
-
-const stripe = new Stripe(stripeKey, {
-  apiVersion: '2025-12-15.clover',
-});
 
 const PAYPAL_API_BASE = process.env.PAYPAL_MODE === 'live'
   ? 'https://api-m.paypal.com'
@@ -44,124 +36,6 @@ async function getPayPalAccessToken(): Promise<string> {
   const data = await response.json() as { access_token: string };
   return data.access_token;
 }
-
-// ============================================================
-// STRIPE CONNECT
-// ============================================================
-
-/**
- * POST /:merchantId/connect/stripe/create-account
- * Creates a Stripe Express connected account for the merchant.
- */
-router.post('/:merchantId/connect/stripe/create-account', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = req.params.merchantId;
-
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-    });
-
-    if (!restaurant) {
-      res.status(404).json({ error: 'Restaurant not found' });
-      return;
-    }
-
-    // If already has a connected account, return it
-    if (restaurant.stripeConnectedAccountId) {
-      res.json({ accountId: restaurant.stripeConnectedAccountId });
-      return;
-    }
-
-    const account = await stripe.accounts.create({
-      type: 'express',
-      metadata: {
-        restaurantId,
-        restaurantName: restaurant.name,
-      },
-      business_profile: {
-        name: restaurant.name,
-      },
-    });
-
-    await prisma.restaurant.update({
-      where: { id: restaurantId },
-      data: {
-        stripeConnectedAccountId: account.id,
-        paymentProcessor: 'stripe',
-      },
-    });
-
-    logger.info(`[Stripe Connect] Created account ${account.id} for restaurant ${restaurant.name}`);
-    res.json({ accountId: account.id });
-  } catch (error: unknown) {
-    logger.error('[Stripe Connect] Error creating account:', error);
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create Stripe account' });
-  }
-});
-
-/**
- * POST /:merchantId/connect/stripe/account-link
- * Creates a one-time Stripe Account Link for hosted onboarding.
- */
-router.post('/:merchantId/connect/stripe/account-link', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = req.params.merchantId;
-    const { returnUrl, refreshUrl } = req.body as { returnUrl?: string; refreshUrl?: string };
-
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-    });
-
-    if (!restaurant?.stripeConnectedAccountId) {
-      res.status(400).json({ error: 'No Stripe account found. Create one first.' });
-      return;
-    }
-
-    const accountLink = await stripe.accountLinks.create({
-      account: restaurant.stripeConnectedAccountId,
-      return_url: returnUrl ?? `${process.env.FRONTEND_URL ?? 'http://localhost:4200'}/setup?stripe=complete`,
-      refresh_url: refreshUrl ?? `${process.env.FRONTEND_URL ?? 'http://localhost:4200'}/setup?stripe=refresh`,
-      type: 'account_onboarding',
-    });
-
-    res.json({ url: accountLink.url });
-  } catch (error: unknown) {
-    logger.error('[Stripe Connect] Error creating account link:', error);
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create account link' });
-  }
-});
-
-/**
- * GET /:merchantId/connect/stripe/status
- * Returns the Stripe connected account's onboarding status.
- */
-router.get('/:merchantId/connect/stripe/status', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = req.params.merchantId;
-
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-    });
-
-    if (!restaurant?.stripeConnectedAccountId) {
-      res.json({ status: 'none' });
-      return;
-    }
-
-    const account = await stripe.accounts.retrieve(restaurant.stripeConnectedAccountId);
-
-    res.json({
-      status: account.charges_enabled ? 'connected' : 'pending',
-      chargesEnabled: account.charges_enabled,
-      detailsSubmitted: account.details_submitted,
-      payoutsEnabled: account.payouts_enabled,
-      accountId: account.id,
-    });
-  } catch (error: unknown) {
-    logger.error('[Stripe Connect] Error retrieving status:', error);
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to retrieve account status' });
-  }
-});
 
 // ============================================================
 // PAYPAL PARTNER REFERRALS
@@ -242,6 +116,7 @@ router.post('/:merchantId/connect/paypal/create-referral', async (req: Request, 
     }
 
     logger.info(`[PayPal Connect] Created referral for restaurant ${restaurant.name}`);
+    await auditLog('payment_paypal_onboarding_started', { ...auditCtx(req), metadata: { restaurantId } });
     res.json({ actionUrl });
   } catch (error: unknown) {
     logger.error('[PayPal Connect] Error creating referral:', error);
@@ -334,6 +209,7 @@ router.post('/:merchantId/connect/paypal/complete', async (req: Request, res: Re
     });
 
     logger.info(`[PayPal Connect] Merchant ${merchantId} linked to restaurant ${restaurant.name}`);
+    await auditLog('payment_paypal_connected', { ...auditCtx(req), metadata: { restaurantId, paypalMerchantId: merchantId } });
     res.json({ success: true, merchantId });
   } catch (error: unknown) {
     logger.error('[PayPal Connect] Error completing connection:', error);

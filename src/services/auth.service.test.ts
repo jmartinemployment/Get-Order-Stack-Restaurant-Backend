@@ -347,9 +347,9 @@ describe('loginUser — account lockout after failed attempts', () => {
     lastName: 'User',
   };
 
-  it('returns locked-account error when failed attempt count reaches 10', async () => {
+  it('returns locked-account error when failed attempt count reaches 6', async () => {
     mockPrismaTeamMember.findUnique.mockResolvedValue(activeUser);
-    mockPrismaAuditLog.count.mockResolvedValue(10);
+    mockPrismaAuditLog.count.mockResolvedValue(6);
 
     const result = await authService.loginUser('user@test.com', 'SomePassword1!');
 
@@ -359,9 +359,9 @@ describe('loginUser — account lockout after failed attempts', () => {
     expect(mockPrismaUserSession.create).not.toHaveBeenCalled();
   });
 
-  it('allows login when failed attempt count is below the lockout threshold of 10', async () => {
+  it('allows login when failed attempt count is below the lockout threshold of 6', async () => {
     mockPrismaTeamMember.findUnique.mockResolvedValue(activeUser);
-    mockPrismaAuditLog.count.mockResolvedValue(9);
+    mockPrismaAuditLog.count.mockResolvedValue(5);
     mockPrismaUserSession.create.mockResolvedValue({
       id: 'sess-new', token: 'session-token', isActive: true, createdAt: new Date(),
     });

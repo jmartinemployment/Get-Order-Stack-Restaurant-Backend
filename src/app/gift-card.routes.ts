@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
 import { logger } from '../utils/logger';
+import { auditLog } from '../utils/audit';
+import { auditCtx } from '../utils/audit-context';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
@@ -82,6 +84,7 @@ router.post('/:merchantId/gift-cards', async (req: Request, res: Response) => {
         recipientEmail: parsed.data.recipientEmail,
       },
     });
+    await auditLog('gift_card_created', { ...auditCtx(req), metadata: { giftCardId: card.id, merchantId: restaurantId, type: parsed.data.type, initialBalance: parsed.data.initialBalance } });
     res.status(201).json(card);
   } catch (error: unknown) {
     logger.error('[GiftCard] Create error:', error);
@@ -148,6 +151,7 @@ router.post('/:merchantId/gift-cards/redeem', async (req: Request, res: Response
       return { card: updatedCard, redemption };
     });
 
+    await auditLog('gift_card_redeemed', { ...auditCtx(req), metadata: { giftCardId: result.card.id, merchantId: req.params.merchantId, amount: parsed.data.amount, orderId: parsed.data.orderId } });
     res.json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Redemption failed';
@@ -174,6 +178,7 @@ router.patch('/:merchantId/gift-cards/:cardId', async (req: Request, res: Respon
       where: { id: cardId, restaurantId },
       data: { status: parsed.data.status },
     });
+    await auditLog('gift_card_status_updated', { ...auditCtx(req), metadata: { giftCardId: cardId, merchantId: restaurantId, status: parsed.data.status } });
     res.json(card);
   } catch (error: unknown) {
     if ((error as { code?: string }).code === 'P2025') {

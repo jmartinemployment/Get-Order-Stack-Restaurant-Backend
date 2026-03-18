@@ -36,14 +36,6 @@ vi.mock('../services/order-status.service', () => ({
   updateOrderStatus: vi.fn().mockResolvedValue({ success: true }),
   getOrderStatusHistory: vi.fn().mockResolvedValue([]),
 }));
-vi.mock('../services/stripe.service', () => ({
-  stripeService: {
-    createPaymentIntent: vi.fn().mockResolvedValue({ success: true, clientSecret: 'pi_test_secret', paymentIntentId: 'pi_test' }),
-    getPaymentIntent: vi.fn().mockResolvedValue({ success: true, paymentIntent: { status: 'succeeded', amount: 1000, currency: 'usd' } }),
-    cancelPaymentIntent: vi.fn().mockResolvedValue({ success: true }),
-    createRefund: vi.fn().mockResolvedValue({ success: true, refund: { id: 're_test', amount: 1000, status: 'succeeded' } }),
-  },
-}));
 vi.mock('../services/paypal.service', () => ({
   paypalService: {
     createOrder: vi.fn().mockResolvedValue({ success: true, paypalOrderId: 'PP-ORDER-123' }),
@@ -215,9 +207,8 @@ const MOCK_ORDER = {
   table: null,
   marketplaceOrder: null,
   paymentStatus: 'paid',
-  paymentMethod: 'stripe',
-  stripePaymentIntentId: 'pi_test_123',
-  paypalOrderId: null,
+  paymentMethod: 'paypal',
+  paypalOrderId: 'PP-ORDER-123',
   paypalCaptureId: null,
   sourceDeviceId: null,
 };
@@ -1306,27 +1297,6 @@ describe('DELETE /api/merchant/:merchantId/orders/:orderId', () => {
 
 // ============ Payments ============
 
-describe('POST /api/merchant/:merchantId/orders/:orderId/payment-intent', () => {
-  const url = `${R_URL}/orders/${ORDER_ID}/payment-intent`;
-
-  it('returns 404 when order not found', async () => {
-    prisma.order.findUnique.mockResolvedValue(null);
-
-    const res = await api.owner.post(url);
-    expect(res.status).toBe(404);
-    expect(res.body.error).toBe('Order not found');
-  });
-
-  it('creates a Stripe payment intent', async () => {
-    prisma.order.findUnique.mockResolvedValue(MOCK_ORDER);
-
-    const res = await api.owner.post(url);
-    expect(res.status).toBe(200);
-    expect(res.body.clientSecret).toBe('pi_test_secret');
-    expect(res.body.paymentIntentId).toBe('pi_test');
-  });
-});
-
 describe('POST /api/merchant/:merchantId/orders/:orderId/paypal-create', () => {
   const url = `${R_URL}/orders/${ORDER_ID}/paypal-create`;
 
@@ -1385,32 +1355,12 @@ describe('GET /api/merchant/:merchantId/orders/:orderId/payment-status', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns Stripe payment status', async () => {
-    prisma.order.findUnique.mockResolvedValue({
-      id: ORDER_ID,
-      orderNumber: 'ORD-TEST-001',
-      paymentStatus: 'paid',
-      paymentMethod: 'stripe',
-      stripePaymentIntentId: 'pi_test_123',
-      paypalOrderId: null,
-      paypalCaptureId: null,
-      total: 27.8,
-    });
-
-    const res = await api.owner.get(url);
-    expect(res.status).toBe(200);
-    expect(res.body.paymentStatus).toBe('paid');
-    expect(res.body.processorData.processor).toBe('stripe');
-    expect(res.body.processorData.status).toBe('succeeded');
-  });
-
   it('returns PayPal payment status', async () => {
     prisma.order.findUnique.mockResolvedValue({
       id: ORDER_ID,
       orderNumber: 'ORD-TEST-001',
       paymentStatus: 'paid',
       paymentMethod: 'paypal',
-      stripePaymentIntentId: null,
       paypalOrderId: 'PP-ORDER-123',
       paypalCaptureId: null,
       total: 27.8,
@@ -1436,7 +1386,6 @@ describe('POST /api/merchant/:merchantId/orders/:orderId/cancel-payment', () => 
   it('returns 400 when no payment exists', async () => {
     prisma.order.findUnique.mockResolvedValue({
       ...MOCK_ORDER,
-      stripePaymentIntentId: null,
       paypalOrderId: null,
     });
 
@@ -1445,7 +1394,7 @@ describe('POST /api/merchant/:merchantId/orders/:orderId/cancel-payment', () => 
     expect(res.body.error).toBe('No payment found for this order');
   });
 
-  it('cancels a Stripe payment', async () => {
+  it('cancels a PayPal payment', async () => {
     prisma.order.findUnique.mockResolvedValue(MOCK_ORDER);
     prisma.order.update.mockResolvedValue({ ...MOCK_ORDER, paymentStatus: 'cancelled' });
 
@@ -1476,7 +1425,6 @@ describe('POST /api/merchant/:merchantId/orders/:orderId/refund', () => {
   it('returns 400 when no refundable payment exists', async () => {
     prisma.order.findUnique.mockResolvedValue({
       ...MOCK_ORDER,
-      stripePaymentIntentId: null,
       paypalCaptureId: null,
     });
 
@@ -1485,20 +1433,9 @@ describe('POST /api/merchant/:merchantId/orders/:orderId/refund', () => {
     expect(res.body.error).toBe('No refundable payment found for this order');
   });
 
-  it('processes a Stripe full refund', async () => {
-    prisma.order.findUnique.mockResolvedValue(MOCK_ORDER);
-    prisma.order.update.mockResolvedValue({ ...MOCK_ORDER, paymentStatus: 'refunded' });
-
-    const res = await api.owner.post(url).send({});
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.refundId).toBe('re_test');
-  });
-
   it('processes a PayPal refund', async () => {
     prisma.order.findUnique.mockResolvedValue({
       ...MOCK_ORDER,
-      stripePaymentIntentId: null,
       paypalCaptureId: 'PP-CAPTURE-123',
     });
     prisma.order.update.mockResolvedValue({ ...MOCK_ORDER, paymentStatus: 'partial_refund' });

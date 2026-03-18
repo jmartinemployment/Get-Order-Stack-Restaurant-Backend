@@ -9,6 +9,8 @@ import {
   PointsAdjustmentSchema,
 } from '../validators/loyalty.validator';
 import { logger } from '../utils/logger';
+import { auditLog } from '../utils/audit';
+import { auditCtx } from '../utils/audit-context';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -42,6 +44,7 @@ router.patch('/:merchantId/loyalty/config', async (req: Request, res: Response) 
     }
 
     const config = await loyaltyService.updateConfig(restaurantId, parsed.data);
+    await auditLog('loyalty_config_updated', { ...auditCtx(req), metadata: { merchantId: restaurantId } });
     res.json(config);
   } catch (error: unknown) {
     logger.error('[Loyalty] Error updating config:', error);
@@ -86,6 +89,7 @@ router.post('/:merchantId/loyalty/rewards', async (req: Request, res: Response) 
         ...parsed.data,
       },
     });
+    await auditLog('loyalty_reward_created', { ...auditCtx(req), metadata: { rewardId: reward.id, merchantId: restaurantId } });
     res.status(201).json(reward);
   } catch (error: unknown) {
     logger.error('[Loyalty] Error creating reward:', error);
@@ -111,6 +115,7 @@ router.patch('/:merchantId/loyalty/rewards/:rewardId', async (req: Request, res:
       where: { id: rewardId },
       data: parsed.data,
     });
+    await auditLog('loyalty_reward_updated', { ...auditCtx(req), metadata: { rewardId, merchantId: req.params.merchantId } });
     res.json(reward);
   } catch (error: unknown) {
     logger.error('[Loyalty] Error updating reward:', error);
@@ -126,6 +131,7 @@ router.delete('/:merchantId/loyalty/rewards/:rewardId', async (req: Request, res
       where: { id: rewardId },
       data: { isActive: false },
     });
+    await auditLog('loyalty_reward_deleted', { ...auditCtx(req), metadata: { rewardId, merchantId: req.params.merchantId } });
     res.status(204).send();
   } catch (error: unknown) {
     logger.error('[Loyalty] Error deleting reward:', error);
@@ -184,6 +190,7 @@ router.post('/:merchantId/customers/:customerId/loyalty/adjust', async (req: Req
       parsed.data.reason,
       restaurantId,
     );
+    await auditLog('loyalty_points_adjusted', { ...auditCtx(req), metadata: { customerId, merchantId: restaurantId, points: parsed.data.points, reason: parsed.data.reason } });
     res.json(customer);
   } catch (error: unknown) {
     logger.error('[Loyalty] Error adjusting points:', error);
@@ -262,6 +269,7 @@ router.put('/:merchantId/referrals/config', async (req: Request, res: Response) 
       create: { restaurantId, enabled, referrerReward, refereeReward, maxReferrals },
       update: { enabled, referrerReward, refereeReward, maxReferrals },
     });
+    await auditLog('referral_config_updated', { ...auditCtx(req), metadata: { merchantId: restaurantId, enabled } });
     res.json({
       enabled: config.enabled,
       referrerReward: config.referrerReward,

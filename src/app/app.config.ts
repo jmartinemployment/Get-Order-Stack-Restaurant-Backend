@@ -1,3 +1,5 @@
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
 // Allowed origins for CORS - trim whitespace from env var values
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
@@ -9,42 +11,30 @@ const allowedOrigins = process.env.CORS_ORIGINS
     'http://127.0.0.1:8081',
     'http://127.0.0.1:8082',
     // Production deployments
-    'https://geekatyourspot.com',
-    'https://www.geekatyourspot.com',
-    // Vercel deployments
+    'https://getorderstack.com',
+    'https://www.getorderstack.com',
+    // Vercel deployments (exact match only — no wildcards)
     'https://get-order-stack-restaurant-mobile-j.vercel.app',
     'https://get-order-stack-restaurant-mobile.vercel.app',
   ];
 
-// Dynamic CORS origin checker - allows Expo dev servers and listed origins
+// Dynamic CORS origin checker
 const corsOriginChecker = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-  // Allow requests with no origin (mobile apps, Postman, etc.)
+  // Requests with no origin (mobile apps, Postman, server-to-server):
+  // In production, reject to prevent anonymous cross-origin access.
+  // In development, allow for Postman / cURL / mobile testing.
   if (!origin) {
-    callback(null, true);
+    callback(null, !IS_PRODUCTION);
     return;
   }
 
-  // Check if origin is in allowed list
+  // Check if origin is in allowed list (exact match only)
   if (allowedOrigins.includes(origin)) {
     callback(null, true);
     return;
   }
 
-  // Allow Expo development servers (*.exp.direct)
-  if (origin.endsWith('.exp.direct')) {
-    callback(null, true);
-    return;
-  }
-
-  // Allow specific Vercel deployments (not all *.vercel.app)
-  if (origin.endsWith('.vercel.app')
-    && (origin.includes('get-order-stack-restaurant-mobile')
-      || origin.includes('orderstack'))) {
-    callback(null, true);
-    return;
-  }
-
-  // Reject other origins
+  // Reject all other origins
   callback(null, false);
 };
 

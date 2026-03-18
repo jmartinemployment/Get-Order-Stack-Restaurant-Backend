@@ -15,25 +15,6 @@ vi.mock('../services/auth.service', async (importOriginal) => {
   };
 });
 
-// Mock Stripe — must be a real constructor class (not just a function)
-vi.mock('stripe', () => {
-  class MockStripe {
-    accounts = {
-      create: vi.fn().mockResolvedValue({ id: 'acct_test123' }),
-      retrieve: vi.fn().mockResolvedValue({
-        id: 'acct_test123',
-        charges_enabled: true,
-        details_submitted: true,
-        payouts_enabled: true,
-      }),
-    };
-    accountLinks = {
-      create: vi.fn().mockResolvedValue({ url: 'https://connect.stripe.com/setup/test' }),
-    };
-  }
-  return { default: MockStripe };
-});
-
 // Mock global fetch for PayPal API calls
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -52,99 +33,6 @@ beforeEach(() => {
 });
 
 const BASE_URL = `/api/merchant/${RESTAURANT_ID}/connect`;
-
-// ============ Stripe Connect ============
-
-describe('POST /connect/stripe/create-account', () => {
-  it('returns 401 without auth', async () => {
-    const res = await api.anonymous().post(`${BASE_URL}/stripe/create-account`);
-    expect(res.status).toBe(401);
-  });
-
-  it('creates a new Stripe account', async () => {
-    prisma.restaurant.findUnique.mockResolvedValue({
-      id: RESTAURANT_ID,
-      name: 'Test Restaurant',
-      stripeConnectedAccountId: null,
-    });
-    prisma.restaurant.update.mockResolvedValue({});
-
-    const res = await api.owner.post(`${BASE_URL}/stripe/create-account`);
-    expect(res.status).toBe(200);
-    expect(res.body.accountId).toBe('acct_test123');
-  });
-
-  it('returns existing account if already connected', async () => {
-    prisma.restaurant.findUnique.mockResolvedValue({
-      id: RESTAURANT_ID,
-      name: 'Test Restaurant',
-      stripeConnectedAccountId: 'acct_existing',
-    });
-
-    const res = await api.owner.post(`${BASE_URL}/stripe/create-account`);
-    expect(res.status).toBe(200);
-    expect(res.body.accountId).toBe('acct_existing');
-  });
-
-  it('returns 404 when restaurant not found', async () => {
-    prisma.restaurant.findUnique.mockResolvedValue(null);
-
-    const res = await api.owner.post(`${BASE_URL}/stripe/create-account`);
-    expect(res.status).toBe(404);
-  });
-});
-
-describe('POST /connect/stripe/account-link', () => {
-  it('creates an account link', async () => {
-    prisma.restaurant.findUnique.mockResolvedValue({
-      id: RESTAURANT_ID,
-      stripeConnectedAccountId: 'acct_test123',
-    });
-
-    const res = await api.owner.post(`${BASE_URL}/stripe/account-link`).send({
-      returnUrl: 'https://example.com/return',
-      refreshUrl: 'https://example.com/refresh',
-    });
-    expect(res.status).toBe(200);
-    expect(res.body.url).toContain('stripe.com');
-  });
-
-  it('returns 400 when no Stripe account exists', async () => {
-    prisma.restaurant.findUnique.mockResolvedValue({
-      id: RESTAURANT_ID,
-      stripeConnectedAccountId: null,
-    });
-
-    const res = await api.owner.post(`${BASE_URL}/stripe/account-link`);
-    expect(res.status).toBe(400);
-    expect(res.body.error).toContain('No Stripe account found');
-  });
-});
-
-describe('GET /connect/stripe/status', () => {
-  it('returns connected status', async () => {
-    prisma.restaurant.findUnique.mockResolvedValue({
-      id: RESTAURANT_ID,
-      stripeConnectedAccountId: 'acct_test123',
-    });
-
-    const res = await api.owner.get(`${BASE_URL}/stripe/status`);
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe('connected');
-    expect(res.body.chargesEnabled).toBe(true);
-  });
-
-  it('returns none when no account', async () => {
-    prisma.restaurant.findUnique.mockResolvedValue({
-      id: RESTAURANT_ID,
-      stripeConnectedAccountId: null,
-    });
-
-    const res = await api.owner.get(`${BASE_URL}/stripe/status`);
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe('none');
-  });
-});
 
 // ============ PayPal Partner Referrals ============
 

@@ -1,57 +1,77 @@
 import { Request, Response, NextFunction } from 'express';
-import crypto from 'node:crypto';
+import { doubleCsrf } from 'csrf-csrf';
 import { logger } from '../utils/logger';
 
-const CSRF_COOKIE = 'XSRF-TOKEN';
-const CSRF_HEADER = 'x-xsrf-token';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-// Safe HTTP methods that don't need CSRF validation
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-
-/**
- * CSRF protection via double-submit cookie pattern (PCI DSS 6.5.9).
- *
- * 1. On every response, set a non-HttpOnly XSRF-TOKEN cookie (JS-readable).
- * 2. Angular's HttpClient reads this cookie and sends it as X-XSRF-TOKEN header.
- * 3. On state-changing requests (POST/PUT/PATCH/DELETE), verify header matches cookie.
- *
- * An attacker on a different origin cannot read our cookie, so they cannot forge the header.
- */
-export function csrfProtection(req: Request, res: Response, next: NextFunction): void {
-  // Generate or read existing CSRF token
-  let csrfToken = req.cookies?.[CSRF_COOKIE] as string | undefined;
-
-  if (!csrfToken) {
-    csrfToken = crypto.randomBytes(32).toString('hex');
-  }
-
-  // Always set/refresh the cookie so the frontend can read it
-  res.cookie(CSRF_COOKIE, csrfToken, {
-    httpOnly: false, // Must be readable by JS (Angular reads it)
+// Double-submit cookie CSRF protection (PCI DSS 6.5.9).
+// The csrf-csrf library sets a signed cookie and validates the x-csrf-token header
+// against it on every state-changing request.
+const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
+  getSecret: () => {
+    const secret = process.env.CSRF_SECRET;
+    if (!secret) throw new Error('CSRF_SECRET environment variable is not set');
+    return secret;
+  },
+  getSessionIdentifier: (req) => (req as Request).cookies?.os_auth ?? 'anonymous',
+  cookieName: 'os_csrf',
+  cookieOptions: {
+    httpOnly: true,
     secure: IS_PRODUCTION,
     sameSite: IS_PRODUCTION ? 'none' : 'lax',
-    path: '/',
-  });
+    path: '/api',
+  },
+  getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string | undefined,
+});
 
-  // Skip validation for safe methods
-  if (SAFE_METHODS.has(req.method)) {
-    next();
-    return;
-  }
-
-  // Skip CSRF for webhook endpoints (they use their own signature verification)
+/**
+ * CSRF double-submit cookie middleware.
+ * Skips webhook paths (they use their own signature verification).
+ */
+export function csrfProtection(req: Request, res: Response, next: NextFunction): void {
+  // Webhooks verify authenticity via HMAC signatures — CSRF tokens are inapplicable
   if (req.path.startsWith('/api/webhooks/')) {
     next();
     return;
   }
 
-  // Validate: header must match cookie
-  const headerToken = req.headers[CSRF_HEADER] as string | undefined;
+  doubleCsrfProtection(req, res, (err?: unknown) => {
+    if (err) {
+      logger.warn('[CSRF] Token validation failed', { path: req.path, method: req.method });
+      res.status(403).json({ error: 'Invalid or missing CSRF token' });
+      return;
+    }
+    next();
+  });
+}
 
-  if (!headerToken || headerToken !== csrfToken) {
-    logger.warn('[CSRF] Token mismatch', { path: req.path, method: req.method });
-    res.status(403).json({ error: 'CSRF token validation failed' });
+/**
+ * Generate a CSRF token for the current session and set the cookie.
+ */
+export function csrfGenerateToken(req: Request, res: Response): string {
+  return generateCsrfToken(req, res);
+}
+
+/**
+ * Defense-in-depth: require Content-Type: application/json on state-changing requests.
+ * This prevents CSRF via cross-origin form submissions even if the CSRF token is bypassed.
+ */
+export function requireJsonContentType(req: Request, res: Response, next: NextFunction): void {
+  const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+  if (SAFE_METHODS.has(req.method)) {
+    next();
+    return;
+  }
+
+  if (req.path.startsWith('/api/webhooks/')) {
+    next();
+    return;
+  }
+
+  const contentType = req.headers['content-type'] ?? '';
+  if (!contentType.includes('application/json')) {
+    logger.warn('[CSRF] Rejected non-JSON content type', { path: req.path, method: req.method, contentType });
+    res.status(403).json({ error: 'Content-Type application/json required' });
     return;
   }
 

@@ -8,6 +8,7 @@ import { auditLog } from '../utils/audit';
 import { logger } from '../utils/logger';
 import { disableInactiveAccounts } from '../jobs/account-maintenance';
 import { mfaService } from '../services/mfa.service';
+import { trackPasswordResetRequest, trackMfaFailed } from '../services/security-alert.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -161,7 +162,11 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
     setAuthCookie(res, result.token!);
     res.json({
       user: result.user,
-      restaurants: result.restaurants
+      restaurants: result.restaurants,
+      ...(result.mfaEnrollmentRequired ? {
+        mfaEnrollmentRequired: true,
+        mfaGraceDeadline: result.mfaGraceDeadline,
+      } : {}),
     });
   } catch (error) {
     logger.error('Login error:', { error });
@@ -181,6 +186,7 @@ router.post('/forgot-password', authRateLimiter, async (req: Request, res: Respo
 
     // Always returns success — anti-enumeration (never reveal if email exists)
     await authService.requestPasswordReset(email);
+    trackPasswordResetRequest(req.ip ?? 'unknown', email);
     res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
   } catch (error) {
     logger.error('Forgot password error:', { error });
@@ -876,6 +882,7 @@ router.post('/mfa/challenge', async (req: Request, res: Response) => {
     const isValid = await mfaService.verifyCode(payload.teamMemberId, code);
     if (!isValid) {
       await auditLog('mfa_challenge_failed', { userId: payload.teamMemberId, ip: req.ip });
+      trackMfaFailed(payload.teamMemberId, req.ip ?? undefined);
       res.status(401).json({ error: 'Invalid MFA code' });
       return;
     }
@@ -947,8 +954,16 @@ router.post('/mfa/challenge', async (req: Request, res: Response) => {
 });
 
 // Disable MFA — requires password verification
+// PCI DSS 8.4.2: Privileged roles (super_admin, owner, manager) cannot disable MFA.
 router.post('/mfa/disable', requireAuth, authRateLimiter, async (req: Request, res: Response) => {
   try {
+    // Block MFA disable for roles that require it
+    const MFA_REQUIRED_ROLES = ['super_admin', 'owner', 'manager'];
+    if (MFA_REQUIRED_ROLES.includes(req.user!.role)) {
+      res.status(403).json({ error: 'MFA is required for your role and cannot be disabled.' });
+      return;
+    }
+
     const { password } = req.body;
     if (!password) {
       res.status(400).json({ error: 'Password is required to disable MFA' });

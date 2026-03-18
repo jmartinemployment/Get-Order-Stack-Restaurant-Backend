@@ -21,10 +21,6 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false
       - key: DELIVERY_CREDENTIALS_ENCRYPTION_KEY
         sync: false
       - key: PAYPAL_CLIENT_ID
@@ -46,4 +42,6 @@ services:
       - key: RESEND_API_KEY
         sync: false
       - key: MFA_ENCRYPTION_KEY
+        sync: false
+      - key: CSRF_SECRET
         sync: false

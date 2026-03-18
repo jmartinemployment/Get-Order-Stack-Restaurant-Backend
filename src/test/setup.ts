@@ -4,8 +4,6 @@ import { vi, beforeEach } from 'vitest';
 process.env.JWT_SECRET = 'test-secret-key-for-integration-tests';
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
-process.env.STRIPE_SECRET_KEY = 'sk_test_fake_key_for_integration_tests';
-process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_fake';
 process.env.DELIVERY_CREDENTIALS_ENCRYPTION_KEY = 'test-encryption-key-32-chars-long!';
 process.env.PAYPAL_CLIENT_ID = 'test-paypal-client-id';
 process.env.PAYPAL_CLIENT_SECRET = 'test-paypal-client-secret';
@@ -83,29 +81,6 @@ vi.mock('@prisma/client', () => {
   return {
     PrismaClient: MockPrismaClient,
   };
-});
-
-// Mock Stripe to prevent API key validation
-vi.mock('stripe', () => {
-  class MockStripe {
-    paymentIntents = {
-      create: vi.fn().mockResolvedValue({ id: 'pi_test', client_secret: 'secret' }),
-      retrieve: vi.fn().mockResolvedValue({ id: 'pi_test' }),
-    };
-    accounts = {
-      create: vi.fn().mockResolvedValue({ id: 'acct_test' }),
-    };
-    accountLinks = {
-      create: vi.fn().mockResolvedValue({ url: 'https://connect.stripe.com/test' }),
-    };
-    webhooks = {
-      constructEvent: vi.fn(),
-    };
-    subscriptions = {
-      create: vi.fn().mockResolvedValue({ id: 'sub_test' }),
-    };
-  }
-  return { default: MockStripe };
 });
 
 // Mock express-rate-limit — prevents 429 during test runs

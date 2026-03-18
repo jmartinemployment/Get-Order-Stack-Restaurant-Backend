@@ -2312,9 +2312,6 @@ router.delete('/:merchantId/orders/:orderId', async (req: Request, res: Response
 
 // ============ Payments ============
 
-// Stripe payment-intent endpoint removed — Stripe discontinued.
-// PayPal Commerce Platform is the sole payment provider.
-
 // Create PayPal order for an order
 router.post('/:merchantId/orders/:orderId/paypal-create', async (req: Request, res: Response) => {
   try {
@@ -2407,7 +2404,6 @@ router.get('/:merchantId/orders/:orderId/payment-status', async (req: Request, r
         orderNumber: true,
         paymentStatus: true,
         paymentMethod: true,
-        stripePaymentIntentId: true,
         paypalOrderId: true,
         paypalCaptureId: true,
         total: true,
