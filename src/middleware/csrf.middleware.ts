@@ -99,9 +99,10 @@ export function requireJsonContentType(req: Request, res: Response, next: NextFu
   }
 
   const contentType = req.headers['content-type'] ?? '';
-  if (!contentType.includes('application/json')) {
+  // Allow application/json (API calls) and multipart/form-data (file uploads)
+  if (!contentType.includes('application/json') && !contentType.includes('multipart/form-data')) {
     logger.warn('[CSRF] Rejected non-JSON content type', { path: req.path, method: req.method, contentType });
-    res.status(403).json({ error: 'Content-Type application/json required' });
+    res.status(403).json({ error: 'Content-Type application/json or multipart/form-data required' });
     return;
   }
 
