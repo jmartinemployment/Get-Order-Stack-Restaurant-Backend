@@ -29,7 +29,7 @@ model Restaurant {
   monthlyRevenue   Decimal? @db.Decimal(10, 2) @map("monthly_revenue")
   deliveryPercent  Int?     @map("delivery_percentage")
   platformsUsed    String[] @default([]) @map("platforms_used")
-  posSystem        String?  @map("pos_system")
+  posSystem        String?  @default("OrderStack") @map("pos_system")
   taxRate          Decimal  @default(0) @db.Decimal(5, 4) @map("tax_rate")
   deliveryEnabled  Boolean  @default(false) @map("delivery_enabled")
   pickupEnabled    Boolean  @default(false) @map("pickup_enabled")
