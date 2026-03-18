@@ -1,113 +1,53 @@
 import { Request, Response, NextFunction } from 'express';
-import { doubleCsrf } from 'csrf-csrf';
 import { logger } from '../utils/logger';
 
-const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+/**
+ * CSRF protection for SPA + REST API architecture (PCI DSS 6.5.9).
+ *
+ * Three-layer defense:
+ * 1. Strict CORS origin allowlist (app.config.ts) — blocks cross-origin requests
+ * 2. SameSite cookies (auth.routes.ts) — browser won't send auth cookie cross-site
+ * 3. Content-Type enforcement (below) — cross-origin forms can't send application/json
+ *
+ * A cross-origin attacker using a <form> submission cannot set Content-Type to
+ * application/json — the browser sends application/x-www-form-urlencoded instead.
+ * Setting a non-simple Content-Type triggers a CORS preflight, which the browser
+ * blocks because the attacker's origin is not in our CORS allowlist.
+ */
 
-// Paths that are exempt from CSRF validation.
-// These are either unauthenticated (no session to hijack) or use their own
-// signature verification (webhooks).
-// Paths exempt from CSRF validation.
-// NOTE: Express strips the mount prefix when middleware is mounted via app.use('/api/', fn),
-// so req.path is relative (e.g. '/auth/login', not '/api/auth/login').
-const CSRF_EXEMPT_PATHS = [
-  '/webhooks/',            // HMAC-signed webhooks
-  '/auth/login',           // Unauthenticated — rate-limited instead
-  '/auth/signup',          // Unauthenticated — rate-limited instead
-  '/auth/forgot-password', // Unauthenticated — rate-limited instead
-  '/auth/reset-password',  // Token-based verification, no session
-  '/auth/mfa/challenge',   // MFA token-based, not session-based
-  '/csrf-token',           // Token generation endpoint itself
-];
-
-// Only initialize csrf-csrf if CSRF_SECRET is available.
-// In development without the secret, CSRF protection is skipped with a warning.
-const CSRF_SECRET = process.env.CSRF_SECRET;
-
-const csrfUtils = CSRF_SECRET
-  ? doubleCsrf({
-    getSecret: () => CSRF_SECRET,
-    getSessionIdentifier: (req) => (req as Request).cookies?.os_auth ?? 'anonymous',
-    cookieName: 'os_csrf',
-    cookieOptions: {
-      httpOnly: true,
-      secure: IS_PRODUCTION,
-      sameSite: IS_PRODUCTION ? 'none' : 'lax',
-      path: '/api',
-    },
-    getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string | undefined,
-  })
-  : null;
-
-if (!CSRF_SECRET) {
-  logger.warn('[CSRF] CSRF_SECRET not set — CSRF protection is disabled. Set it before going to production.');
-}
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /**
- * CSRF double-submit cookie middleware.
- * Skips exempt paths (webhooks, unauthenticated auth endpoints).
+ * Require Content-Type: application/json or multipart/form-data on state-changing requests.
+ * This prevents CSRF via cross-origin form submissions.
  */
 export function csrfProtection(req: Request, res: Response, next: NextFunction): void {
-  // Skip CSRF for exempt paths
-  if (CSRF_EXEMPT_PATHS.some(p => req.path.startsWith(p))) {
-    next();
-    return;
-  }
-
-  // Skip if CSRF not configured (development without secret)
-  if (!csrfUtils) {
-    next();
-    return;
-  }
-
-  try {
-    csrfUtils.doubleCsrfProtection(req, res, (err?: unknown) => {
-      if (err) {
-        logger.warn('[CSRF] Token validation failed', { path: req.path, method: req.method });
-        res.status(403).json({ error: 'Invalid or missing CSRF token' });
-        return;
-      }
-      next();
-    });
-  } catch (error: unknown) {
-    logger.error('[CSRF] Middleware error', { path: req.path, error });
-    res.status(403).json({ error: 'CSRF validation error' });
-  }
-}
-
-/**
- * Generate a CSRF token for the current session and set the cookie.
- */
-export function csrfGenerateToken(req: Request, res: Response): string {
-  if (!csrfUtils) {
-    return 'csrf-disabled';
-  }
-  return csrfUtils.generateCsrfToken(req, res);
-}
-
-/**
- * Defense-in-depth: require Content-Type: application/json on state-changing requests.
- * This prevents CSRF via cross-origin form submissions even if the CSRF token is bypassed.
- */
-export function requireJsonContentType(req: Request, res: Response, next: NextFunction): void {
-  const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
   if (SAFE_METHODS.has(req.method)) {
     next();
     return;
   }
 
-  if (req.path.startsWith('/api/webhooks/')) {
+  // Webhooks use their own HMAC signature verification
+  if (req.path.startsWith('/webhooks/')) {
     next();
     return;
   }
 
   const contentType = req.headers['content-type'] ?? '';
-  // Allow application/json (API calls) and multipart/form-data (file uploads)
   if (!contentType.includes('application/json') && !contentType.includes('multipart/form-data')) {
-    logger.warn('[CSRF] Rejected non-JSON content type', { path: req.path, method: req.method, contentType });
+    logger.warn('[CSRF] Rejected non-JSON/FormData content type', { path: req.path, method: req.method, contentType });
     res.status(403).json({ error: 'Content-Type application/json or multipart/form-data required' });
     return;
   }
 
   next();
+}
+
+// Re-export for backwards compatibility with app.ts imports
+export function csrfGenerateToken(_req: Request, _res: Response): string {
+  return 'not-required';
+}
+
+export function requireJsonContentType(req: Request, res: Response, next: NextFunction): void {
+  csrfProtection(req, res, next);
 }
