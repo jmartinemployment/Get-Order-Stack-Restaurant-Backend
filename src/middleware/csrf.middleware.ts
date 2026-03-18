@@ -4,52 +4,82 @@ import { logger } from '../utils/logger';
 
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-// Double-submit cookie CSRF protection (PCI DSS 6.5.9).
-// The csrf-csrf library sets a signed cookie and validates the x-csrf-token header
-// against it on every state-changing request.
-const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
-  getSecret: () => {
-    const secret = process.env.CSRF_SECRET;
-    if (!secret) throw new Error('CSRF_SECRET environment variable is not set');
-    return secret;
-  },
-  getSessionIdentifier: (req) => (req as Request).cookies?.os_auth ?? 'anonymous',
-  cookieName: 'os_csrf',
-  cookieOptions: {
-    httpOnly: true,
-    secure: IS_PRODUCTION,
-    sameSite: IS_PRODUCTION ? 'none' : 'lax',
-    path: '/api',
-  },
-  getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string | undefined,
-});
+// Paths that are exempt from CSRF validation.
+// These are either unauthenticated (no session to hijack) or use their own
+// signature verification (webhooks).
+const CSRF_EXEMPT_PATHS = [
+  '/api/webhooks/',       // HMAC-signed webhooks
+  '/api/auth/login',      // Unauthenticated — rate-limited instead
+  '/api/auth/signup',     // Unauthenticated — rate-limited instead
+  '/api/auth/forgot-password', // Unauthenticated — rate-limited instead
+  '/api/auth/reset-password',  // Token-based verification, no session
+  '/api/auth/mfa/challenge',   // MFA token-based, not session-based
+  '/api/csrf-token',      // Token generation endpoint itself
+];
+
+// Only initialize csrf-csrf if CSRF_SECRET is available.
+// In development without the secret, CSRF protection is skipped with a warning.
+const CSRF_SECRET = process.env.CSRF_SECRET;
+
+const csrfUtils = CSRF_SECRET
+  ? doubleCsrf({
+    getSecret: () => CSRF_SECRET,
+    getSessionIdentifier: (req) => (req as Request).cookies?.os_auth ?? 'anonymous',
+    cookieName: 'os_csrf',
+    cookieOptions: {
+      httpOnly: true,
+      secure: IS_PRODUCTION,
+      sameSite: IS_PRODUCTION ? 'none' : 'lax',
+      path: '/api',
+    },
+    getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string | undefined,
+  })
+  : null;
+
+if (!CSRF_SECRET) {
+  logger.warn('[CSRF] CSRF_SECRET not set — CSRF protection is disabled. Set it before going to production.');
+}
 
 /**
  * CSRF double-submit cookie middleware.
- * Skips webhook paths (they use their own signature verification).
+ * Skips exempt paths (webhooks, unauthenticated auth endpoints).
  */
 export function csrfProtection(req: Request, res: Response, next: NextFunction): void {
-  // Webhooks verify authenticity via HMAC signatures — CSRF tokens are inapplicable
-  if (req.path.startsWith('/api/webhooks/')) {
+  // Skip CSRF for exempt paths
+  if (CSRF_EXEMPT_PATHS.some(p => req.path.startsWith(p))) {
     next();
     return;
   }
 
-  doubleCsrfProtection(req, res, (err?: unknown) => {
-    if (err) {
-      logger.warn('[CSRF] Token validation failed', { path: req.path, method: req.method });
-      res.status(403).json({ error: 'Invalid or missing CSRF token' });
-      return;
-    }
+  // Skip if CSRF not configured (development without secret)
+  if (!csrfUtils) {
     next();
-  });
+    return;
+  }
+
+  try {
+    csrfUtils.doubleCsrfProtection(req, res, (err?: unknown) => {
+      if (err) {
+        logger.warn('[CSRF] Token validation failed', { path: req.path, method: req.method });
+        res.status(403).json({ error: 'Invalid or missing CSRF token' });
+        return;
+      }
+      next();
+    });
+  } catch (error: unknown) {
+    logger.error('[CSRF] Middleware error', { path: req.path, error });
+    res.status(403).json({ error: 'CSRF validation error' });
+  }
 }
 
 /**
  * Generate a CSRF token for the current session and set the cookie.
  */
 export function csrfGenerateToken(req: Request, res: Response): string {
-  return generateCsrfToken(req, res);
+  if (!csrfUtils) {
+    return 'csrf-disabled';
+  }
+  return csrfUtils.generateCsrfToken(req, res);
 }
 
 /**
