@@ -4,7 +4,6 @@ import { PrismaClient } from '@prisma/client';
 import { aiCostService } from '../services/ai-cost.service';
 import { taxService } from '../services/tax.service';
 import { updateOrderStatus, getOrderStatusHistory } from '../services/order-status.service';
-import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { sendOrderEventToDevice, broadcastToSourceAndKDS, broadcastOrderEvent } from '../services/socket.service';
 import { cloudPrntService } from '../services/cloudprnt.service';
@@ -2313,39 +2312,8 @@ router.delete('/:merchantId/orders/:orderId', async (req: Request, res: Response
 
 // ============ Payments ============
 
-// Create payment intent for an order
-router.post('/:merchantId/orders/:orderId/payment-intent', async (req: Request, res: Response) => {
-  try {
-    const { orderId } = req.params;
-
-    const order = await prisma.order.findUnique({
-      where: { id: orderId }
-    });
-
-    if (!order) {
-      res.status(404).json({ error: 'Order not found' });
-      return;
-    }
-
-    const result = await stripeService.createPaymentIntent({
-      orderId,
-      amount: Number(order.total)
-    });
-
-    if (!result.success) {
-      res.status(400).json({ error: result.error });
-      return;
-    }
-
-    res.json({
-      clientSecret: result.clientSecret,
-      paymentIntentId: result.paymentIntentId
-    });
-  } catch (error) {
-    logger.error('Error creating payment intent:', error);
-    res.status(500).json({ error: 'Failed to create payment intent' });
-  }
-});
+// Stripe payment-intent endpoint removed — Stripe discontinued.
+// PayPal Commerce Platform is the sole payment provider.
 
 // Create PayPal order for an order
 router.post('/:merchantId/orders/:orderId/paypal-create', async (req: Request, res: Response) => {
@@ -2452,17 +2420,7 @@ router.get('/:merchantId/orders/:orderId/payment-status', async (req: Request, r
     }
 
     let processorData = null;
-    if (order.stripePaymentIntentId) {
-      const result = await stripeService.getPaymentIntent(order.stripePaymentIntentId);
-      if (result.success && result.paymentIntent) {
-        processorData = {
-          processor: 'stripe',
-          status: result.paymentIntent.status,
-          amount: result.paymentIntent.amount / 100,
-          currency: result.paymentIntent.currency,
-        };
-      }
-    } else if (order.paypalOrderId) {
+    if (order.paypalOrderId) {
       const result = await paypalService.getOrderStatus(order.paypalOrderId);
       if (result.success) {
         processorData = {
@@ -2503,9 +2461,7 @@ router.post('/:merchantId/orders/:orderId/cancel-payment', async (req: Request, 
 
     let result: { success: boolean; error?: string };
 
-    if (order.stripePaymentIntentId) {
-      result = await stripeService.cancelPaymentIntent(order.stripePaymentIntentId);
-    } else if (order.paypalOrderId) {
+    if (order.paypalOrderId) {
       result = await paypalService.cancelOrder(order.paypalOrderId);
     } else {
       res.status(400).json({ error: 'No payment found for this order' });
@@ -2551,16 +2507,7 @@ router.post('/:merchantId/orders/:orderId/refund', async (req: Request, res: Res
 
     let refundResponse: { success: boolean; refundId?: string; amount?: number | null; status?: string; error?: string };
 
-    if (order.stripePaymentIntentId) {
-      const result = await stripeService.createRefund(order.stripePaymentIntentId, amount);
-      refundResponse = {
-        success: result.success,
-        refundId: result.refund?.id,
-        amount: result.refund?.amount ? result.refund.amount / 100 : null,
-        status: result.refund?.status,
-        error: result.error,
-      };
-    } else if (order.paypalCaptureId) {
+    if (order.paypalCaptureId) {
       const result = await paypalService.refundCapture(order.paypalCaptureId, amount);
       refundResponse = {
         success: result.success,

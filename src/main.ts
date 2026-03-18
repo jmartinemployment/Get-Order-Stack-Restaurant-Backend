@@ -18,8 +18,6 @@ function validateRequiredEnvVars(): void {
 
   // --- Soft warnings (app starts but features are degraded) ---
   const recommended: Array<[string, string]> = [
-    ['STRIPE_SECRET_KEY', 'Stripe payments will not work'],
-    ['STRIPE_WEBHOOK_SECRET', 'Stripe webhooks will reject all events'],
     ['DELIVERY_CREDENTIALS_ENCRYPTION_KEY', 'Delivery credential encryption will fail'],
     ['PAYPAL_CLIENT_ID', 'PayPal payments will not work'],
     ['PAYPAL_CLIENT_SECRET', 'PayPal payments will not work'],

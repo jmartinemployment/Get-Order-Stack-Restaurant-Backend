@@ -46,6 +46,7 @@ export interface AuthResult {
   }>;
   error?: string;
   requiresPasswordChange?: boolean;
+  mfaRequired?: boolean;
 }
 
 export interface PinAuthResult {
@@ -159,7 +160,7 @@ class AuthService {
         createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
       },
     });
-    return recentFailures >= 10;
+    return recentFailures >= 6;
   }
 
   private checkPasswordValidity(member: Awaited<ReturnType<typeof prisma.teamMember.findUnique>>): AuthResult | null {
@@ -223,6 +224,40 @@ class AuthService {
       // Check password validity (expiry, forced change, 90-day policy)
       const validityError = this.checkPasswordValidity(member);
       if (validityError) return validityError;
+
+      // MFA check — if enabled, return partial auth (PCI DSS 8.4.2)
+      if (member.mfaEnabled) {
+        // Create a short-lived MFA session (5 min) — not a full session
+        const mfaSession = await prisma.userSession.create({
+          data: {
+            userId: member.id,
+            token: this.generateSessionToken(),
+            deviceInfo: deviceInfo ?? 'MFA pending',
+            ipAddress,
+            expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
+          },
+        });
+
+        const mfaToken = this.generateToken(
+          { teamMemberId: member.id, email: member.email!, role: member.role, type: 'user' },
+          mfaSession.id,
+          '5m',
+        );
+
+        return {
+          success: true,
+          token: mfaToken,
+          user: {
+            id: member.id,
+            email: member.email!,
+            firstName: member.firstName,
+            lastName: member.lastName,
+            role: member.role,
+            restaurantGroupId: member.restaurantGroupId,
+          },
+          mfaRequired: true,
+        };
+      }
 
       // Create session
       const expiresAt = new Date();
@@ -669,7 +704,7 @@ class AuthService {
 
       const notReused = await this.checkPasswordHistory(teamMemberId, newPassword);
       if (!notReused) {
-        return { success: false, error: 'Cannot reuse one of your last 4 passwords' };
+        return { success: false, error: 'Cannot reuse any of your last 12 passwords' };
       }
 
       const passwordHash = await this.hashPassword(newPassword);
@@ -751,7 +786,7 @@ class AuthService {
 
       const notReused = await this.checkPasswordHistory(resetToken.teamMemberId, newPassword);
       if (!notReused) {
-        return { success: false, error: 'Cannot reuse one of your last 4 passwords' };
+        return { success: false, error: 'Cannot reuse any of your last 12 passwords' };
       }
 
       const passwordHash = await this.hashPassword(newPassword);

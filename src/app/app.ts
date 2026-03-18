@@ -40,7 +40,6 @@ import { sentimentRouter } from '../routes/sentiment.routes';
 import teamManagementRoutes from './team-management.routes';
 import retailRoutes from './retail.routes';
 import cateringRoutes, { publicRouter as cateringPublicRoutes } from './catering.routes';
-import { stripeService } from '../services/stripe.service';
 import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
 import { marketplaceService } from '../services/marketplace.service';
@@ -48,6 +47,7 @@ import publicMenuRoutes from './public-menu.routes';
 import { requireAuth } from '../middleware/auth.middleware';
 import { globalErrorHandler } from '../middleware/error-handler';
 import { requestLogger } from '../middleware/request-logger';
+import { csrfProtection } from '../middleware/csrf.middleware';
 import { logger } from '../utils/logger';
 
 const app = express();
@@ -98,33 +98,6 @@ app.use('/api/', apiRateLimiter);
 
 // Request logger (after CORS, before routes)
 app.use(requestLogger);
-
-// Stripe webhook - MUST be before express.json() to get raw body
-app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
-  const signature = req.headers['stripe-signature'] as string;
-
-  if (!signature) {
-    logger.error('[Stripe Webhook] Missing stripe-signature header');
-    res.status(400).json({ error: 'Missing signature' });
-    return;
-  }
-
-  const event = stripeService.constructWebhookEvent(req.body, signature);
-
-  if (!event) {
-    res.status(400).json({ error: 'Invalid signature' });
-    return;
-  }
-
-  const result = await stripeService.handleWebhookEvent(event);
-
-  if (!result.success) {
-    res.status(500).json({ error: result.error });
-    return;
-  }
-
-  res.json({ received: true });
-});
 
 // PayPal webhook - MUST be before express.json() to get raw body
 app.post('/api/webhooks/paypal', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -368,6 +341,9 @@ app.post('/api/webhooks/grubhub', express.raw({ type: 'application/json' }), asy
 // JSON body parser for all other routes
 app.use(express.json());
 
+// CSRF protection — after JSON parser, before routes (PCI DSS 6.5.9)
+app.use('/api/', csrfProtection);
+
 // Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -425,7 +401,7 @@ app.use('/api/merchant', requireAuth, printerProfileRoutes);  // Printer profile
 app.use('/api/merchant', requireAuth, peripheralRoutes);  // Peripheral device CRUD
 app.use('/api/merchant', requireAuth, kioskProfileRoutes);  // Kiosk profile CRUD
 app.use('/api/merchant', requireAuth, menuRoutes);
-app.use('/api/merchant', requireAuth, paymentConnectRoutes);  // Stripe Connect + PayPal Partner Referrals
+app.use('/api/merchant', requireAuth, paymentConnectRoutes);  // PayPal Partner Referrals
 app.use('/api/merchant', requireAuth, subscriptionRoutes);  // Subscription plan tier CRUD
 app.use('/api/merchant', requireAuth, onboardingRoutes);  // Merchant profile + business hours
 
