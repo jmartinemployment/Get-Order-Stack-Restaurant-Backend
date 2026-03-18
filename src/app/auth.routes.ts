@@ -63,10 +63,10 @@ const pinRateLimiter = rateLimit({
 
 // ============ User Authentication ============
 
-// Public signup — creates owner account + auto-login
+// Public signup — creates owner account + restaurant + auto-login
 router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
   try {
-    const { firstName, lastName, email, password } = req.body;
+    const { firstName, lastName, email, password, businessName } = req.body;
 
     if (!email || !password) {
       res.status(400).json({ error: 'Email and password are required' });
@@ -75,6 +75,11 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
 
     if (!firstName || !lastName) {
       res.status(400).json({ error: 'First name and last name are required' });
+      return;
+    }
+
+    if (!businessName) {
+      res.status(400).json({ error: 'Business name is required' });
       return;
     }
 
@@ -87,7 +92,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    // Create the user as an owner — no restaurant yet, onboarding creates it and links them
+    // Create the user as an owner
     const createResult = await authService.createUser({
       email,
       password,
@@ -103,16 +108,49 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
       return;
     }
 
+    // Create a restaurant and link it to the new owner
+    const slug = businessName.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replaceAll(/^-|-$/g, '');
+    const restaurant = await prisma.restaurant.create({
+      data: {
+        name: businessName,
+        slug: `${slug}-${Date.now()}`,
+        email,
+        address: '',
+        city: '',
+        state: '',
+        zip: '',
+        merchantProfile: { onboardingComplete: false },
+      },
+    });
+
+    // Link owner to restaurant
+    await prisma.userRestaurantAccess.create({
+      data: {
+        teamMemberId: createResult.user!.id,
+        restaurantId: restaurant.id,
+        role: 'owner',
+      },
+    });
+
+    await prisma.teamMember.update({
+      where: { id: createResult.user!.id },
+      data: { restaurantId: restaurant.id },
+    });
+
+    await auditLog('signup_with_restaurant', {
+      userId: createResult.user!.id,
+      metadata: { email, restaurantId: restaurant.id, businessName },
+    });
+
     // Auto-login after signup
     const deviceInfo = req.headers['user-agent'] || undefined;
     const ipAddress = req.ip || req.socket.remoteAddress || undefined;
     const loginResult = await authService.loginUser(email, password, deviceInfo, ipAddress);
 
     if (!loginResult.success) {
-      // User created but login failed — unlikely but handle gracefully
       res.status(201).json({
         user: createResult.user,
-        restaurants: [],
+        restaurants: [{ id: restaurant.id, name: restaurant.name, slug: restaurant.slug, role: 'owner', onboardingComplete: false }],
       });
       return;
     }
