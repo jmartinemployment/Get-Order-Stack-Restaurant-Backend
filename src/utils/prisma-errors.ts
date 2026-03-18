@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { Prisma } from '@prisma/client';
+import { logger } from './logger';
 
 interface PrismaErrorMapping {
   P2002?: { status: number; message: string };
@@ -17,7 +18,7 @@ export function handlePrismaError(
   mappings: PrismaErrorMapping,
   fallbackMessage: string
 ): void {
-  console.error(fallbackMessage + ':', error);
+  logger.error(fallbackMessage + ':', error);
 
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     const mapping = mappings[error.code as keyof PrismaErrorMapping];

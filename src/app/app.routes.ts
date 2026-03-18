@@ -399,7 +399,7 @@ router.post('/:merchantId/auth/validate-pin', async (req: Request, res: Response
       permissions,
     });
   } catch (error) {
-    console.error('[Auth] Error validating PIN:', error);
+    logger.error('[Auth] Error validating PIN:', error);
     res.status(500).json({ error: 'Failed to validate PIN' });
   }
 });
@@ -426,7 +426,7 @@ router.post('/', async (req: Request, res: Response) => {
     if (zip && (taxRate === undefined || taxRate === null)) {
       const taxInfo = await taxService.getTaxRateByZip(zip, state);
       finalTaxRate = taxInfo.rate;
-      console.log('[Restaurant] Auto-set tax rate', { zip, finalTaxRate, source: taxInfo.source });
+      logger.info('[Restaurant] Auto-set tax rate', { zip, finalTaxRate, source: taxInfo.source });
     }
 
     const restaurant = await prisma.restaurant.create({
@@ -441,7 +441,7 @@ router.post('/', async (req: Request, res: Response) => {
     });
     res.status(201).json(restaurant);
   } catch (error) {
-    console.error('Error creating restaurant:', error);
+    logger.error('Error creating restaurant:', error);
     res.status(500).json({ error: 'Failed to create restaurant' });
   }
 });
@@ -458,7 +458,7 @@ router.get('/:merchantId', async (req: Request, res: Response) => {
     }
     res.json(restaurant);
   } catch (error) {
-    console.error('Error fetching restaurant:', error);
+    logger.error('Error fetching restaurant:', error);
     res.status(500).json({ error: 'Failed to fetch restaurant' });
   }
 });
@@ -475,7 +475,7 @@ router.get('/slug/:slug', async (req: Request, res: Response) => {
     }
     res.json(restaurant);
   } catch (error) {
-    console.error('Error fetching restaurant by slug:', error);
+    logger.error('Error fetching restaurant by slug:', error);
     res.status(500).json({ error: 'Failed to fetch restaurant' });
   }
 });
@@ -506,7 +506,7 @@ router.patch('/:merchantId', async (req: Request, res: Response) => {
     });
     res.json(restaurant);
   } catch (error) {
-    console.error('Error updating restaurant:', error);
+    logger.error('Error updating restaurant:', error);
     res.status(500).json({ error: 'Failed to update restaurant' });
   }
 });
@@ -595,7 +595,7 @@ router.get('/:merchantId/menu', async (req: Request, res: Response) => {
 
     res.json(menu);
   } catch (error) {
-    console.error('Error fetching menu:', error);
+    logger.error('Error fetching menu:', error);
     res.status(500).json({ error: 'Failed to fetch menu' });
   }
 });
@@ -611,7 +611,7 @@ router.get('/:merchantId/menu/categories', async (req: Request, res: Response) =
     });
     res.json(categories);
   } catch (error) {
-    console.error('Error fetching categories:', error);
+    logger.error('Error fetching categories:', error);
     res.status(500).json({ error: 'Failed to fetch categories' });
   }
 });
@@ -646,7 +646,7 @@ router.post('/:merchantId/menu/categories', async (req: Request, res: Response) 
     });
     res.status(201).json(category);
   } catch (error) {
-    console.error('Error creating category:', error);
+    logger.error('Error creating category:', error);
     res.status(500).json({ error: 'Failed to create category' });
   }
 });
@@ -690,7 +690,7 @@ router.patch('/:merchantId/menu/categories/:categoryId', async (req: Request, re
     });
     res.json(category);
   } catch (error) {
-    console.error('Error updating category:', error);
+    logger.error('Error updating category:', error);
     res.status(500).json({ error: 'Failed to update category' });
   }
 });
@@ -702,7 +702,7 @@ router.delete('/:merchantId/menu/categories/:categoryId', async (req: Request, r
     await prisma.menuCategory.delete({ where: { id: categoryId } });
     res.status(204).send();
   } catch (error) {
-    console.error('Error deleting category:', error);
+    logger.error('Error deleting category:', error);
     res.status(500).json({ error: 'Failed to delete category' });
   }
 });
@@ -1049,7 +1049,7 @@ router.patch('/:merchantId/menu/items/:itemId/86', async (req: Request, res: Res
     });
     res.json(item);
   } catch (error) {
-    console.error('Error toggling 86 status:', error);
+    logger.error('Error toggling 86 status:', error);
     res.status(500).json({ error: 'Failed to update 86 status' });
   }
 });
@@ -1061,7 +1061,7 @@ router.delete('/:merchantId/menu/items/:itemId', async (req: Request, res: Respo
     await prisma.menuItem.delete({ where: { id: itemId } });
     res.status(204).send();
   } catch (error) {
-    console.error('Error deleting menu item:', error);
+    logger.error('Error deleting menu item:', error);
     res.status(500).json({ error: 'Failed to delete menu item' });
   }
 });
@@ -1080,7 +1080,7 @@ router.get('/:merchantId/modifiers', async (req: Request, res: Response) => {
     });
     res.json(groups);
   } catch (error) {
-    console.error('Error fetching modifier groups:', error);
+    logger.error('Error fetching modifier groups:', error);
     res.status(500).json({ error: 'Failed to fetch modifier groups' });
   }
 });
@@ -1119,7 +1119,7 @@ router.post('/:merchantId/modifiers', async (req: Request, res: Response) => {
     });
     res.status(201).json(group);
   } catch (error) {
-    console.error('Error creating modifier group:', error);
+    logger.error('Error creating modifier group:', error);
     res.status(500).json({ error: 'Failed to create modifier group' });
   }
 });
@@ -1151,7 +1151,7 @@ router.patch('/:merchantId/modifiers/:groupId', async (req: Request, res: Respon
     });
     res.json(group);
   } catch (error) {
-    console.error('Error updating modifier group:', error);
+    logger.error('Error updating modifier group:', error);
     res.status(500).json({ error: 'Failed to update modifier group' });
   }
 });
@@ -1164,7 +1164,7 @@ router.delete('/:merchantId/modifiers/:groupId', async (req: Request, res: Respo
     await prisma.modifierGroup.delete({ where: { id: groupId } });
     res.status(204).send();
   } catch (error) {
-    console.error('Error deleting modifier group:', error);
+    logger.error('Error deleting modifier group:', error);
     res.status(500).json({ error: 'Failed to delete modifier group' });
   }
 });
@@ -1190,7 +1190,7 @@ router.post('/:merchantId/modifiers/:groupId/options', async (req: Request, res:
     });
     res.status(201).json(modifier);
   } catch (error) {
-    console.error('Error creating modifier:', error);
+    logger.error('Error creating modifier:', error);
     res.status(500).json({ error: 'Failed to create modifier' });
   }
 });
@@ -1213,7 +1213,7 @@ router.patch('/:merchantId/modifiers/:groupId/options/:modifierId', async (req: 
     });
     res.json(modifier);
   } catch (error) {
-    console.error('Error updating modifier:', error);
+    logger.error('Error updating modifier:', error);
     res.status(500).json({ error: 'Failed to update modifier' });
   }
 });
@@ -1224,7 +1224,7 @@ router.delete('/:merchantId/modifiers/:groupId/options/:modifierId', async (req:
     await prisma.modifier.delete({ where: { id: modifierId } });
     res.status(204).send();
   } catch (error) {
-    console.error('Error deleting modifier:', error);
+    logger.error('Error deleting modifier:', error);
     res.status(500).json({ error: 'Failed to delete modifier' });
   }
 });
@@ -1240,7 +1240,7 @@ router.get('/:merchantId/tables', async (req: Request, res: Response) => {
     });
     res.json(tables);
   } catch (error) {
-    console.error('Error fetching tables:', error);
+    logger.error('Error fetching tables:', error);
     res.status(500).json({ error: 'Failed to fetch tables' });
   }
 });
@@ -1257,7 +1257,7 @@ router.post('/:merchantId/tables', async (req: Request, res: Response) => {
     });
     res.status(201).json(table);
   } catch (error) {
-    console.error('Error creating table:', error);
+    logger.error('Error creating table:', error);
     res.status(500).json({ error: 'Failed to create table' });
   }
 });
@@ -1290,7 +1290,7 @@ router.patch('/:merchantId/tables/:tableId', async (req: Request, res: Response)
     });
     res.json(table);
   } catch (error) {
-    console.error('Error updating table:', error);
+    logger.error('Error updating table:', error);
     res.status(500).json({ error: 'Failed to update table' });
   }
 });
@@ -1301,7 +1301,7 @@ router.delete('/:merchantId/tables/:tableId', async (req: Request, res: Response
     await prisma.restaurantTable.delete({ where: { id: tableId } });
     res.status(204).send();
   } catch (error) {
-    console.error('Error deleting table:', error);
+    logger.error('Error deleting table:', error);
     res.status(500).json({ error: 'Failed to delete table' });
   }
 });
@@ -1331,7 +1331,7 @@ router.get('/:merchantId/bookings', async (req: Request, res: Response) => {
     });
     res.json(reservations);
   } catch (error) {
-    console.error('Error fetching reservations:', error);
+    logger.error('Error fetching reservations:', error);
     res.status(500).json({ error: 'Failed to fetch reservations' });
   }
 });
@@ -1364,7 +1364,7 @@ router.post('/:merchantId/bookings', async (req: Request, res: Response) => {
     });
     res.status(201).json(reservation);
   } catch (error) {
-    console.error('Error creating reservation:', error);
+    logger.error('Error creating reservation:', error);
     res.status(500).json({ error: 'Failed to create reservation' });
   }
 });
@@ -1382,7 +1382,7 @@ router.get('/:merchantId/bookings/:reservationId', async (req: Request, res: Res
     }
     res.json(reservation);
   } catch (error) {
-    console.error('Error fetching reservation:', error);
+    logger.error('Error fetching reservation:', error);
     res.status(500).json({ error: 'Failed to fetch reservation' });
   }
 });
@@ -1408,7 +1408,7 @@ router.patch('/:merchantId/bookings/:reservationId', async (req: Request, res: R
     });
     res.json(reservation);
   } catch (error) {
-    console.error('Error updating reservation:', error);
+    logger.error('Error updating reservation:', error);
     res.status(500).json({ error: 'Failed to update reservation' });
   }
 });
@@ -1419,7 +1419,7 @@ router.delete('/:merchantId/bookings/:reservationId', async (req: Request, res: 
     await prisma.reservation.delete({ where: { id: reservationId } });
     res.status(204).send();
   } catch (error) {
-    console.error('Error deleting reservation:', error);
+    logger.error('Error deleting reservation:', error);
     res.status(500).json({ error: 'Failed to delete reservation' });
   }
 });
@@ -1462,7 +1462,7 @@ router.post('/:merchantId/menu/items/:itemId/estimate-cost', async (req: Request
 
     res.json({ item: updated, estimation });
   } catch (error) {
-    console.error('Error estimating cost:', error);
+    logger.error('Error estimating cost:', error);
     res.status(500).json({ error: 'Failed to estimate cost' });
   }
 });
@@ -1497,7 +1497,7 @@ router.post('/:merchantId/menu/items/:itemId/generate-description', async (req: 
 
     res.json(updated);
   } catch (error) {
-    console.error('Error generating description:', error);
+    logger.error('Error generating description:', error);
     res.status(500).json({ error: 'Failed to generate description' });
   }
 });
@@ -1535,7 +1535,7 @@ router.post('/:merchantId/menu/estimate-all-costs', async (req: Request, res: Re
 
     res.json({ message: 'Cost estimation complete', itemsProcessed: items.length, itemsEstimated: estimated });
   } catch (error) {
-    console.error('Error estimating costs:', error);
+    logger.error('Error estimating costs:', error);
     res.status(500).json({ error: 'Failed to estimate costs' });
   }
 });
@@ -1567,7 +1567,7 @@ router.post('/:merchantId/menu/generate-all-descriptions', async (req: Request, 
 
     res.json({ message: 'Description generation complete', itemsProcessed: items.length, itemsGenerated: generated });
   } catch (error) {
-    console.error('Error generating descriptions:', error);
+    logger.error('Error generating descriptions:', error);
     res.status(500).json({ error: 'Failed to generate descriptions' });
   }
 });
@@ -1608,7 +1608,7 @@ router.get('/:merchantId/orders', async (req: Request, res: Response) => {
     });
     res.json(orders.map(enrichOrderResponse));
   } catch (error) {
-    console.error('Error fetching orders:', error);
+    logger.error('Error fetching orders:', error);
     res.status(500).json({ error: 'Failed to fetch orders' });
   }
 });
@@ -1631,7 +1631,7 @@ router.get('/:merchantId/orders/:orderId', async (req: Request, res: Response) =
     }
     res.json(enrichOrderResponse(order));
   } catch (error) {
-    console.error('Error fetching order:', error);
+    logger.error('Error fetching order:', error);
     res.status(500).json({ error: 'Failed to fetch order' });
   }
 });
@@ -1832,7 +1832,7 @@ router.post('/:merchantId/orders', async (req: Request, res: Response) => {
     }
 
     const latestOrder = await loadOrderWithRelations(order.id);
-    console.log(`[Order Create] Order ${order.orderNumber} created with sourceDeviceId: ${order.sourceDeviceId || 'NONE'}`);
+    logger.info(`[Order Create] Order ${order.orderNumber} created with sourceDeviceId: ${order.sourceDeviceId || 'NONE'}`);
 
     const enrichedOrder = enrichOrderResponse(latestOrder ?? order);
     broadcastToSourceAndKDS(restaurantId, order.sourceDeviceId, 'order:new', enrichedOrder);
@@ -1845,7 +1845,7 @@ router.post('/:merchantId/orders', async (req: Request, res: Response) => {
 
     res.status(201).json(enrichedOrder);
   } catch (error) {
-    console.error('Error creating order:', error);
+    logger.error('Error creating order:', error);
     res.status(500).json({ error: 'Failed to create order' });
   }
 });
@@ -1890,17 +1890,17 @@ router.patch('/:merchantId/orders/:orderId/status', async (req: Request, res: Re
     // Broadcast status update to source device + KDS devices only
     // Other POS devices don't need updates for orders they didn't create
     if (order) {
-      console.log(`[Order Status] Order ${order.orderNumber} -> ${status}, sourceDeviceId: ${order.sourceDeviceId || 'NONE'}`);
+      logger.info(`[Order Status] Order ${order.orderNumber} -> ${status}, sourceDeviceId: ${order.sourceDeviceId || 'NONE'}`);
       const enrichedOrder = enrichOrderResponse(order);
       broadcastToSourceAndKDS(order.restaurantId, order.sourceDeviceId, 'order:updated', enrichedOrder);
 
       // Queue print job + send notifications when order becomes ready
       if (status === 'ready') {
         cloudPrntService.queuePrintJob(orderId).catch((error: unknown) => {
-          console.error(`[Order Status] Failed to queue print job for order ${order.orderNumber}:`, error);
+          logger.error(`[Order Status] Failed to queue print job for order ${order.orderNumber}:`, error);
         });
         notificationService.onOrderReady(orderId).catch((error: unknown) => {
-          console.error(`[Order Status] Failed to send notification for order ${order.orderNumber}:`, error);
+          logger.error(`[Order Status] Failed to send notification for order ${order.orderNumber}:`, error);
         });
       }
     }
@@ -1911,7 +1911,7 @@ router.patch('/:merchantId/orders/:orderId/status', async (req: Request, res: Re
 
     res.json(enrichOrderResponse(order));
   } catch (error) {
-    console.error('Error updating order status:', error);
+    logger.error('Error updating order status:', error);
     res.status(500).json({ error: 'Failed to update order status' });
   }
 });
@@ -1972,7 +1972,7 @@ router.patch('/:merchantId/orders/:orderId/fire-course', async (req: Request, re
     broadcastToSourceAndKDS(updatedOrder.restaurantId, updatedOrder.sourceDeviceId, 'order:updated', enriched);
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[Course Pacing] Error firing course:', error);
+    logger.error('[Course Pacing] Error firing course:', error);
     res.status(500).json({ error: 'Failed to fire course' });
   }
 });
@@ -2035,7 +2035,7 @@ router.patch('/:merchantId/orders/:orderId/fire-item', async (req: Request, res:
     broadcastToSourceAndKDS(updatedOrder.restaurantId, updatedOrder.sourceDeviceId, 'order:updated', enriched);
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[Course Pacing] Error firing item:', error);
+    logger.error('[Course Pacing] Error firing item:', error);
     res.status(500).json({ error: 'Failed to fire item' });
   }
 });
@@ -2048,7 +2048,7 @@ router.get('/:merchantId/course-pacing/metrics', async (req: Request, res: Respo
     const metrics = await coursePacingService.getRestaurantMetrics(restaurantId, lookbackDays);
     res.json(metrics);
   } catch (error) {
-    console.error('[Course Pacing] Error loading pacing metrics:', error);
+    logger.error('[Course Pacing] Error loading pacing metrics:', error);
     res.status(500).json({ error: 'Failed to load course pacing metrics' });
   }
 });
@@ -2063,7 +2063,7 @@ router.get('/:merchantId/throttling/status', async (req: Request, res: Response)
     const status = await orderThrottlingService.getStatus(restaurantId);
     res.json(status);
   } catch (error) {
-    console.error('[Order Throttling] Error loading throttling status:', error);
+    logger.error('[Order Throttling] Error loading throttling status:', error);
     res.status(500).json({ error: 'Failed to load order throttling status' });
   }
 });
@@ -2087,7 +2087,7 @@ router.post('/:merchantId/orders/:orderId/throttle/hold', async (req: Request, r
     broadcastToSourceAndKDS(updatedOrder.restaurantId, updatedOrder.sourceDeviceId, 'order:updated', enriched);
     res.json(enriched);
   } catch (error) {
-    console.error('[Order Throttling] Error holding order:', error);
+    logger.error('[Order Throttling] Error holding order:', error);
     res.status(500).json({ error: 'Failed to hold order' });
   }
 });
@@ -2111,7 +2111,7 @@ router.post('/:merchantId/orders/:orderId/throttle/release', async (req: Request
     broadcastToSourceAndKDS(updatedOrder.restaurantId, updatedOrder.sourceDeviceId, 'order:updated', enriched);
     res.json(enriched);
   } catch (error) {
-    console.error('[Order Throttling] Error releasing order:', error);
+    logger.error('[Order Throttling] Error releasing order:', error);
     res.status(500).json({ error: 'Failed to release order' });
   }
 });
@@ -2123,7 +2123,7 @@ router.get('/:merchantId/orders/:orderId/history', async (req: Request, res: Res
     const history = await getOrderStatusHistory(orderId);
     res.json(history);
   } catch (error) {
-    console.error('Error getting order status history:', error);
+    logger.error('Error getting order status history:', error);
     res.status(500).json({ error: 'Failed to get order status history' });
   }
 });
@@ -2135,7 +2135,7 @@ router.post('/:merchantId/orders/:orderId/reprint', async (req: Request, res: Re
     const jobId = await cloudPrntService.queuePrintJob(orderId);
     res.json({ success: true, jobId });
   } catch (error) {
-    console.error('Error reprinting order:', error);
+    logger.error('Error reprinting order:', error);
     res.status(500).json({ error: 'Failed to reprint order' });
   }
 });
@@ -2205,7 +2205,7 @@ router.patch('/:merchantId/orders/:orderId/items/:itemId/status', async (req: Re
 
     res.json(orderItem);
   } catch (error) {
-    console.error('Error updating order item status:', error);
+    logger.error('Error updating order item status:', error);
     res.status(500).json({ error: 'Failed to update order item status' });
   }
 });
@@ -2287,7 +2287,7 @@ router.patch('/:merchantId/orders/:orderId/items/ready', async (req: Request, re
       items: updatedItems,
     });
   } catch (error) {
-    console.error('Error marking items ready:', error);
+    logger.error('Error marking items ready:', error);
     res.status(500).json({ error: 'Failed to mark items as ready' });
   }
 });
@@ -2306,7 +2306,7 @@ router.delete('/:merchantId/orders/:orderId', async (req: Request, res: Response
     await prisma.order.delete({ where: { id: orderId } });
     res.status(204).send();
   } catch (error) {
-    console.error('Error deleting order:', error);
+    logger.error('Error deleting order:', error);
     res.status(500).json({ error: 'Failed to delete order' });
   }
 });
@@ -2342,7 +2342,7 @@ router.post('/:merchantId/orders/:orderId/payment-intent', async (req: Request, 
       paymentIntentId: result.paymentIntentId
     });
   } catch (error) {
-    console.error('Error creating payment intent:', error);
+    logger.error('Error creating payment intent:', error);
     res.status(500).json({ error: 'Failed to create payment intent' });
   }
 });
@@ -2373,7 +2373,7 @@ router.post('/:merchantId/orders/:orderId/paypal-create', async (req: Request, r
 
     res.json({ paypalOrderId: result.paypalOrderId });
   } catch (error) {
-    console.error('Error creating PayPal order:', error);
+    logger.error('Error creating PayPal order:', error);
     res.status(500).json({ error: 'Failed to create PayPal order' });
   }
 });
@@ -2422,7 +2422,7 @@ router.post('/:merchantId/orders/:orderId/paypal-capture', async (req: Request, 
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error capturing PayPal order:', error);
+    logger.error('Error capturing PayPal order:', error);
     res.status(500).json({ error: 'Failed to capture PayPal order' });
   }
 });
@@ -2482,7 +2482,7 @@ router.get('/:merchantId/orders/:orderId/payment-status', async (req: Request, r
       processorData,
     });
   } catch (error) {
-    console.error('Error getting payment status:', error);
+    logger.error('Error getting payment status:', error);
     res.status(500).json({ error: 'Failed to get payment status' });
   }
 });
@@ -2524,7 +2524,7 @@ router.post('/:merchantId/orders/:orderId/cancel-payment', async (req: Request, 
 
     res.json({ success: true, message: 'Payment cancelled' });
   } catch (error) {
-    console.error('Error cancelling payment:', error);
+    logger.error('Error cancelling payment:', error);
     res.status(500).json({ error: 'Failed to cancel payment' });
   }
 });
@@ -2593,7 +2593,7 @@ router.post('/:merchantId/orders/:orderId/refund', async (req: Request, res: Res
       status: refundResponse.status,
     });
   } catch (error) {
-    console.error('Error processing refund:', error);
+    logger.error('Error processing refund:', error);
     res.status(500).json({ error: 'Failed to process refund' });
   }
 });
@@ -2608,7 +2608,7 @@ router.get('/tax-rate/:zipCode', async (req: Request, res: Response) => {
     const taxInfo = await taxService.getTaxRateByZip(zipCode, state as string);
     res.json(taxInfo);
   } catch (error) {
-    console.error('Error looking up tax rate:', error);
+    logger.error('Error looking up tax rate:', error);
     res.status(500).json({ error: 'Failed to lookup tax rate' });
   }
 });

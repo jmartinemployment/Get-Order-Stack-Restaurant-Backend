@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { salesInsightsService } from './sales-insights.service';
 import { aiConfigService } from './ai-config.service';
 import { aiUsageService } from './ai-usage.service';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
@@ -593,7 +594,7 @@ Format: [{"type":"...", "title":"...", "message":"...", "priority":"...", ...}]`
 
       return JSON.parse(content.text.slice(start, end + 1));
     } catch (error: unknown) {
-      console.error('[Labor] AI recommendations failed:', error);
+      logger.error('[Labor] AI recommendations failed:', error);
       return generateBasicRecommendations(ordersByHour, shiftsByHour);
     }
   },

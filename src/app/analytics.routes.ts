@@ -113,7 +113,7 @@ router.get('/:merchantId/analytics/today-stats', async (req: Request, res: Respo
     });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error getting today stats:', message);
+    logger.error('Error getting today stats:', message);
     res.status(500).json({ error: 'Failed to get today stats' });
   }
 });
@@ -141,7 +141,7 @@ router.get('/:merchantId/analytics/menu-engineering', async (req: Request, res: 
 
     res.json(report);
   } catch (error) {
-    console.error('Error generating menu engineering report:', error);
+    logger.error('Error generating menu engineering report:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
 });
@@ -166,7 +166,7 @@ router.get('/:merchantId/analytics/upsell-suggestions', async (req: Request, res
 
     res.json(suggestions);
   } catch (error) {
-    console.error('Error getting upsell suggestions:', error);
+    logger.error('Error getting upsell suggestions:', error);
     res.status(500).json({ error: 'Failed to get upsell suggestions' });
   }
 });
@@ -695,7 +695,7 @@ router.get('/:merchantId/analytics/prep-time-accuracy', async (req: Request, res
 
     res.json({ items });
   } catch (error: unknown) {
-    console.error('[Analytics] Error fetching prep time accuracy:', error);
+    logger.error('[Analytics] Error fetching prep time accuracy:', error);
     res.json({ items: [] });
   }
 });
@@ -721,7 +721,7 @@ router.get('/:merchantId/analytics/sales/daily', async (req: Request, res: Respo
 
     res.json(report);
   } catch (error) {
-    console.error('Error getting daily insights:', error);
+    logger.error('Error getting daily insights:', error);
     res.status(500).json({ error: 'Failed to get daily insights' });
   }
 });
@@ -747,7 +747,7 @@ router.get('/:merchantId/analytics/sales/weekly', async (req: Request, res: Resp
 
     res.json(report);
   } catch (error) {
-    console.error('Error getting weekly insights:', error);
+    logger.error('Error getting weekly insights:', error);
     res.status(500).json({ error: 'Failed to get weekly insights' });
   }
 });
@@ -774,7 +774,7 @@ router.get('/:merchantId/analytics/sales/summary', async (req: Request, res: Res
 
     res.json(summary);
   } catch (error) {
-    console.error('Error getting sales summary:', error);
+    logger.error('Error getting sales summary:', error);
     res.status(500).json({ error: 'Failed to get sales summary' });
   }
 });
@@ -791,7 +791,7 @@ router.get('/:merchantId/inventory', async (req: Request, res: Response) => {
     const items = await inventoryService.getInventory(restaurantId);
     res.json(items);
   } catch (error) {
-    console.error('Error getting inventory:', error);
+    logger.error('Error getting inventory:', error);
     res.status(500).json({ error: 'Failed to get inventory' });
   }
 });
@@ -823,7 +823,7 @@ router.post('/:merchantId/inventory', async (req: Request, res: Response) => {
 
     res.status(201).json(item);
   } catch (error) {
-    console.error('Error creating inventory item:', error);
+    logger.error('Error creating inventory item:', error);
     res.status(500).json({ error: 'Failed to create inventory item' });
   }
 });
@@ -845,7 +845,7 @@ router.patch('/:merchantId/inventory/:itemId/stock', async (req: Request, res: R
     const item = await inventoryService.updateStock(itemId, stock, reason);
     res.json(item);
   } catch (error) {
-    console.error('Error updating stock:', error);
+    logger.error('Error updating stock:', error);
     res.status(500).json({ error: 'Failed to update stock' });
   }
 });
@@ -867,7 +867,7 @@ router.post('/:merchantId/inventory/:itemId/usage', async (req: Request, res: Re
     const item = await inventoryService.recordUsage(itemId, quantity, reason);
     res.json(item);
   } catch (error) {
-    console.error('Error recording usage:', error);
+    logger.error('Error recording usage:', error);
     res.status(500).json({ error: 'Failed to record usage' });
   }
 });
@@ -889,7 +889,7 @@ router.post('/:merchantId/inventory/:itemId/restock', async (req: Request, res: 
     const item = await inventoryService.recordRestock(itemId, quantity, invoiceNumber);
     res.json(item);
   } catch (error) {
-    console.error('Error recording restock:', error);
+    logger.error('Error recording restock:', error);
     res.status(500).json({ error: 'Failed to record restock' });
   }
 });
@@ -904,7 +904,7 @@ router.get('/:merchantId/inventory/alerts', async (req: Request, res: Response) 
     const alerts = await inventoryService.getAlerts(restaurantId);
     res.json(alerts);
   } catch (error) {
-    console.error('Error getting inventory alerts:', error);
+    logger.error('Error getting inventory alerts:', error);
     res.status(500).json({ error: 'Failed to get alerts' });
   }
 });
@@ -919,7 +919,7 @@ router.get('/:merchantId/inventory/predictions', async (req: Request, res: Respo
     const predictions = await inventoryService.getStockPredictions(restaurantId);
     res.json(predictions);
   } catch (error) {
-    console.error('Error getting predictions:', error);
+    logger.error('Error getting predictions:', error);
     res.status(500).json({ error: 'Failed to get predictions' });
   }
 });
@@ -934,7 +934,7 @@ router.get('/:merchantId/inventory/report', async (req: Request, res: Response) 
     const report = await inventoryService.generateReport(restaurantId);
     res.json(report);
   } catch (error) {
-    console.error('Error generating inventory report:', error);
+    logger.error('Error generating inventory report:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
 });
@@ -978,7 +978,7 @@ router.get('/:merchantId/inventory/expiring', async (req: Request, res: Response
 
     res.json(expiring);
   } catch (error: unknown) {
-    console.error('Error getting expiring items:', toErrorMessage(error));
+    logger.error('Error getting expiring items:', toErrorMessage(error));
     res.json([]);
   }
 });
@@ -994,7 +994,7 @@ router.get('/:merchantId/inventory/unit-conversions', async (req: Request, res: 
     });
     res.json(conversions);
   } catch (error: unknown) {
-    console.error('[Inventory] Error fetching unit conversions:', error);
+    logger.error('[Inventory] Error fetching unit conversions:', error);
     res.status(500).json({ error: 'Failed to fetch unit conversions' });
   }
 });
@@ -1014,7 +1014,7 @@ router.post('/:merchantId/inventory/unit-conversions', async (req: Request, res:
     });
     res.status(201).json(conversion);
   } catch (error: unknown) {
-    console.error('[Inventory] Error creating unit conversion:', error);
+    logger.error('[Inventory] Error creating unit conversion:', error);
     res.status(500).json({ error: 'Failed to create unit conversion' });
   }
 });
@@ -1034,7 +1034,7 @@ router.patch('/:merchantId/inventory/unit-conversions/:id', async (req: Request,
       res.status(404).json({ error: 'Unit conversion not found' });
       return;
     }
-    console.error('[Inventory] Error updating unit conversion:', error);
+    logger.error('[Inventory] Error updating unit conversion:', error);
     res.status(500).json({ error: 'Failed to update unit conversion' });
   }
 });
@@ -1051,7 +1051,7 @@ router.get('/:merchantId/inventory/cycle-counts', async (req: Request, res: Resp
     });
     res.json(counts);
   } catch (error: unknown) {
-    console.error('[Inventory] Error fetching cycle counts:', error);
+    logger.error('[Inventory] Error fetching cycle counts:', error);
     res.status(500).json({ error: 'Failed to fetch cycle counts' });
   }
 });
@@ -1081,7 +1081,7 @@ router.post('/:merchantId/inventory/cycle-counts', async (req: Request, res: Res
     });
     res.status(201).json(count);
   } catch (error: unknown) {
-    console.error('[Inventory] Error creating cycle count:', error);
+    logger.error('[Inventory] Error creating cycle count:', error);
     res.status(500).json({ error: 'Failed to create cycle count' });
   }
 });
@@ -1106,7 +1106,7 @@ router.patch('/:merchantId/inventory/cycle-counts/:id', async (req: Request, res
       res.status(404).json({ error: 'Cycle count not found' });
       return;
     }
-    console.error('[Inventory] Error updating cycle count:', error);
+    logger.error('[Inventory] Error updating cycle count:', error);
     res.status(500).json({ error: 'Failed to update cycle count' });
   }
 });
@@ -1127,7 +1127,7 @@ router.get('/:merchantId/inventory/:itemId', async (req: Request, res: Response)
 
     res.json(item);
   } catch (error) {
-    console.error('Error getting inventory item:', error);
+    logger.error('Error getting inventory item:', error);
     res.status(500).json({ error: 'Failed to get inventory item' });
   }
 });
@@ -1142,7 +1142,7 @@ router.get('/:merchantId/inventory/:itemId/predict', async (req: Request, res: R
     const prediction = await inventoryService.predictItemRunout(itemId);
     res.json({ prediction });
   } catch (error) {
-    console.error('Error predicting runout:', error);
+    logger.error('Error predicting runout:', error);
     res.status(500).json({ error: 'Failed to predict runout' });
   }
 });
@@ -1165,7 +1165,7 @@ router.get('/:merchantId/orders/:orderId/profit-insight', async (req: Request, r
 
     res.json(insight);
   } catch (error) {
-    console.error('Error getting order profit insight:', error);
+    logger.error('Error getting order profit insight:', error);
     res.status(500).json({ error: 'Failed to get profit insight' });
   }
 });
@@ -1186,7 +1186,7 @@ router.get('/:merchantId/orders/recent-profit', async (req: Request, res: Respon
 
     res.json(result);
   } catch (error) {
-    console.error('Error getting recent orders profit:', error);
+    logger.error('Error getting recent orders profit:', error);
     res.status(500).json({ error: 'Failed to get recent orders profit' });
   }
 });
@@ -1221,7 +1221,7 @@ router.get('/:merchantId/customers', async (req: Request, res: Response) => {
 
     res.json(customers);
   } catch (error) {
-    console.error('Error getting customers:', error);
+    logger.error('Error getting customers:', error);
     res.status(500).json({ error: 'Failed to get customers' });
   }
 });
@@ -1242,7 +1242,7 @@ router.patch('/:merchantId/customers/:customerId', async (req: Request, res: Res
 
     res.json(customer);
   } catch (error) {
-    console.error('Error updating customer:', error);
+    logger.error('Error updating customer:', error);
     res.status(500).json({ error: 'Failed to update customer' });
   }
 });
@@ -1265,7 +1265,7 @@ router.get('/:merchantId/analytics/goals', async (req: Request, res: Response) =
     res.json(goals);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error getting sales goals:', message);
+    logger.error('Error getting sales goals:', message);
     res.status(500).json({ error: 'Failed to get sales goals' });
   }
 });
@@ -1299,7 +1299,7 @@ router.get('/:merchantId/reporting-categories', async (req: Request, res: Respon
     res.json(categories);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error getting reporting categories:', message);
+    logger.error('Error getting reporting categories:', message);
     res.status(500).json({ error: 'Failed to get reporting categories' });
   }
 });
@@ -1327,7 +1327,7 @@ router.post('/:merchantId/reporting-categories', async (req: Request, res: Respo
     res.status(201).json(category);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error creating reporting category:', message);
+    logger.error('Error creating reporting category:', message);
     res.status(500).json({ error: 'Failed to create reporting category' });
   }
 });
@@ -1356,7 +1356,7 @@ router.patch('/:merchantId/reporting-categories/:id', async (req: Request, res: 
     res.json(category);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error updating reporting category:', message);
+    logger.error('Error updating reporting category:', message);
     res.status(500).json({ error: 'Failed to update reporting category' });
   }
 });
@@ -1374,7 +1374,7 @@ router.delete('/:merchantId/reporting-categories/:id', async (req: Request, res:
     res.status(204).send();
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error deleting reporting category:', message);
+    logger.error('Error deleting reporting category:', message);
     res.status(500).json({ error: 'Failed to delete reporting category' });
   }
 });
@@ -1441,7 +1441,7 @@ router.get('/:merchantId/reports/realtime-kpis', async (req: Request, res: Respo
     });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error getting realtime KPIs:', message);
+    logger.error('Error getting realtime KPIs:', message);
     res.status(500).json({ error: 'Failed to get realtime KPIs' });
   }
 });
@@ -1511,7 +1511,7 @@ router.get('/:merchantId/bookings/turn-time-stats', async (req: Request, res: Re
     });
   } catch (error: unknown) {
     // If seatedAt/completedAt columns don't exist yet, return defaults
-    console.error('Error getting turn time stats:', toErrorMessage(error));
+    logger.error('Error getting turn time stats:', toErrorMessage(error));
     res.json({ overall: 45, byPartySize: [], byMealPeriod: [], byDayOfWeek: [], sampleSize: 0 });
   }
 });
@@ -1537,7 +1537,7 @@ router.get('/:merchantId/waitlist', async (req: Request, res: Response) => {
     res.json(entries);
   } catch (error: unknown) {
     // If 'waitlisted' status isn't used yet, return empty array
-    console.error('Error getting waitlist:', toErrorMessage(error));
+    logger.error('Error getting waitlist:', toErrorMessage(error));
     res.json([]);
   }
 });
@@ -1564,7 +1564,7 @@ router.get('/:merchantId/purchase-orders', async (req: Request, res: Response) =
     res.json(orders);
   } catch (error: unknown) {
     // If 'type' field doesn't exist yet, return empty array
-    console.error('Error getting purchase orders:', toErrorMessage(error));
+    logger.error('Error getting purchase orders:', toErrorMessage(error));
     res.json([]);
   }
 });
@@ -1590,7 +1590,7 @@ router.get('/:merchantId/order-templates', async (req: Request, res: Response) =
     res.json(templates);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error getting order templates:', message);
+    logger.error('Error getting order templates:', message);
     res.status(500).json({ error: 'Failed to get order templates' });
   }
 });
@@ -1611,7 +1611,7 @@ router.post('/:merchantId/order-templates', async (req: Request, res: Response) 
     res.status(201).json(template);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error creating order template:', message);
+    logger.error('Error creating order template:', message);
     res.status(500).json({ error: 'Failed to create order template' });
   }
 });
@@ -1623,7 +1623,7 @@ router.delete('/:merchantId/order-templates/:id', async (req: Request, res: Resp
     res.json({ success: true });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error deleting order template:', message);
+    logger.error('Error deleting order template:', message);
     res.status(500).json({ error: 'Failed to delete order template' });
   }
 });
@@ -1660,7 +1660,7 @@ router.get('/:merchantId/reports/saved', async (req: Request, res: Response) => 
     res.json(reports);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error getting saved reports:', message);
+    logger.error('Error getting saved reports:', message);
     res.status(500).json({ error: 'Failed to get saved reports' });
   }
 });
@@ -1681,7 +1681,7 @@ router.post('/:merchantId/reports/saved', async (req: Request, res: Response) =>
     res.status(201).json(report);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error creating saved report:', message);
+    logger.error('Error creating saved report:', message);
     res.status(500).json({ error: 'Failed to create saved report' });
   }
 });
@@ -1701,7 +1701,7 @@ router.patch('/:merchantId/reports/saved/:id', async (req: Request, res: Respons
     res.json(report);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error updating saved report:', message);
+    logger.error('Error updating saved report:', message);
     res.status(500).json({ error: 'Failed to update saved report' });
   }
 });
@@ -1713,7 +1713,7 @@ router.delete('/:merchantId/reports/saved/:id', async (req: Request, res: Respon
     res.json({ success: true });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error deleting saved report:', message);
+    logger.error('Error deleting saved report:', message);
     res.status(500).json({ error: 'Failed to delete saved report' });
   }
 });
@@ -1748,7 +1748,7 @@ router.get('/:merchantId/reports/schedules', async (req: Request, res: Response)
     res.json(schedules);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error getting report schedules:', message);
+    logger.error('Error getting report schedules:', message);
     res.status(500).json({ error: 'Failed to get report schedules' });
   }
 });
@@ -1768,7 +1768,7 @@ router.post('/:merchantId/reports/schedules', async (req: Request, res: Response
     res.status(201).json(schedule);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error creating report schedule:', message);
+    logger.error('Error creating report schedule:', message);
     res.status(500).json({ error: 'Failed to create report schedule' });
   }
 });
@@ -1788,7 +1788,7 @@ router.patch('/:merchantId/reports/schedules/:id', async (req: Request, res: Res
     res.json(schedule);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error updating report schedule:', message);
+    logger.error('Error updating report schedule:', message);
     res.status(500).json({ error: 'Failed to update report schedule' });
   }
 });
@@ -1800,7 +1800,7 @@ router.delete('/:merchantId/reports/schedules/:id', async (req: Request, res: Re
     res.json({ success: true });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error deleting report schedule:', message);
+    logger.error('Error deleting report schedule:', message);
     res.status(500).json({ error: 'Failed to delete report schedule' });
   }
 });
@@ -1816,7 +1816,7 @@ router.get('/:merchantId/bookings/recurring', async (req: Request, res: Response
     });
     res.json(recurring);
   } catch (error: unknown) {
-    console.error('[Reservations] Error fetching recurring:', error);
+    logger.error('[Reservations] Error fetching recurring:', error);
     res.status(500).json({ error: 'Failed to fetch recurring reservations' });
   }
 });
@@ -1836,7 +1836,7 @@ router.post('/:merchantId/bookings/recurring', async (req: Request, res: Respons
     });
     res.status(201).json(recurring);
   } catch (error: unknown) {
-    console.error('[Reservations] Error creating recurring:', error);
+    logger.error('[Reservations] Error creating recurring:', error);
     res.status(500).json({ error: 'Failed to create recurring reservation' });
   }
 });
@@ -1858,7 +1858,7 @@ router.patch('/:merchantId/bookings/recurring/:id', async (req: Request, res: Re
       res.status(404).json({ error: 'Recurring reservation not found' });
       return;
     }
-    console.error('[Reservations] Error updating recurring:', error);
+    logger.error('[Reservations] Error updating recurring:', error);
     res.status(500).json({ error: 'Failed to update recurring reservation' });
   }
 });
@@ -1873,7 +1873,7 @@ router.delete('/:merchantId/bookings/recurring/:id', async (req: Request, res: R
       res.status(404).json({ error: 'Recurring reservation not found' });
       return;
     }
-    console.error('[Reservations] Error deleting recurring:', error);
+    logger.error('[Reservations] Error deleting recurring:', error);
     res.status(500).json({ error: 'Failed to delete recurring reservation' });
   }
 });
@@ -1886,7 +1886,7 @@ router.get('/:merchantId/waitlist/virtual-config', async (req: Request, res: Res
     const profile = rawProfile === RESTAURANT_NOT_FOUND ? null : rawProfile;
     res.json(profile?.virtualWaitlistConfig ?? { enabled: false, estimatedWaitDisplay: true, maxPartySize: 20 });
   } catch (error: unknown) {
-    console.error('[Waitlist] Error getting virtual config:', error);
+    logger.error('[Waitlist] Error getting virtual config:', error);
     res.status(500).json({ error: 'Failed to get virtual waitlist config' });
   }
 });
@@ -1896,7 +1896,7 @@ router.put('/:merchantId/waitlist/virtual-config', async (req: Request, res: Res
     await setMerchantProfileKey(req.params.merchantId, 'virtualWaitlistConfig', req.body);
     res.json(req.body);
   } catch (error: unknown) {
-    console.error('[Waitlist] Error saving virtual config:', error);
+    logger.error('[Waitlist] Error saving virtual config:', error);
     res.status(500).json({ error: 'Failed to save virtual waitlist config' });
   }
 });
@@ -1907,7 +1907,7 @@ router.get('/:merchantId/waitlist/sms-config', async (req: Request, res: Respons
     const profile = rawProfile === RESTAURANT_NOT_FOUND ? null : rawProfile;
     res.json(profile?.waitlistSmsConfig ?? { enabled: false, provider: null, notifyOnReady: true, notifyOnCancel: true });
   } catch (error: unknown) {
-    console.error('[Waitlist] Error getting SMS config:', error);
+    logger.error('[Waitlist] Error getting SMS config:', error);
     res.status(500).json({ error: 'Failed to get waitlist SMS config' });
   }
 });
@@ -1917,7 +1917,7 @@ router.put('/:merchantId/waitlist/sms-config', async (req: Request, res: Respons
     await setMerchantProfileKey(req.params.merchantId, 'waitlistSmsConfig', req.body);
     res.json(req.body);
   } catch (error: unknown) {
-    console.error('[Waitlist] Error saving SMS config:', error);
+    logger.error('[Waitlist] Error saving SMS config:', error);
     res.status(500).json({ error: 'Failed to save waitlist SMS config' });
   }
 });
@@ -1958,7 +1958,7 @@ router.get('/:merchantId/waitlist/analytics', async (req: Request, res: Response
 
     res.json({ avgWaitTime, totalSeated, noShows, noShowRate });
   } catch (error: unknown) {
-    console.error('[Waitlist] Error getting analytics:', error);
+    logger.error('[Waitlist] Error getting analytics:', error);
     res.status(500).json({ error: 'Failed to get waitlist analytics' });
   }
 });
@@ -1971,7 +1971,7 @@ router.get('/:merchantId/calendar/connection', async (req: Request, res: Respons
     const profile = rawProfile === RESTAURANT_NOT_FOUND ? null : rawProfile;
     res.json(profile?.calendarConnection ?? { provider: null, connected: false, syncEnabled: false });
   } catch (error: unknown) {
-    console.error('[Calendar] Error getting connection:', error);
+    logger.error('[Calendar] Error getting connection:', error);
     res.status(500).json({ error: 'Failed to get calendar connection' });
   }
 });
@@ -1981,7 +1981,7 @@ router.put('/:merchantId/calendar/connection', async (req: Request, res: Respons
     await setMerchantProfileKey(req.params.merchantId, 'calendarConnection', req.body);
     res.json(req.body);
   } catch (error: unknown) {
-    console.error('[Calendar] Error saving connection:', error);
+    logger.error('[Calendar] Error saving connection:', error);
     res.status(500).json({ error: 'Failed to save calendar connection' });
   }
 });
@@ -1997,7 +1997,7 @@ router.get('/:merchantId/events', async (req: Request, res: Response) => {
     });
     res.json(events);
   } catch (error: unknown) {
-    console.error('[Events] Error listing events:', error);
+    logger.error('[Events] Error listing events:', error);
     res.status(500).json({ error: 'Failed to list events' });
   }
 });
@@ -2017,7 +2017,7 @@ router.post('/:merchantId/events', async (req: Request, res: Response) => {
     });
     res.status(201).json(event);
   } catch (error: unknown) {
-    console.error('[Events] Error creating event:', error);
+    logger.error('[Events] Error creating event:', error);
     res.status(500).json({ error: 'Failed to create event' });
   }
 });
@@ -2042,7 +2042,7 @@ router.patch('/:merchantId/events/:eventId', async (req: Request, res: Response)
       res.status(404).json({ error: 'Event not found' });
       return;
     }
-    console.error('[Events] Error updating event:', error);
+    logger.error('[Events] Error updating event:', error);
     res.status(500).json({ error: 'Failed to update event' });
   }
 });
@@ -2057,7 +2057,7 @@ router.delete('/:merchantId/events/:eventId', async (req: Request, res: Response
       res.status(404).json({ error: 'Event not found' });
       return;
     }
-    console.error('[Events] Error deleting event:', error);
+    logger.error('[Events] Error deleting event:', error);
     res.status(500).json({ error: 'Failed to delete event' });
   }
 });
@@ -2074,7 +2074,7 @@ router.get('/:merchantId/customers/feedback', async (req: Request, res: Response
     });
     res.json(feedback);
   } catch (error: unknown) {
-    console.error('[CRM] Error fetching feedback:', error);
+    logger.error('[CRM] Error fetching feedback:', error);
     res.status(500).json({ error: 'Failed to fetch customer feedback' });
   }
 });
@@ -2094,7 +2094,7 @@ router.post('/:merchantId/customers/feedback', async (req: Request, res: Respons
     });
     res.status(201).json(feedback);
   } catch (error: unknown) {
-    console.error('[CRM] Error creating feedback:', error);
+    logger.error('[CRM] Error creating feedback:', error);
     res.status(500).json({ error: 'Failed to create feedback' });
   }
 });
@@ -2110,7 +2110,7 @@ router.get('/:merchantId/customers/smart-groups', async (req: Request, res: Resp
     });
     res.json(groups);
   } catch (error: unknown) {
-    console.error('[CRM] Error fetching smart groups:', error);
+    logger.error('[CRM] Error fetching smart groups:', error);
     res.status(500).json({ error: 'Failed to fetch smart groups' });
   }
 });
@@ -2130,7 +2130,7 @@ router.post('/:merchantId/customers/smart-groups', async (req: Request, res: Res
     });
     res.status(201).json(group);
   } catch (error: unknown) {
-    console.error('[CRM] Error creating smart group:', error);
+    logger.error('[CRM] Error creating smart group:', error);
     res.status(500).json({ error: 'Failed to create smart group' });
   }
 });
@@ -2149,7 +2149,7 @@ router.patch('/:merchantId/customers/smart-groups/:groupId', async (req: Request
       res.status(404).json({ error: 'Smart group not found' });
       return;
     }
-    console.error('[CRM] Error updating smart group:', error);
+    logger.error('[CRM] Error updating smart group:', error);
     res.status(500).json({ error: 'Failed to update smart group' });
   }
 });
@@ -2164,7 +2164,7 @@ router.delete('/:merchantId/customers/smart-groups/:groupId', async (req: Reques
       res.status(404).json({ error: 'Smart group not found' });
       return;
     }
-    console.error('[CRM] Error deleting smart group:', error);
+    logger.error('[CRM] Error deleting smart group:', error);
     res.status(500).json({ error: 'Failed to delete smart group' });
   }
 });
@@ -2181,7 +2181,7 @@ router.get('/:merchantId/customers/messages/threads', async (req: Request, res: 
     });
     res.json(threads);
   } catch (error: unknown) {
-    console.error('[CRM] Error fetching message threads:', error);
+    logger.error('[CRM] Error fetching message threads:', error);
     res.status(500).json({ error: 'Failed to fetch message threads' });
   }
 });
@@ -2197,7 +2197,7 @@ router.get('/:merchantId/customers/messages/templates', async (req: Request, res
     });
     res.json(templates);
   } catch (error: unknown) {
-    console.error('[CRM] Error fetching message templates:', error);
+    logger.error('[CRM] Error fetching message templates:', error);
     res.status(500).json({ error: 'Failed to fetch message templates' });
   }
 });
@@ -2217,7 +2217,7 @@ router.post('/:merchantId/customers/messages/templates', async (req: Request, re
     });
     res.status(201).json(template);
   } catch (error: unknown) {
-    console.error('[CRM] Error creating message template:', error);
+    logger.error('[CRM] Error creating message template:', error);
     res.status(500).json({ error: 'Failed to create message template' });
   }
 });
@@ -2239,7 +2239,7 @@ router.patch('/:merchantId/customers/messages/templates/:templateId', async (req
       res.status(404).json({ error: 'Message template not found' });
       return;
     }
-    console.error('[CRM] Error updating message template:', error);
+    logger.error('[CRM] Error updating message template:', error);
     res.status(500).json({ error: 'Failed to update message template' });
   }
 });
@@ -2254,7 +2254,7 @@ router.delete('/:merchantId/customers/messages/templates/:templateId', async (re
       res.status(404).json({ error: 'Message template not found' });
       return;
     }
-    console.error('[CRM] Error deleting message template:', error);
+    logger.error('[CRM] Error deleting message template:', error);
     res.status(500).json({ error: 'Failed to delete message template' });
   }
 });
@@ -2293,7 +2293,7 @@ router.get('/:merchantId/analytics/team/sales', async (req: Request, res: Respon
 
     res.json(results);
   } catch (error: unknown) {
-    console.error('[Analytics] Error getting team sales:', error);
+    logger.error('[Analytics] Error getting team sales:', error);
     res.status(500).json({ error: 'Failed to get team sales analytics' });
   }
 });
@@ -2329,7 +2329,7 @@ router.get('/:merchantId/reports/team-member-sales', async (req: Request, res: R
       totalTips: Math.round(stats.totalTips * 100) / 100,
     })));
   } catch (error: unknown) {
-    console.error('[Reports] Error getting team member sales:', error);
+    logger.error('[Reports] Error getting team member sales:', error);
     res.status(500).json({ error: 'Failed to get team member sales report' });
   }
 });
@@ -2365,7 +2365,7 @@ router.get('/:merchantId/reports/tax-service-charges', async (req: Request, res:
       effectiveTaxRate: totalRevenue > 0 ? Math.round((totalTax / totalRevenue) * 10000) / 100 : 0,
     });
   } catch (error: unknown) {
-    console.error('[Reports] Error getting tax report:', error);
+    logger.error('[Reports] Error getting tax report:', error);
     res.status(500).json({ error: 'Failed to get tax & service charges report' });
   }
 });
@@ -2395,7 +2395,7 @@ router.get('/:merchantId/analytics/conversion-funnel', async (req: Request, res:
       conversionRate: allOrders > 0 ? Math.round((completedOrders / allOrders) * 1000) / 10 : 0,
     });
   } catch (error: unknown) {
-    console.error('[Analytics] Error getting conversion funnel:', error);
+    logger.error('[Analytics] Error getting conversion funnel:', error);
     res.status(500).json({ error: 'Failed to get conversion funnel' });
   }
 });
@@ -2437,7 +2437,7 @@ router.get('/:merchantId/analytics/forecast/revenue', async (req: Request, res: 
       confidence: orders.length > 100 ? 'medium' : forecastConfidence,
     });
   } catch (error: unknown) {
-    console.error('[Analytics] Error getting revenue forecast:', error);
+    logger.error('[Analytics] Error getting revenue forecast:', error);
     res.status(500).json({ error: 'Failed to get revenue forecast' });
   }
 });
@@ -2479,7 +2479,7 @@ router.get('/:merchantId/analytics/forecast/demand', async (req: Request, res: R
       confidence: orders.length > 100 ? 'medium' : demandConfidence,
     });
   } catch (error: unknown) {
-    console.error('[Analytics] Error getting demand forecast:', error);
+    logger.error('[Analytics] Error getting demand forecast:', error);
     res.status(500).json({ error: 'Failed to get demand forecast' });
   }
 });
@@ -2526,7 +2526,7 @@ router.get('/:merchantId/analytics/forecast/staffing', async (req: Request, res:
       confidence: orders.length > 100 ? 'medium' : staffingConfidence,
     });
   } catch (error: unknown) {
-    console.error('[Analytics] Error getting staffing forecast:', error);
+    logger.error('[Analytics] Error getting staffing forecast:', error);
     res.status(500).json({ error: 'Failed to get staffing forecast' });
   }
 });

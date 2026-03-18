@@ -429,6 +429,11 @@ app.use('/api/merchant', requireAuth, paymentConnectRoutes);  // Stripe Connect 
 app.use('/api/merchant', requireAuth, subscriptionRoutes);  // Subscription plan tier CRUD
 app.use('/api/merchant', requireAuth, onboardingRoutes);  // Merchant profile + business hours
 
+// Custom 404 — no path disclosure (PCI DSS 6.5.5)
+app.use((_req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
 // Global error handler — MUST be last middleware
 app.use(globalErrorHandler);
 

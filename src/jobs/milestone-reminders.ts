@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { sendMilestoneReminder } from '../services/email.service';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
@@ -14,14 +15,14 @@ interface MilestoneEntry {
 }
 
 export function startMilestoneReminderCron(): void {
-  console.log('[MilestoneReminders] Starting milestone reminder job (hourly check, sends at 9am)');
+  logger.info('[MilestoneReminders] Starting milestone reminder job (hourly check, sends at 9am)');
 
   setInterval(() => {
     const hour = new Date().getHours();
     if (hour !== 9) return;
 
     processReminders().catch((error: unknown) => {
-      console.error('[MilestoneReminders] Processing failed:', error);
+      logger.error('[MilestoneReminders] Processing failed:', error);
     });
   }, CHECK_INTERVAL_MS);
 }
@@ -56,7 +57,7 @@ async function sendAndMarkMilestone(
     milestone.reminderSentAt = now.toISOString();
     return true;
   } catch (error: unknown) {
-    console.error(`[MilestoneReminders] Failed to send reminder for job ${job.id}, milestone ${milestone.id}:`, error);
+    logger.error(`[MilestoneReminders] Failed to send reminder for job ${job.id}, milestone ${milestone.id}:`, error);
     return false;
   }
 }
@@ -105,6 +106,6 @@ async function processReminders(): Promise<void> {
   }
 
   if (sentCount > 0) {
-    console.log(`[MilestoneReminders] Sent ${sentCount} reminder(s)`);
+    logger.info(`[MilestoneReminders] Sent ${sentCount} reminder(s)`);
   }
 }

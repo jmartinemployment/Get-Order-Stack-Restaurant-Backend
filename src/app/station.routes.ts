@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import { toErrorMessage } from '../utils/errors';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
@@ -52,7 +53,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (error: unknown) {
-    console.error('[Station] List error:', error);
+    logger.error('[Station] List error:', error);
     res.status(500).json({ error: 'Failed to list stations' });
   }
 });
@@ -79,7 +80,7 @@ router.post('/', async (req: Request, res: Response) => {
       res.status(409).json({ error: `Station "${parsed.data.name}" already exists` });
       return;
     }
-    console.error('[Station] Create error:', error);
+    logger.error('[Station] Create error:', error);
     res.status(500).json({ error: 'Failed to create station' });
   }
 });
@@ -115,7 +116,7 @@ router.patch('/:stationId', async (req: Request, res: Response) => {
       res.status(409).json({ error: `Station name already exists` });
       return;
     }
-    console.error('[Station] Update error:', error);
+    logger.error('[Station] Update error:', error);
     res.status(500).json({ error: 'Failed to update station' });
   }
 });
@@ -133,7 +134,7 @@ router.delete('/:stationId', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Station not found' });
       return;
     }
-    console.error('[Station] Delete error:', error);
+    logger.error('[Station] Delete error:', error);
     res.status(500).json({ error: 'Failed to delete station' });
   }
 });
@@ -190,7 +191,7 @@ router.put('/:stationId/categories', async (req: Request, res: Response) => {
     res.json({ success: true, stationId, categoryIds: parsed.data.categoryIds });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('[Station] Set categories error:', message);
+    logger.error('[Station] Set categories error:', message);
     res.status(500).json({ error: 'Failed to set station categories', detail: message });
   }
 });
@@ -214,7 +215,7 @@ stationCategoryMappingRouter.get('/', async (req: Request, res: Response) => {
     });
     res.json(mappings);
   } catch (error: unknown) {
-    console.error('[Station] List mappings error:', error);
+    logger.error('[Station] List mappings error:', error);
     res.status(500).json({ error: 'Failed to list station-category mappings' });
   }
 });

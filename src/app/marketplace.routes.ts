@@ -2,6 +2,7 @@ import { Request, Response, Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireMerchantManager } from '../middleware/auth.middleware';
 import { marketplaceService } from '../services/marketplace.service';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -38,7 +39,7 @@ router.get('/:merchantId/marketplace/integrations', requireAuth, requireMerchant
     const integrations = await marketplaceService.listIntegrations(restaurantId);
     res.json({ integrations });
   } catch (error: unknown) {
-    console.error('[Marketplace] Failed to load integrations:', error);
+    logger.error('[Marketplace] Failed to load integrations:', error);
     res.status(500).json({ error: 'Failed to load marketplace integrations' });
   }
 });
@@ -72,7 +73,7 @@ router.put('/:merchantId/marketplace/integrations/:provider', requireAuth, requi
     res.json(summary);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to update marketplace integration';
-    console.error('[Marketplace] Failed to update integration:', message);
+    logger.error('[Marketplace] Failed to update integration:', message);
     res.status(500).json({ error: message });
   }
 });
@@ -90,7 +91,7 @@ router.delete('/:merchantId/marketplace/integrations/:provider/secret', requireA
     res.json(summary);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to clear marketplace integration secret';
-    console.error('[Marketplace] Failed to clear integration secret:', message);
+    logger.error('[Marketplace] Failed to clear integration secret:', message);
     res.status(500).json({ error: message });
   }
 });
@@ -111,7 +112,7 @@ router.get('/:merchantId/marketplace/menu-mappings', requireAuth, requireMerchan
     res.json({ mappings });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to load marketplace menu mappings';
-    console.error('[Marketplace] Failed to load menu mappings', { error: message });
+    logger.error('[Marketplace] Failed to load menu mappings', { error: message });
     res.status(500).json({ error: message });
   }
 });
@@ -135,7 +136,7 @@ router.post('/:merchantId/marketplace/menu-mappings', requireAuth, requireMercha
     res.json(mapping);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to save marketplace menu mapping';
-    console.error('[Marketplace] Failed to save menu mapping:', message);
+    logger.error('[Marketplace] Failed to save menu mapping:', message);
     res.status(500).json({ error: message });
   }
 });
@@ -151,7 +152,7 @@ router.delete('/:merchantId/marketplace/menu-mappings/:mappingId', requireAuth, 
     res.json({ deleted: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to delete marketplace menu mapping';
-    console.error('[Marketplace] Failed to delete menu mapping:', message);
+    logger.error('[Marketplace] Failed to delete menu mapping:', message);
     res.status(500).json({ error: message });
   }
 });
@@ -179,7 +180,7 @@ router.get('/:merchantId/marketplace/status-sync/jobs', requireAuth, requireMerc
     res.json({ jobs });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to load marketplace sync jobs';
-    console.error('[Marketplace] Failed to load status sync jobs:', message);
+    logger.error('[Marketplace] Failed to load status sync jobs:', message);
     res.status(500).json({ error: message });
   }
 });
@@ -195,7 +196,7 @@ router.post('/:merchantId/marketplace/status-sync/jobs/:jobId/retry', requireAut
     res.json(retried);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to retry marketplace sync job';
-    console.error('[Marketplace] Failed to retry status sync job:', message);
+    logger.error('[Marketplace] Failed to retry status sync job:', message);
     res.status(500).json({ error: message });
   }
 });
@@ -211,7 +212,7 @@ router.post('/:merchantId/marketplace/status-sync/process', requireAuth, require
     res.json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to process marketplace sync jobs';
-    console.error('[Marketplace] Failed to process status sync jobs:', message);
+    logger.error('[Marketplace] Failed to process status sync jobs:', message);
     res.status(500).json({ error: message });
   }
 });
@@ -235,7 +236,7 @@ router.get('/:merchantId/marketplace/pilot/summary', requireAuth, requireMerchan
     res.json(summary);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to load marketplace pilot summary';
-    console.error('[Marketplace] Failed to load pilot summary:', message);
+    logger.error('[Marketplace] Failed to load pilot summary:', message);
     res.status(500).json({ error: message });
   }
 });

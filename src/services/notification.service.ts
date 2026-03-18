@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { toErrorMessage } from '../utils/errors';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
@@ -52,7 +53,7 @@ async function sendSms(
   //   to,
   // });
 
-  console.log(`[Notification] SMS STUB — would send to ${to}: "${message}"`);
+  logger.info(`[Notification] SMS STUB — would send to ${to}: "${message}"`);
   return { sent: false, channel: 'sms', reason: 'provider_stubbed' };
 }
 
@@ -78,7 +79,7 @@ async function sendEmail(
   //   text: body,
   // });
 
-  console.log(`[Notification] Email STUB — would send to ${to}: subject="${subject}", body="${body}"`);
+  logger.info(`[Notification] Email STUB — would send to ${to}: subject="${subject}", body="${body}"`);
   return { sent: false, channel: 'email', reason: 'provider_stubbed' };
 }
 
@@ -95,13 +96,13 @@ async function onOrderReady(orderId: string): Promise<NotificationResult[]> {
     });
 
     if (!order) {
-      console.log('[Notification] Order not found — skipping notification', { orderId });
+      logger.info('[Notification] Order not found — skipping notification', { orderId });
       return results;
     }
 
     const rawSettings = (order.restaurant as Record<string, unknown>)?.notificationSettings;
     if (!rawSettings || typeof rawSettings !== 'object') {
-      console.log(`[Notification] No notification settings for restaurant ${order.restaurantId} — skipping`);
+      logger.info(`[Notification] No notification settings for restaurant ${order.restaurantId} — skipping`);
       return results;
     }
 
@@ -117,13 +118,13 @@ async function onOrderReady(orderId: string): Promise<NotificationResult[]> {
     const isForced = orderSource !== undefined && forcedNotificationSources.includes(orderSource);
 
     if (!isForced && !settings.orderReadyNotifyCustomer) {
-      console.log(`[Notification] Customer notification disabled for restaurant ${order.restaurantId}`);
+      logger.info(`[Notification] Customer notification disabled for restaurant ${order.restaurantId}`);
       return results;
     }
 
     const customer = order.customer;
     if (!customer) {
-      console.log(`[Notification] No customer on order ${order.orderNumber} — skipping notification`);
+      logger.info(`[Notification] No customer on order ${order.orderNumber} — skipping notification`);
       return results;
     }
 
@@ -154,9 +155,9 @@ async function onOrderReady(orderId: string): Promise<NotificationResult[]> {
       results.push(emailResult);
     }
 
-    console.log(`[Notification] Order ${order.orderNumber} ready — ${results.length} notification(s) attempted`);
+    logger.info(`[Notification] Order ${order.orderNumber} ready — ${results.length} notification(s) attempted`);
   } catch (error: unknown) {
-    console.error(`[Notification] Error processing order ${orderId}:`, toErrorMessage(error));
+    logger.error(`[Notification] Error processing order ${orderId}:`, toErrorMessage(error));
   }
 
   return results;

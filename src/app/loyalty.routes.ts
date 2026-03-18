@@ -8,6 +8,7 @@ import {
   LoyaltyRewardUpdateSchema,
   PointsAdjustmentSchema,
 } from '../validators/loyalty.validator';
+import { logger } from '../utils/logger';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -21,7 +22,7 @@ router.get('/:merchantId/loyalty/config', async (req: Request, res: Response) =>
     const config = await loyaltyService.getConfig(restaurantId);
     res.json(config);
   } catch (error: unknown) {
-    console.error('[Loyalty] Error fetching config:', error);
+    logger.error('[Loyalty] Error fetching config:', error);
     res.status(500).json({ error: 'Failed to fetch loyalty config' });
   }
 });
@@ -43,7 +44,7 @@ router.patch('/:merchantId/loyalty/config', async (req: Request, res: Response) 
     const config = await loyaltyService.updateConfig(restaurantId, parsed.data);
     res.json(config);
   } catch (error: unknown) {
-    console.error('[Loyalty] Error updating config:', error);
+    logger.error('[Loyalty] Error updating config:', error);
     res.status(500).json({ error: 'Failed to update loyalty config' });
   }
 });
@@ -60,7 +61,7 @@ router.get('/:merchantId/loyalty/rewards', async (req: Request, res: Response) =
     });
     res.json(rewards);
   } catch (error: unknown) {
-    console.error('[Loyalty] Error fetching rewards:', error);
+    logger.error('[Loyalty] Error fetching rewards:', error);
     res.status(500).json({ error: 'Failed to fetch loyalty rewards' });
   }
 });
@@ -87,7 +88,7 @@ router.post('/:merchantId/loyalty/rewards', async (req: Request, res: Response) 
     });
     res.status(201).json(reward);
   } catch (error: unknown) {
-    console.error('[Loyalty] Error creating reward:', error);
+    logger.error('[Loyalty] Error creating reward:', error);
     res.status(500).json({ error: 'Failed to create loyalty reward' });
   }
 });
@@ -112,7 +113,7 @@ router.patch('/:merchantId/loyalty/rewards/:rewardId', async (req: Request, res:
     });
     res.json(reward);
   } catch (error: unknown) {
-    console.error('[Loyalty] Error updating reward:', error);
+    logger.error('[Loyalty] Error updating reward:', error);
     res.status(500).json({ error: 'Failed to update loyalty reward' });
   }
 });
@@ -127,7 +128,7 @@ router.delete('/:merchantId/loyalty/rewards/:rewardId', async (req: Request, res
     });
     res.status(204).send();
   } catch (error: unknown) {
-    console.error('[Loyalty] Error deleting reward:', error);
+    logger.error('[Loyalty] Error deleting reward:', error);
     res.status(500).json({ error: 'Failed to delete loyalty reward' });
   }
 });
@@ -141,7 +142,7 @@ router.get('/:merchantId/customers/:customerId/loyalty', async (req: Request, re
     const profile = await loyaltyService.getCustomerLoyalty(customerId, restaurantId);
     res.json(profile);
   } catch (error: unknown) {
-    console.error('[Loyalty] Error fetching customer loyalty:', error);
+    logger.error('[Loyalty] Error fetching customer loyalty:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch customer loyalty';
     res.status(error instanceof Error && error.message === 'Customer not found' ? 404 : 500).json({ error: message });
   }
@@ -158,7 +159,7 @@ router.get('/:merchantId/customers/:customerId/loyalty/history', async (req: Req
     );
     res.json(history);
   } catch (error: unknown) {
-    console.error('[Loyalty] Error fetching points history:', error);
+    logger.error('[Loyalty] Error fetching points history:', error);
     res.status(500).json({ error: 'Failed to fetch points history' });
   }
 });
@@ -185,7 +186,7 @@ router.post('/:merchantId/customers/:customerId/loyalty/adjust', async (req: Req
     );
     res.json(customer);
   } catch (error: unknown) {
-    console.error('[Loyalty] Error adjusting points:', error);
+    logger.error('[Loyalty] Error adjusting points:', error);
     res.status(500).json({ error: 'Failed to adjust points' });
   }
 });
@@ -217,7 +218,7 @@ router.get('/:merchantId/customers/lookup', async (req: Request, res: Response) 
 
     res.json(customer);
   } catch (error: unknown) {
-    console.error('[Loyalty] Error looking up customer:', error);
+    logger.error('[Loyalty] Error looking up customer:', error);
     res.status(500).json({ error: 'Failed to lookup customer' });
   }
 });
@@ -247,7 +248,7 @@ router.get('/:merchantId/referrals/config', async (req: Request, res: Response) 
     });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error getting referral config:', message);
+    logger.error('Error getting referral config:', message);
     res.status(500).json({ error: 'Failed to get referral config' });
   }
 });
@@ -269,7 +270,7 @@ router.put('/:merchantId/referrals/config', async (req: Request, res: Response) 
     });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error saving referral config:', message);
+    logger.error('Error saving referral config:', message);
     res.status(500).json({ error: 'Failed to save referral config' });
   }
 });

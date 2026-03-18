@@ -1,4 +1,5 @@
 import { marketplaceService } from '../services/marketplace.service';
+import { logger } from '../utils/logger';
 
 const DEFAULT_INTERVAL_MS = 15_000;
 const DEFAULT_BATCH_SIZE = 25;
@@ -24,7 +25,7 @@ function isEnabled(): boolean {
 
 export function startMarketplaceStatusSyncJob(): void {
   if (!isEnabled()) {
-    console.log('[MarketplaceStatusSync] Job disabled by MARKETPLACE_STATUS_SYNC_JOB_ENABLED');
+    logger.info('[MarketplaceStatusSync] Job disabled by MARKETPLACE_STATUS_SYNC_JOB_ENABLED');
     return;
   }
 
@@ -38,16 +39,16 @@ export function startMarketplaceStatusSyncJob(): void {
     try {
       const result = await marketplaceService.processDueStatusSyncJobs({ limit: batchSize });
       if (result.processed > 0 || result.scanned > 0) {
-        console.log('[MarketplaceStatusSync] Run complete', result);
+        logger.info('[MarketplaceStatusSync] Run complete', result);
       }
     } catch (error: unknown) {
-      console.error('[MarketplaceStatusSync] Scheduled run failed:', error);
+      logger.error('[MarketplaceStatusSync] Scheduled run failed:', error);
     } finally {
       inFlight = false;
     }
   };
 
-  console.log(
+  logger.info(
     `[MarketplaceStatusSync] Starting worker interval=${intervalMs}ms batch=${batchSize}`,
   );
 

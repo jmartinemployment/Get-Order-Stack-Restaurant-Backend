@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -257,7 +258,7 @@ router.get('/:merchantSlug/menu', async (req: Request, res: Response) => {
       categories: [...categoryMap.values()].filter(c => c.items.length > 0),
     });
   } catch (error: unknown) {
-    console.error('[Public Menu] Error:', error);
+    logger.error('[Public Menu] Error:', error);
     res.status(500).json({ error: 'Failed to load menu' });
   }
 });

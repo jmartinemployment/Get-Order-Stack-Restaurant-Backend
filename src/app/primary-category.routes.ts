@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -51,7 +52,7 @@ router.get('/:merchantId/primary-categories', async (req: Request, res: Response
 
     res.json(result);
   } catch (error) {
-    console.error('Error fetching primary categories:', error);
+    logger.error('Error fetching primary categories:', error);
     res.status(500).json({ error: 'Failed to fetch primary categories' });
   }
 });
@@ -92,7 +93,7 @@ router.post('/:merchantId/primary-categories', async (req: Request, res: Respons
       res.status(400).json({ error: 'A primary category with this slug already exists' });
       return;
     }
-    console.error('Error creating primary category:', error);
+    logger.error('Error creating primary category:', error);
     res.status(500).json({ error: 'Failed to create primary category' });
   }
 });
@@ -124,7 +125,7 @@ router.patch('/:merchantId/primary-categories/:categoryId', async (req: Request,
       res.status(400).json({ error: 'A primary category with this slug already exists' });
       return;
     }
-    console.error('Error updating primary category:', error);
+    logger.error('Error updating primary category:', error);
     res.status(500).json({ error: 'Failed to update primary category' });
   }
 });
@@ -149,7 +150,7 @@ router.delete('/:merchantId/primary-categories/:categoryId', async (req: Request
 
     res.status(204).send();
   } catch (error) {
-    console.error('Error deleting primary category:', error);
+    logger.error('Error deleting primary category:', error);
     res.status(500).json({ error: 'Failed to delete primary category' });
   }
 });
@@ -176,7 +177,7 @@ router.post('/:merchantId/primary-categories/reorder', async (req: Request, res:
 
     res.json({ success: true, updated: order.length });
   } catch (error) {
-    console.error('Error reordering primary categories:', error);
+    logger.error('Error reordering primary categories:', error);
     res.status(500).json({ error: 'Failed to reorder primary categories' });
   }
 });
@@ -199,7 +200,7 @@ router.patch('/:merchantId/menu/categories/:categoryId/assign', async (req: Requ
 
     res.json(category);
   } catch (error) {
-    console.error('Error assigning category:', error);
+    logger.error('Error assigning category:', error);
     res.status(500).json({ error: 'Failed to assign category' });
   }
 });
@@ -225,7 +226,7 @@ router.post('/:merchantId/primary-categories/:primaryCategoryId/assign-bulk', as
 
     res.json({ success: true, assigned: categoryIds.length });
   } catch (error) {
-    console.error('Error bulk assigning categories:', error);
+    logger.error('Error bulk assigning categories:', error);
     res.status(500).json({ error: 'Failed to bulk assign categories' });
   }
 });
@@ -423,7 +424,7 @@ router.get('/:merchantId/menu/grouped', async (req: Request, res: Response) => {
 
     res.json(grouped);
   } catch (error) {
-    console.error('Error fetching grouped menu:', error);
+    logger.error('Error fetching grouped menu:', error);
     res.status(500).json({ error: 'Failed to fetch grouped menu' });
   }
 });

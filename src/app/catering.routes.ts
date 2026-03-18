@@ -278,7 +278,7 @@ router.get('/:merchantId/catering/events', async (req: Request, res: Response) =
     res.json(events);
   } catch (error: unknown) {
     const msg = toErrorMessage(error);
-    console.error('[catering] GET events error:', msg);
+    logger.error('[catering] GET events error:', msg);
     res.status(500).json({ error: 'Failed to fetch catering events', detail: msg });
   }
 });
@@ -303,7 +303,7 @@ router.post('/:merchantId/catering/events', async (req: Request, res: Response) 
       res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
-    console.error('[catering] POST event error:', toErrorMessage(error));
+    logger.error('[catering] POST event error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to create catering event' });
   }
 });
@@ -321,7 +321,7 @@ router.get('/:merchantId/catering/events/:id', async (req: Request, res: Respons
     }
     res.json(event);
   } catch (error: unknown) {
-    console.error('[catering] GET event error:', toErrorMessage(error));
+    logger.error('[catering] GET event error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to fetch catering event' });
   }
 });
@@ -365,7 +365,7 @@ router.patch('/:merchantId/catering/events/:id', async (req: Request, res: Respo
       res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
-    console.error('[catering] PATCH event error:', toErrorMessage(error));
+    logger.error('[catering] PATCH event error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to update catering event' });
   }
 });
@@ -386,7 +386,7 @@ router.delete('/:merchantId/catering/events/:id', async (req: Request, res: Resp
     await prisma.cateringEvent.delete({ where: { id } });
     res.status(204).send();
   } catch (error: unknown) {
-    console.error('[catering] DELETE event error:', toErrorMessage(error));
+    logger.error('[catering] DELETE event error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to delete catering event' });
   }
 });
@@ -430,7 +430,7 @@ router.patch('/:merchantId/catering/events/:id/milestones/:milestoneId/pay', asy
 
     res.json(updated);
   } catch (error: unknown) {
-    console.error('[catering] milestone pay error:', toErrorMessage(error));
+    logger.error('[catering] milestone pay error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to mark milestone paid' });
   }
 });
@@ -500,7 +500,7 @@ router.post('/:merchantId/catering/events/:id/clone', async (req: Request, res: 
 
     res.status(201).json(clone);
   } catch (error: unknown) {
-    console.error('[catering] clone event error:', toErrorMessage(error));
+    logger.error('[catering] clone event error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to clone catering event' });
   }
 });
@@ -558,13 +558,13 @@ router.post('/:merchantId/catering/events/:id/proposal', async (req: Request, re
           restaurant?.defaultBrandingColor ?? null,
         );
       } catch (emailError: unknown) {
-        console.error('[Catering] Failed to send proposal email:', toErrorMessage(emailError));
+        logger.error('[Catering] Failed to send proposal email:', toErrorMessage(emailError));
       }
     }
 
     res.status(201).json({ token, url: `/catering/proposal/${token}`, expiresAt: proposalToken.expiresAt });
   } catch (error: unknown) {
-    console.error('[catering] generate proposal error:', toErrorMessage(error));
+    logger.error('[catering] generate proposal error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to generate proposal' });
   }
 });
@@ -736,7 +736,7 @@ publicRouter.get('/catering/proposal/:token', async (req: Request, res: Response
 
     res.json(proposalToken.job);
   } catch (error: unknown) {
-    console.error('[catering] GET proposal error:', toErrorMessage(error));
+    logger.error('[catering] GET proposal error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to fetch proposal' });
   }
 });
@@ -839,7 +839,7 @@ publicRouter.post('/catering/proposal/:token/approve', async (req: Request, res:
 
     res.json({ success: true, packageName: selectedPkg.name, totalCents: fees.totalCents });
   } catch (error: unknown) {
-    console.error('[catering] approve proposal error:', toErrorMessage(error));
+    logger.error('[catering] approve proposal error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to approve proposal' });
   }
 });
@@ -875,7 +875,7 @@ publicRouter.get('/catering/portal/:token', async (req: Request, res: Response) 
 
     res.json(proposalToken.job);
   } catch (error: unknown) {
-    console.error('[catering] GET portal error:', toErrorMessage(error));
+    logger.error('[catering] GET portal error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to fetch portal data' });
   }
 });
@@ -902,7 +902,7 @@ router.get('/:merchantId/catering/events/:id/activity', async (req: Request, res
 
     res.json(activities);
   } catch (error: unknown) {
-    console.error('[catering] GET activity timeline error:', toErrorMessage(error));
+    logger.error('[catering] GET activity timeline error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to fetch activity timeline' });
   }
 });
@@ -937,7 +937,7 @@ router.post('/:merchantId/catering/events/:id/contract', async (req: Request, re
 
     res.json(updated);
   } catch (error: unknown) {
-    console.error('[catering] contract upload error:', toErrorMessage(error));
+    logger.error('[catering] contract upload error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to upload contract' });
   }
 });
@@ -997,7 +997,7 @@ router.get('/:merchantId/catering/clients', async (req: Request, res: Response) 
 
     res.json([...clientMap.values()].sort((a, b) => b.totalRevenueCents - a.totalRevenueCents));
   } catch (error: unknown) {
-    console.error('[catering] GET clients error:', toErrorMessage(error));
+    logger.error('[catering] GET clients error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to fetch client history' });
   }
 });
@@ -1040,7 +1040,7 @@ router.get('/:merchantId/catering/prep-list', async (req: Request, res: Response
       })),
     });
   } catch (error: unknown) {
-    console.error('[catering] GET prep list error:', toErrorMessage(error));
+    logger.error('[catering] GET prep list error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to generate prep list' });
   }
 });
@@ -1085,7 +1085,7 @@ router.get('/:merchantId/reports/catering/deferred', async (req: Request, res: R
 
     res.json(entries);
   } catch (error: unknown) {
-    console.error('[catering] deferred revenue report error:', toErrorMessage(error));
+    logger.error('[catering] deferred revenue report error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to generate deferred revenue report' });
   }
 });
@@ -1143,7 +1143,7 @@ router.get('/:merchantId/reports/catering/performance', async (req: Request, res
       revenueByMonth,
     });
   } catch (error: unknown) {
-    console.error('[catering] performance report error:', toErrorMessage(error));
+    logger.error('[catering] performance report error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to generate performance report' });
   }
 });
@@ -1204,7 +1204,7 @@ publicRouter.post('/catering/lead/:merchantSlug', async (req: Request, res: Resp
       res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
-    console.error('[catering] lead capture error:', toErrorMessage(error));
+    logger.error('[catering] lead capture error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to submit inquiry' });
   }
 });
@@ -1224,7 +1224,7 @@ router.get('/:merchantId/catering/capacity', async (req: Request, res: Response)
       conflictAlertsEnabled: true,
     });
   } catch (error: unknown) {
-    console.error('[catering] GET capacity settings error:', toErrorMessage(error));
+    logger.error('[catering] GET capacity settings error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to fetch capacity settings' });
   }
 });
@@ -1254,7 +1254,7 @@ router.put('/:merchantId/catering/capacity', async (req: Request, res: Response)
       res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
-    console.error('[catering] PUT capacity settings error:', toErrorMessage(error));
+    logger.error('[catering] PUT capacity settings error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to save capacity settings' });
   }
 });
@@ -1280,7 +1280,7 @@ router.get('/:merchantId/catering/packages', async (req, res) => {
     });
     res.json(templates);
   } catch (error: unknown) {
-    console.error('[catering] GET package templates error:', toErrorMessage(error));
+    logger.error('[catering] GET package templates error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to load package templates' });
   }
 });
@@ -1307,7 +1307,7 @@ router.post('/:merchantId/catering/packages', async (req, res) => {
       res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
-    console.error('[catering] POST package template error:', toErrorMessage(error));
+    logger.error('[catering] POST package template error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to create package template' });
   }
 });
@@ -1326,7 +1326,7 @@ router.patch('/:merchantId/catering/packages/:templateId', async (req, res) => {
       res.status(400).json({ error: 'Validation failed', details: error.issues });
       return;
     }
-    console.error('[catering] PATCH package template error:', toErrorMessage(error));
+    logger.error('[catering] PATCH package template error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to update package template' });
   }
 });
@@ -1340,7 +1340,7 @@ router.delete('/:merchantId/catering/packages/:templateId', async (req, res) => 
     });
     res.status(204).send();
   } catch (error: unknown) {
-    console.error('[catering] DELETE package template error:', toErrorMessage(error));
+    logger.error('[catering] DELETE package template error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to delete package template' });
   }
 });

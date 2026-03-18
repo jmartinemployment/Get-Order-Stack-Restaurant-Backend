@@ -6,6 +6,7 @@ import type {
   PrinterResponseDto,
   CloudPrntConfigDto,
 } from '../models/printer.dto';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
@@ -28,7 +29,7 @@ export class PrinterService {
       ],
     });
 
-    console.log('[PrinterService] Fetched printers for restaurant', {
+    logger.info('[PrinterService] Fetched printers for restaurant', {
       restaurantId,
       count: printers.length,
     });
@@ -43,7 +44,7 @@ export class PrinterService {
     restaurantId: string,
     data: CreatePrinterDto
   ): Promise<PrinterResponseDto> {
-    console.log('[PrinterService] Creating printer', { restaurantId, data });
+    logger.info('[PrinterService] Creating printer', { restaurantId, data });
 
     // Validate MAC address
     if (!MAC_ADDRESS_REGEX.exec(data.macAddress)) {
@@ -71,7 +72,7 @@ export class PrinterService {
         data: { isDefault: false },
       });
 
-      console.log('[PrinterService] Unset previous default printer', { restaurantId });
+      logger.info('[PrinterService] Unset previous default printer', { restaurantId });
     }
 
     // Create printer
@@ -88,7 +89,7 @@ export class PrinterService {
       },
     });
 
-    console.log('[PrinterService] Printer created', {
+    logger.info('[PrinterService] Printer created', {
       printerId: printer.id,
       restaurantId,
       name: printer.name,
@@ -121,7 +122,7 @@ export class PrinterService {
     printerId: string,
     data: UpdatePrinterDto
   ): Promise<any> {
-    console.log('[PrinterService] Updating printer', { printerId, data });
+    logger.info('[PrinterService] Updating printer', { printerId, data });
 
     const printer = await prisma.printer.findUnique({
       where: { id: printerId },
@@ -142,7 +143,7 @@ export class PrinterService {
         data: { isDefault: false },
       });
 
-      console.log('[PrinterService] Unset previous default printer', {
+      logger.info('[PrinterService] Unset previous default printer', {
         restaurantId: printer.restaurantId,
       });
     }
@@ -153,7 +154,7 @@ export class PrinterService {
       data,
     });
 
-    console.log('[PrinterService] Printer updated', {
+    logger.info('[PrinterService] Printer updated', {
       printerId,
       changes: Object.keys(data),
     });
@@ -165,7 +166,7 @@ export class PrinterService {
    * Delete a printer
    */
   async delete(printerId: string): Promise<void> {
-    console.log('[PrinterService] Deleting printer', { printerId });
+    logger.info('[PrinterService] Deleting printer', { printerId });
 
     const printer = await prisma.printer.findUnique({
       where: { id: printerId },
@@ -180,7 +181,7 @@ export class PrinterService {
       where: { id: printerId },
     });
 
-    console.log('[PrinterService] Printer deleted', {
+    logger.info('[PrinterService] Printer deleted', {
       printerId,
       name: printer.name,
     });

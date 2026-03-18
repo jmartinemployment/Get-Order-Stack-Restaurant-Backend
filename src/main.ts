@@ -6,6 +6,7 @@ import { startPrintJobCleanup } from './jobs/print-job-cleanup';
 import { startMarketplaceStatusSyncJob } from './jobs/marketplace-status-sync';
 import { startMilestoneReminderCron } from './jobs/milestone-reminders';
 import { getSecret } from './utils/secrets';
+import { logger } from './utils/logger';
 
 function validateRequiredEnvVars(): void {
   // --- Hard requirements (crash if missing) ---
@@ -27,7 +28,7 @@ function validateRequiredEnvVars(): void {
 
   for (const [key, warning] of recommended) {
     if (!getSecret(key)) {
-      console.warn(`[Startup] WARNING: ${key} is not set — ${warning}`);
+      logger.warn(`[Startup] WARNING: ${key} is not set — ${warning}`);
     }
   }
 
@@ -47,9 +48,9 @@ initializeSocketServer(httpServer, config.corsOrigins);
 validateRequiredEnvVars();
 
 httpServer.listen(config.port, () => {
-  console.log(`🚀 GetOrderStack Restaurant API running on port ${config.port}`);
-  console.log(`   Environment: ${config.nodeEnv}`);
-  console.log(`   WebSocket: Enabled`);
+  logger.info(`🚀 GetOrderStack Restaurant API running on port ${config.port}`);
+  logger.info(`   Environment: ${config.nodeEnv}`);
+  logger.info(`   WebSocket: Enabled`);
 
   // Start background cleanup job for stale print jobs
   startPrintJobCleanup();

@@ -14,6 +14,7 @@ import {
   ValidateClockInSchema,
   ClockInOverrideSchema,
 } from '../validators/labor.validator';
+import { logger } from '../utils/logger';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -31,7 +32,7 @@ router.get('/:merchantId/staff/pins', async (req: Request, res: Response) => {
     });
     res.json(pins);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching staff pins:', error);
+    logger.error('[Labor] Error fetching staff pins:', error);
     res.status(500).json({ error: 'Failed to fetch staff pins' });
   }
 });
@@ -64,7 +65,7 @@ router.get('/:merchantId/staff/shifts', async (req: Request, res: Response) => {
 
     res.json(shifts);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching shifts:', error);
+    logger.error('[Labor] Error fetching shifts:', error);
     res.status(500).json({ error: 'Failed to fetch shifts' });
   }
 });
@@ -86,7 +87,7 @@ router.post('/:merchantId/staff/shifts/publish', async (req: Request, res: Respo
     const result = await laborService.publishWeek(restaurantId, parsed.data.weekStartDate);
     res.json(result);
   } catch (error: unknown) {
-    console.error('[Labor] Error publishing week:', error);
+    logger.error('[Labor] Error publishing week:', error);
     res.status(500).json({ error: 'Failed to publish week' });
   }
 });
@@ -113,7 +114,7 @@ router.post('/:merchantId/staff/shifts', async (req: Request, res: Response) => 
       res.status(409).json({ error: message.replace('CONFLICT: ', '') });
       return;
     }
-    console.error('[Labor] Error creating shift:', error);
+    logger.error('[Labor] Error creating shift:', error);
     res.status(500).json({ error: 'Failed to create shift' });
   }
 });
@@ -140,7 +141,7 @@ router.patch('/:merchantId/staff/shifts/:id', async (req: Request, res: Response
       res.status(409).json({ error: message.replace('CONFLICT: ', '') });
       return;
     }
-    console.error('[Labor] Error updating shift:', error);
+    logger.error('[Labor] Error updating shift:', error);
     res.status(500).json({ error: 'Failed to update shift' });
   }
 });
@@ -152,7 +153,7 @@ router.delete('/:merchantId/staff/shifts/:id', async (req: Request, res: Respons
     await laborService.deleteShift(id);
     res.status(204).send();
   } catch (error: unknown) {
-    console.error('[Labor] Error deleting shift:', error);
+    logger.error('[Labor] Error deleting shift:', error);
     res.status(500).json({ error: 'Failed to delete shift' });
   }
 });
@@ -185,7 +186,7 @@ router.post('/:merchantId/staff/clock-in', async (req: Request, res: Response) =
       res.status(409).json({ error: message.replace('ALREADY_CLOCKED_IN: ', '') });
       return;
     }
-    console.error('[Labor] Error clocking in:', error);
+    logger.error('[Labor] Error clocking in:', error);
     res.status(500).json({ error: 'Failed to clock in' });
   }
 });
@@ -207,7 +208,7 @@ router.post('/:merchantId/staff/clock-out/:id', async (req: Request, res: Respon
     const entry = await laborService.clockOut(id, parsed.data.breakMinutes, parsed.data.notes);
     res.json(entry);
   } catch (error: unknown) {
-    console.error('[Labor] Error clocking out:', error);
+    logger.error('[Labor] Error clocking out:', error);
     res.status(500).json({ error: 'Failed to clock out' });
   }
 });
@@ -219,7 +220,7 @@ router.get('/:merchantId/staff/active-clocks', async (req: Request, res: Respons
     const clocks = await laborService.getActiveClocks(restaurantId);
     res.json(clocks);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching active clocks:', error);
+    logger.error('[Labor] Error fetching active clocks:', error);
     res.status(500).json({ error: 'Failed to fetch active clocks' });
   }
 });
@@ -244,7 +245,7 @@ router.get('/:merchantId/staff/labor-report', async (req: Request, res: Response
     );
     res.json(report);
   } catch (error: unknown) {
-    console.error('[Labor] Error generating labor report:', error);
+    logger.error('[Labor] Error generating labor report:', error);
     res.status(500).json({ error: 'Failed to generate labor report' });
   }
 });
@@ -258,7 +259,7 @@ router.get('/:merchantId/staff/labor-recommendations', async (req: Request, res:
     const recommendations = await laborService.getLaborRecommendations(restaurantId);
     res.json(recommendations);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching recommendations:', error);
+    logger.error('[Labor] Error fetching recommendations:', error);
     res.status(500).json({ error: 'Failed to fetch labor recommendations' });
   }
 });
@@ -272,7 +273,7 @@ router.get('/:merchantId/staff/labor-targets', async (req: Request, res: Respons
     const targets = await laborService.getTargets(restaurantId);
     res.json(targets);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching labor targets:', error);
+    logger.error('[Labor] Error fetching labor targets:', error);
     res.status(500).json({ error: 'Failed to fetch labor targets' });
   }
 });
@@ -294,7 +295,7 @@ router.put('/:merchantId/staff/labor-targets', async (req: Request, res: Respons
     const target = await laborService.setTarget(restaurantId, parsed.data);
     res.json(target);
   } catch (error: unknown) {
-    console.error('[Labor] Error setting labor target:', error);
+    logger.error('[Labor] Error setting labor target:', error);
     res.status(500).json({ error: 'Failed to set labor target' });
   }
 });
@@ -329,7 +330,7 @@ router.get('/:merchantId/staff/schedule-templates', async (req: Request, res: Re
       createdAt: t.createdAt.toISOString(),
     })));
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching schedule templates:', error);
+    logger.error('[Labor] Error fetching schedule templates:', error);
     res.status(500).json({ error: 'Failed to fetch schedule templates' });
   }
 });
@@ -404,7 +405,7 @@ router.post('/:merchantId/staff/schedule-templates', async (req: Request, res: R
       createdAt: template.createdAt.toISOString(),
     });
   } catch (error: unknown) {
-    console.error('[Labor] Error saving schedule template:', error);
+    logger.error('[Labor] Error saving schedule template:', error);
     res.status(500).json({ error: 'Failed to save schedule template' });
   }
 });
@@ -467,7 +468,7 @@ router.post('/:merchantId/staff/schedule-templates/:templateId/apply', async (re
       isPublished: s.isPublished,
     })));
   } catch (error: unknown) {
-    console.error('[Labor] Error applying schedule template:', error);
+    logger.error('[Labor] Error applying schedule template:', error);
     res.status(500).json({ error: 'Failed to apply schedule template' });
   }
 });
@@ -489,7 +490,7 @@ router.delete('/:merchantId/staff/schedule-templates/:templateId', async (req: R
     await prisma.scheduleTemplate.delete({ where: { id: templateId } });
     res.status(204).send();
   } catch (error: unknown) {
-    console.error('[Labor] Error deleting schedule template:', error);
+    logger.error('[Labor] Error deleting schedule template:', error);
     res.status(500).json({ error: 'Failed to delete schedule template' });
   }
 });
@@ -563,7 +564,7 @@ router.post('/:merchantId/staff/copy-week', async (req: Request, res: Response) 
       isPublished: s.isPublished,
     })));
   } catch (error: unknown) {
-    console.error('[Labor] Error copying previous week:', error);
+    logger.error('[Labor] Error copying previous week:', error);
     res.status(500).json({ error: 'Failed to copy previous week' });
   }
 });
@@ -617,7 +618,7 @@ router.get('/:merchantId/staff/labor-live', async (req: Request, res: Response) 
       projectedDailyLaborCost,
     });
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching live labor snapshot:', error);
+    logger.error('[Labor] Error fetching live labor snapshot:', error);
     res.status(500).json({ error: 'Failed to fetch live labor snapshot' });
   }
 });
@@ -644,7 +645,7 @@ router.get('/:merchantId/staff/notifications', async (req: Request, res: Respons
 
     res.json(notifications);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching notifications:', error);
+    logger.error('[Labor] Error fetching notifications:', error);
     res.status(500).json({ error: 'Failed to fetch notifications' });
   }
 });
@@ -661,7 +662,7 @@ router.patch('/:merchantId/staff/notifications/:notificationId/read', async (req
 
     res.json({ success: true });
   } catch (error: unknown) {
-    console.error('[Labor] Error marking notification read:', error);
+    logger.error('[Labor] Error marking notification read:', error);
     res.status(500).json({ error: 'Failed to mark notification read' });
   }
 });
@@ -709,7 +710,7 @@ router.post('/:merchantId/staff/notifications/schedule-published', async (req: R
 
     res.json({ sent: uniquePinIds.length });
   } catch (error: unknown) {
-    console.error('[Labor] Error sending schedule notification:', error);
+    logger.error('[Labor] Error sending schedule notification:', error);
     res.status(500).json({ error: 'Failed to send schedule notification' });
   }
 });
@@ -755,7 +756,7 @@ router.post('/:merchantId/staff/notifications/announcement', async (req: Request
 
     res.json({ sent: pinIds.length });
   } catch (error: unknown) {
-    console.error('[Labor] Error sending announcement:', error);
+    logger.error('[Labor] Error sending announcement:', error);
     res.status(500).json({ error: 'Failed to send announcement' });
   }
 });
@@ -843,7 +844,7 @@ router.get('/:merchantId/staff/:staffPinId/earnings', async (req: Request, res: 
 
     res.json(earnings);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching staff earnings:', error);
+    logger.error('[Labor] Error fetching staff earnings:', error);
     res.status(500).json({ error: 'Failed to fetch staff earnings' });
   }
 });
@@ -862,7 +863,7 @@ router.get('/:merchantId/staff/:staffPinId/availability', async (req: Request, r
 
     res.json(prefs);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching availability:', error);
+    logger.error('[Labor] Error fetching availability:', error);
     res.status(500).json({ error: 'Failed to fetch availability' });
   }
 });
@@ -917,7 +918,7 @@ router.put('/:merchantId/staff/:staffPinId/availability', async (req: Request, r
 
     res.json(result);
   } catch (error: unknown) {
-    console.error('[Labor] Error saving availability:', error);
+    logger.error('[Labor] Error saving availability:', error);
     res.status(500).json({ error: 'Failed to save availability' });
   }
 });
@@ -965,7 +966,7 @@ router.get('/:merchantId/staff/:staffPinId/swap-requests', async (req: Request, 
 
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching swap requests:', error);
+    logger.error('[Labor] Error fetching swap requests:', error);
     res.status(500).json({ error: 'Failed to fetch swap requests' });
   }
 });
@@ -1018,7 +1019,7 @@ router.post('/:merchantId/staff/swap-requests', async (req: Request, res: Respon
 
     res.status(201).json(enriched);
   } catch (error: unknown) {
-    console.error('[Labor] Error creating swap request:', error);
+    logger.error('[Labor] Error creating swap request:', error);
     res.status(500).json({ error: 'Failed to create swap request' });
   }
 });
@@ -1079,7 +1080,7 @@ router.patch('/:merchantId/staff/swap-requests/:requestId', async (req: Request,
       res.status(404).json({ error: 'Swap request not found' });
       return;
     }
-    console.error('[Labor] Error updating swap request:', error);
+    logger.error('[Labor] Error updating swap request:', error);
     res.status(500).json({ error: 'Failed to update swap request' });
   }
 });
@@ -1112,7 +1113,7 @@ router.get('/:merchantId/staff/workweek-config', async (req: Request, res: Respo
       overtimeMultiplier: Number(config.overtimeMultiplier),
     });
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching workweek config:', error);
+    logger.error('[Labor] Error fetching workweek config:', error);
     res.status(500).json({ error: 'Failed to fetch workweek config' });
   }
 });
@@ -1155,7 +1156,7 @@ router.put('/:merchantId/staff/workweek-config', async (req: Request, res: Respo
       overtimeMultiplier: Number(config.overtimeMultiplier),
     });
   } catch (error: unknown) {
-    console.error('[Labor] Error saving workweek config:', error);
+    logger.error('[Labor] Error saving workweek config:', error);
     res.status(500).json({ error: 'Failed to save workweek config' });
   }
 });
@@ -1196,7 +1197,7 @@ router.get('/:merchantId/staff/:staffPinId/timecard-edits', async (req: Request,
       },
     })));
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching staff timecard edits:', error);
+    logger.error('[Labor] Error fetching staff timecard edits:', error);
     res.status(500).json({ error: 'Failed to fetch timecard edits' });
   }
 });
@@ -1242,7 +1243,7 @@ router.get('/:merchantId/staff/timecard-edits', async (req: Request, res: Respon
       },
     })));
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching timecard edits:', error);
+    logger.error('[Labor] Error fetching timecard edits:', error);
     res.status(500).json({ error: 'Failed to fetch timecard edits' });
   }
 });
@@ -1300,7 +1301,7 @@ router.post('/:merchantId/staff/timecard-edits', async (req: Request, res: Respo
       createdAt: edit.createdAt.toISOString(),
     });
   } catch (error: unknown) {
-    console.error('[Labor] Error creating timecard edit request:', error);
+    logger.error('[Labor] Error creating timecard edit request:', error);
     res.status(500).json({ error: 'Failed to create edit request' });
   }
 });
@@ -1370,7 +1371,7 @@ router.patch('/:merchantId/staff/timecard-edits/:editId/approve', async (req: Re
       createdAt: updatedEdit.createdAt.toISOString(),
     });
   } catch (error: unknown) {
-    console.error('[Labor] Error approving timecard edit:', error);
+    logger.error('[Labor] Error approving timecard edit:', error);
     res.status(500).json({ error: 'Failed to approve edit request' });
   }
 });
@@ -1423,7 +1424,7 @@ router.patch('/:merchantId/staff/timecard-edits/:editId/deny', async (req: Reque
       createdAt: updatedEdit.createdAt.toISOString(),
     });
   } catch (error: unknown) {
-    console.error('[Labor] Error denying timecard edit:', error);
+    logger.error('[Labor] Error denying timecard edit:', error);
     res.status(500).json({ error: 'Failed to deny edit request' });
   }
 });
@@ -1513,7 +1514,7 @@ router.post('/:merchantId/staff/validate-clock-in', async (req: Request, res: Re
 
     res.json({ allowed: true });
   } catch (error: unknown) {
-    console.error('[Labor] Error validating clock-in:', error);
+    logger.error('[Labor] Error validating clock-in:', error);
     res.status(500).json({ error: 'Failed to validate clock-in' });
   }
 });
@@ -1564,7 +1565,7 @@ router.post('/:merchantId/staff/clock-in-with-override', async (req: Request, re
       res.status(409).json({ error: message.replace('ALREADY_CLOCKED_IN: ', '') });
       return;
     }
-    console.error('[Labor] Error clocking in with override:', error);
+    logger.error('[Labor] Error clocking in with override:', error);
     res.status(500).json({ error: 'Failed to clock in with override' });
   }
 });
@@ -1705,7 +1706,7 @@ router.post('/:merchantId/staff/auto-clock-out', async (req: Request, res: Respo
         : 'No entries needed auto clock-out',
     });
   } catch (error: unknown) {
-    console.error('[Labor] Error running auto clock-out:', error);
+    logger.error('[Labor] Error running auto clock-out:', error);
     res.status(500).json({ error: 'Failed to run auto clock-out' });
   }
 });
@@ -1722,7 +1723,7 @@ router.get('/:merchantId/break-types', async (req: Request, res: Response) => {
     });
     res.json(breakTypes);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching break types:', error);
+    logger.error('[Labor] Error fetching break types:', error);
     res.status(500).json({ error: 'Failed to fetch break types' });
   }
 });
@@ -1749,7 +1750,7 @@ router.post('/:merchantId/break-types', async (req: Request, res: Response) => {
     });
     res.status(201).json(breakType);
   } catch (error: unknown) {
-    console.error('[Labor] Error creating break type:', error);
+    logger.error('[Labor] Error creating break type:', error);
     res.status(500).json({ error: 'Failed to create break type' });
   }
 });
@@ -1774,7 +1775,7 @@ router.patch('/:merchantId/break-types/:id', async (req: Request, res: Response)
       res.status(404).json({ error: 'Break type not found' });
       return;
     }
-    console.error('[Labor] Error updating break type:', error);
+    logger.error('[Labor] Error updating break type:', error);
     res.status(500).json({ error: 'Failed to update break type' });
   }
 });
@@ -1791,7 +1792,7 @@ router.get('/:merchantId/labor/payroll', async (req: Request, res: Response) => 
     });
     res.json(periods);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching payroll periods:', error);
+    logger.error('[Labor] Error fetching payroll periods:', error);
     res.status(500).json({ error: 'Failed to fetch payroll periods' });
   }
 });
@@ -1816,7 +1817,7 @@ router.post('/:merchantId/labor/payroll', async (req: Request, res: Response) =>
     });
     res.status(201).json(period);
   } catch (error: unknown) {
-    console.error('[Labor] Error creating payroll period:', error);
+    logger.error('[Labor] Error creating payroll period:', error);
     res.status(500).json({ error: 'Failed to create payroll period' });
   }
 });
@@ -1839,7 +1840,7 @@ router.patch('/:merchantId/labor/payroll/:id', async (req: Request, res: Respons
       res.status(404).json({ error: 'Payroll period not found' });
       return;
     }
-    console.error('[Labor] Error updating payroll period:', error);
+    logger.error('[Labor] Error updating payroll period:', error);
     res.status(500).json({ error: 'Failed to update payroll period' });
   }
 });
@@ -1856,7 +1857,7 @@ router.get('/:merchantId/labor/commissions/rules', async (req: Request, res: Res
     });
     res.json(rules);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching commission rules:', error);
+    logger.error('[Labor] Error fetching commission rules:', error);
     res.status(500).json({ error: 'Failed to fetch commission rules' });
   }
 });
@@ -1885,7 +1886,7 @@ router.post('/:merchantId/labor/commissions/rules', async (req: Request, res: Re
     });
     res.status(201).json(rule);
   } catch (error: unknown) {
-    console.error('[Labor] Error creating commission rule:', error);
+    logger.error('[Labor] Error creating commission rule:', error);
     res.status(500).json({ error: 'Failed to create commission rule' });
   }
 });
@@ -1912,7 +1913,7 @@ router.patch('/:merchantId/labor/commissions/rules/:ruleId', async (req: Request
       res.status(404).json({ error: 'Commission rule not found' });
       return;
     }
-    console.error('[Labor] Error updating commission rule:', error);
+    logger.error('[Labor] Error updating commission rule:', error);
     res.status(500).json({ error: 'Failed to update commission rule' });
   }
 });
@@ -1928,7 +1929,7 @@ router.delete('/:merchantId/labor/commissions/rules/:ruleId', async (req: Reques
       res.status(404).json({ error: 'Commission rule not found' });
       return;
     }
-    console.error('[Labor] Error deleting commission rule:', error);
+    logger.error('[Labor] Error deleting commission rule:', error);
     res.status(500).json({ error: 'Failed to delete commission rule' });
   }
 });
@@ -1952,7 +1953,7 @@ router.get('/:merchantId/labor/compliance/alerts', async (req: Request, res: Res
     });
     res.json(alerts);
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching compliance alerts:', error);
+    logger.error('[Labor] Error fetching compliance alerts:', error);
     res.status(500).json({ error: 'Failed to fetch compliance alerts' });
   }
 });
@@ -1980,7 +1981,7 @@ router.get('/:merchantId/labor/compliance/summary', async (req: Request, res: Re
       bySeverity,
     });
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching compliance summary:', error);
+    logger.error('[Labor] Error fetching compliance summary:', error);
     res.status(500).json({ error: 'Failed to fetch compliance summary' });
   }
 });
@@ -2049,7 +2050,7 @@ router.get('/:merchantId/timecards', async (req: Request, res: Response) => {
       };
     }));
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching timecards:', error);
+    logger.error('[Labor] Error fetching timecards:', error);
     res.status(500).json({ error: 'Failed to fetch timecards' });
   }
 });
@@ -2092,7 +2093,7 @@ router.get('/:merchantId/timecard-edits', async (req: Request, res: Response) =>
       expiresAt: null,
     })));
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching timecard edits:', error);
+    logger.error('[Labor] Error fetching timecard edits:', error);
     res.status(500).json({ error: 'Failed to fetch timecard edits' });
   }
 });
@@ -2128,7 +2129,7 @@ router.get('/:merchantId/labor/pto/requests', async (req: Request, res: Response
       createdAt: r.createdAt.toISOString(),
     })));
   } catch (error: unknown) {
-    console.error('[Labor] Error fetching PTO requests:', error);
+    logger.error('[Labor] Error fetching PTO requests:', error);
     res.status(500).json({ error: 'Failed to fetch PTO requests' });
   }
 });
@@ -2182,7 +2183,7 @@ router.post('/:merchantId/labor/pto/requests', async (req: Request, res: Respons
       createdAt: request.createdAt.toISOString(),
     });
   } catch (error: unknown) {
-    console.error('[Labor] Error creating PTO request:', error);
+    logger.error('[Labor] Error creating PTO request:', error);
     res.status(500).json({ error: 'Failed to create PTO request' });
   }
 });
@@ -2232,7 +2233,7 @@ router.patch('/:merchantId/labor/pto/requests/:id', async (req: Request, res: Re
       createdAt: updated.createdAt.toISOString(),
     });
   } catch (error: unknown) {
-    console.error('[Labor] Error updating PTO request:', error);
+    logger.error('[Labor] Error updating PTO request:', error);
     res.status(500).json({ error: 'Failed to update PTO request' });
   }
 });

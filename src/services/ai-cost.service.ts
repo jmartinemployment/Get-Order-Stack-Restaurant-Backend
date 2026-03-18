@@ -5,6 +5,7 @@
 
 import { aiConfigService } from './ai-config.service';
 import { aiUsageService } from './ai-usage.service';
+import { logger } from '../utils/logger';
 
 interface CostEstimation {
   estimatedCost: number;
@@ -73,7 +74,7 @@ Respond in JSON format only:
 
       return result;
     } catch (error) {
-      console.error('AI cost estimation failed:', error);
+      logger.error('AI cost estimation failed:', error);
       return null;
     }
   }
@@ -117,7 +118,7 @@ Respond with ONLY the description text, no quotes or formatting.`;
 
       return content.text.trim();
     } catch (error) {
-      console.error('AI description generation failed:', error);
+      logger.error('AI description generation failed:', error);
       return null;
     }
   }

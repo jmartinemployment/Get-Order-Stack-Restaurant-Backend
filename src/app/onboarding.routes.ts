@@ -84,7 +84,7 @@ router.get('/:merchantId/merchant-profile', async (req: Request, res: Response) 
 
     res.json(restaurant.merchantProfile ?? null);
   } catch (error) {
-    console.error('Failed to load merchant profile:', error);
+    logger.error('Failed to load merchant profile:', error);
     res.status(500).json({ error: 'Failed to load merchant profile' });
   }
 });
@@ -116,7 +116,7 @@ router.patch('/:merchantId/merchant-profile', async (req: Request, res: Response
 
     res.json(restaurant.merchantProfile);
   } catch (error) {
-    console.error('Failed to save merchant profile:', error);
+    logger.error('Failed to save merchant profile:', error);
     res.status(500).json({ error: 'Failed to save merchant profile' });
   }
 });
@@ -233,7 +233,7 @@ router.post('/:merchantId/apply-menu-template', async (req: Request, res: Respon
 
     res.json({ success: true, categoriesCreated: template.categories.length, itemsCreated: template.itemCount });
   } catch (error) {
-    console.error('Failed to apply menu template:', error);
+    logger.error('Failed to apply menu template:', error);
     res.status(500).json({ error: 'Failed to apply menu template' });
   }
 });
@@ -268,7 +268,7 @@ router.post('/:merchantId/business-hours', async (req: Request, res: Response) =
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Failed to save business hours:', error);
+    logger.error('Failed to save business hours:', error);
     res.status(500).json({ error: 'Failed to save business hours' });
   }
 });
@@ -354,7 +354,7 @@ router.get('/:merchantId/business-hours/check', async (req: Request, res: Respon
 
     res.json(computeBusinessHoursStatus(restaurant.businessHours as unknown as BusinessHoursDay[] | null));
   } catch (error) {
-    console.error('Failed to check business hours:', error);
+    logger.error('Failed to check business hours:', error);
     res.status(500).json({ error: 'Failed to check business hours' });
   }
 });
@@ -524,7 +524,7 @@ router.patch('/restaurant/:id', requireAuth, async (req: Request, res: Response)
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Update onboarding restaurant error:', error);
+    logger.error('Update onboarding restaurant error:', error);
     res.status(500).json({ error: 'Failed to update restaurant' });
   }
 });
@@ -594,7 +594,7 @@ router.post('/restaurant/:id/complete', requireAuth, async (req: Request, res: R
 
     res.status(200).json({ restaurantId: restaurant.id, name: restaurant.name, slug: restaurant.slug });
   } catch (error) {
-    console.error('Complete onboarding error:', error);
+    logger.error('Complete onboarding error:', error);
     res.status(500).json({ error: 'Failed to complete onboarding' });
   }
 });
@@ -629,7 +629,7 @@ router.get('/restaurant/:id/status', requireAuth, async (req: Request, res: Resp
 
     res.json({ restaurantId: restaurant.id, onboardingComplete, businessName: restaurant.name });
   } catch (error) {
-    console.error('Get onboarding status error:', error);
+    logger.error('Get onboarding status error:', error);
     res.status(500).json({ error: 'Failed to get status' });
   }
 });
@@ -977,7 +977,7 @@ router.post('/create', optionalAuth, async (req: Request, res: Response) => {
     const token = loginResult.success ? loginResult.token : null;
     res.status(201).json(buildOnboardingResponse(result.restaurant, result.device.id, token));
   } catch (error) {
-    console.error('Onboarding create error:', error);
+    logger.error('Onboarding create error:', error);
     if (error instanceof Error && error.message.includes('Unique constraint')) {
       res.status(409).json({ error: 'An account with this email already exists' });
       return;

@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.middleware';
 import { PLATFORM_FEE_TIERS, PlatformFeeTier } from '../config/platform-fees';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -63,7 +64,7 @@ router.get('/:merchantId/subscription', requireAuth, async (req: Request, res: R
       },
     });
   } catch (error: unknown) {
-    console.error('[Subscription] Error loading subscription:', error);
+    logger.error('[Subscription] Error loading subscription:', error);
     res.status(500).json({ error: 'Failed to load subscription' });
   }
 });
@@ -108,7 +109,7 @@ router.post('/:merchantId/subscription/change-plan', requireAuth, async (req: Re
       interval: 'month',
     });
   } catch (error: unknown) {
-    console.error('[Subscription] Error changing plan:', error);
+    logger.error('[Subscription] Error changing plan:', error);
     res.status(500).json({ error: 'Failed to change plan' });
   }
 });
@@ -144,7 +145,7 @@ router.post('/:merchantId/subscription/cancel', requireAuth, async (req: Request
       interval: 'month',
     });
   } catch (error: unknown) {
-    console.error('[Subscription] Error canceling subscription:', error);
+    logger.error('[Subscription] Error canceling subscription:', error);
     res.status(500).json({ error: 'Failed to cancel subscription' });
   }
 });

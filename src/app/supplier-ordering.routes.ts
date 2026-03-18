@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { supplierCredentialsService } from '../services/supplier-credentials.service';
 import { requireAuth, requireMerchantManager } from '../middleware/auth.middleware';
+import { logger } from '../utils/logger';
 
 const router = Router({ mergeParams: true });
 
@@ -40,7 +41,7 @@ router.get('/supplier-credentials', requireAuth, requireMerchantManager, async (
     const summary = await supplierCredentialsService.getSummary(restaurantId);
     res.json(summary);
   } catch (error: unknown) {
-    console.error('[Supplier Ordering] Credentials summary error:', error);
+    logger.error('[Supplier Ordering] Credentials summary error:', error);
     res.status(500).json({ error: 'Failed to load supplier credentials' });
   }
 });
@@ -57,7 +58,7 @@ router.put('/supplier-credentials/sysco', requireAuth, requireMerchantManager, a
     const summary = await supplierCredentialsService.upsertSysco(restaurantId, parsed.data);
     res.json(summary);
   } catch (error: unknown) {
-    console.error('[Supplier Ordering] Upsert Sysco error:', error);
+    logger.error('[Supplier Ordering] Upsert Sysco error:', error);
     res.status(500).json({ error: 'Failed to save Sysco credentials' });
   }
 });
@@ -74,7 +75,7 @@ router.put('/supplier-credentials/gfs', requireAuth, requireMerchantManager, asy
     const summary = await supplierCredentialsService.upsertGfs(restaurantId, parsed.data);
     res.json(summary);
   } catch (error: unknown) {
-    console.error('[Supplier Ordering] Upsert GFS error:', error);
+    logger.error('[Supplier Ordering] Upsert GFS error:', error);
     res.status(500).json({ error: 'Failed to save GFS credentials' });
   }
 });
@@ -86,7 +87,7 @@ router.delete('/supplier-credentials/sysco', requireAuth, requireMerchantManager
     const summary = await supplierCredentialsService.clearSysco(restaurantId);
     res.json(summary);
   } catch (error: unknown) {
-    console.error('[Supplier Ordering] Clear Sysco error:', error);
+    logger.error('[Supplier Ordering] Clear Sysco error:', error);
     res.status(500).json({ error: 'Failed to clear Sysco credentials' });
   }
 });
@@ -98,7 +99,7 @@ router.delete('/supplier-credentials/gfs', requireAuth, requireMerchantManager, 
     const summary = await supplierCredentialsService.clearGfs(restaurantId);
     res.json(summary);
   } catch (error: unknown) {
-    console.error('[Supplier Ordering] Clear GFS error:', error);
+    logger.error('[Supplier Ordering] Clear GFS error:', error);
     res.status(500).json({ error: 'Failed to clear GFS credentials' });
   }
 });
@@ -115,7 +116,7 @@ router.post('/supplier-credentials/test', requireAuth, requireMerchantManager, a
     const result = await supplierCredentialsService.testConnection(restaurantId, parsed.data.provider);
     res.json(result);
   } catch (error: unknown) {
-    console.error('[Supplier Ordering] Test connection error:', error);
+    logger.error('[Supplier Ordering] Test connection error:', error);
     res.status(500).json({ error: 'Failed to test supplier connection' });
   }
 });

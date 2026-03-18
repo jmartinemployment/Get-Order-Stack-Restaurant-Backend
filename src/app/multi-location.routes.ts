@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
@@ -68,7 +69,7 @@ router.get('/:groupId/location-groups', async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (error: unknown) {
-    console.error('[MultiLocation] List groups error:', error);
+    logger.error('[MultiLocation] List groups error:', error);
     res.status(500).json({ error: 'Failed to list location groups' });
   }
 });
@@ -114,7 +115,7 @@ router.post('/:groupId/location-groups', async (req: Request, res: Response) => 
 
     res.status(201).json(group);
   } catch (error: unknown) {
-    console.error('[MultiLocation] Create group error:', error);
+    logger.error('[MultiLocation] Create group error:', error);
     res.status(500).json({ error: 'Failed to create location group' });
   }
 });
@@ -169,7 +170,7 @@ router.patch('/:groupId/location-groups/:locationGroupId', async (req: Request, 
       res.status(404).json({ error: 'Location group not found' });
       return;
     }
-    console.error('[MultiLocation] Update group error:', error);
+    logger.error('[MultiLocation] Update group error:', error);
     res.status(500).json({ error: 'Failed to update location group' });
   }
 });
@@ -187,7 +188,7 @@ router.delete('/:groupId/location-groups/:locationGroupId', async (req: Request,
       res.status(404).json({ error: 'Location group not found' });
       return;
     }
-    console.error('[MultiLocation] Delete group error:', error);
+    logger.error('[MultiLocation] Delete group error:', error);
     res.status(500).json({ error: 'Failed to delete location group' });
   }
 });
@@ -207,7 +208,7 @@ router.get('/:groupId/location-groups/:locationGroupId/members', async (req: Req
     });
     res.json(members);
   } catch (error: unknown) {
-    console.error('[MultiLocation] List members error:', error);
+    logger.error('[MultiLocation] List members error:', error);
     res.status(500).json({ error: 'Failed to list members' });
   }
 });
@@ -235,7 +236,7 @@ router.post('/:groupId/location-groups/:locationGroupId/members', async (req: Re
       res.status(409).json({ error: 'Restaurant is already a member of this group' });
       return;
     }
-    console.error('[MultiLocation] Add member error:', error);
+    logger.error('[MultiLocation] Add member error:', error);
     res.status(500).json({ error: 'Failed to add member' });
   }
 });
@@ -251,7 +252,7 @@ router.delete('/:groupId/location-groups/:locationGroupId/members/:memberId', as
       res.status(404).json({ error: 'Member not found' });
       return;
     }
-    console.error('[MultiLocation] Remove member error:', error);
+    logger.error('[MultiLocation] Remove member error:', error);
     res.status(500).json({ error: 'Failed to remove member' });
   }
 });
@@ -328,7 +329,7 @@ router.get('/:groupId/cross-location-report', async (req: Request, res: Response
 
     res.json({ days, locations });
   } catch (error: unknown) {
-    console.error('[MultiLocation] Cross-location report error:', error);
+    logger.error('[MultiLocation] Cross-location report error:', error);
     res.status(500).json({ error: 'Failed to generate cross-location report' });
   }
 });
@@ -422,7 +423,7 @@ router.post('/:groupId/sync-menu/preview', async (req: Request, res: Response) =
       targets,
     });
   } catch (error: unknown) {
-    console.error('[MultiLocation] Sync preview error:', error);
+    logger.error('[MultiLocation] Sync preview error:', error);
     res.status(500).json({ error: 'Failed to generate sync preview' });
   }
 });
@@ -578,7 +579,7 @@ router.post('/:groupId/sync-menu', async (req: Request, res: Response) => {
       conflicts: totalConflicts,
     });
   } catch (error: unknown) {
-    console.error('[MultiLocation] Menu sync error:', error);
+    logger.error('[MultiLocation] Menu sync error:', error);
     res.status(500).json({ error: 'Failed to sync menu' });
   }
 });
@@ -594,7 +595,7 @@ router.get('/:groupId/sync-menu/history', async (req: Request, res: Response) =>
     });
     res.json(logs);
   } catch (error: unknown) {
-    console.error('[MultiLocation] Sync history error:', error);
+    logger.error('[MultiLocation] Sync history error:', error);
     res.status(500).json({ error: 'Failed to load sync history' });
   }
 });
@@ -747,7 +748,7 @@ router.post('/:groupId/propagate-settings', async (req: Request, res: Response) 
       updatedCount,
     });
   } catch (error: unknown) {
-    console.error('[MultiLocation] Propagate settings error:', error);
+    logger.error('[MultiLocation] Propagate settings error:', error);
     res.status(500).json({ error: 'Failed to propagate settings' });
   }
 });

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
@@ -45,7 +46,7 @@ router.get('/:merchantId/gift-cards', async (req: Request, res: Response) => {
     });
     res.json(cards);
   } catch (error: unknown) {
-    console.error('[GiftCard] List error:', error);
+    logger.error('[GiftCard] List error:', error);
     res.status(500).json({ error: 'Failed to list gift cards' });
   }
 });
@@ -83,7 +84,7 @@ router.post('/:merchantId/gift-cards', async (req: Request, res: Response) => {
     });
     res.status(201).json(card);
   } catch (error: unknown) {
-    console.error('[GiftCard] Create error:', error);
+    logger.error('[GiftCard] Create error:', error);
     res.status(500).json({ error: 'Failed to create gift card' });
   }
 });
@@ -103,7 +104,7 @@ router.get('/:merchantId/gift-cards/balance/:code', async (req: Request, res: Re
       card,
     });
   } catch (error: unknown) {
-    console.error('[GiftCard] Balance check error:', error);
+    logger.error('[GiftCard] Balance check error:', error);
     res.status(500).json({ error: 'Failed to check balance' });
   }
 });
@@ -154,7 +155,7 @@ router.post('/:merchantId/gift-cards/redeem', async (req: Request, res: Response
       res.status(400).json({ error: message });
       return;
     }
-    console.error('[GiftCard] Redeem error:', error);
+    logger.error('[GiftCard] Redeem error:', error);
     res.status(500).json({ error: 'Failed to redeem gift card' });
   }
 });
@@ -179,7 +180,7 @@ router.patch('/:merchantId/gift-cards/:cardId', async (req: Request, res: Respon
       res.status(404).json({ error: 'Gift card not found' });
       return;
     }
-    console.error('[GiftCard] Update error:', error);
+    logger.error('[GiftCard] Update error:', error);
     res.status(500).json({ error: 'Failed to update gift card' });
   }
 });
@@ -194,7 +195,7 @@ router.get('/:merchantId/gift-cards/:cardId/redemptions', async (req: Request, r
     });
     res.json(redemptions);
   } catch (error: unknown) {
-    console.error('[GiftCard] Redemptions list error:', error);
+    logger.error('[GiftCard] Redemptions list error:', error);
     res.status(500).json({ error: 'Failed to list redemptions' });
   }
 });

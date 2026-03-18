@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
@@ -41,7 +42,7 @@ router.get('/:merchantId/combos', async (req: Request, res: Response) => {
     });
     res.json(combos);
   } catch (error: unknown) {
-    console.error('[Combo] List error:', error);
+    logger.error('[Combo] List error:', error);
     res.status(500).json({ error: 'Failed to list combos' });
   }
 });
@@ -67,7 +68,7 @@ router.post('/:merchantId/combos', async (req: Request, res: Response) => {
     });
     res.status(201).json(combo);
   } catch (error: unknown) {
-    console.error('[Combo] Create error:', error);
+    logger.error('[Combo] Create error:', error);
     res.status(500).json({ error: 'Failed to create combo' });
   }
 });
@@ -92,7 +93,7 @@ router.patch('/:merchantId/combos/:comboId', async (req: Request, res: Response)
       res.status(404).json({ error: 'Combo not found' });
       return;
     }
-    console.error('[Combo] Update error:', error);
+    logger.error('[Combo] Update error:', error);
     res.status(500).json({ error: 'Failed to update combo' });
   }
 });
@@ -110,7 +111,7 @@ router.delete('/:merchantId/combos/:comboId', async (req: Request, res: Response
       res.status(404).json({ error: 'Combo not found' });
       return;
     }
-    console.error('[Combo] Delete error:', error);
+    logger.error('[Combo] Delete error:', error);
     res.status(500).json({ error: 'Failed to delete combo' });
   }
 });

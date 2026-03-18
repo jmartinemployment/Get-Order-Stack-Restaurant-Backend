@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
@@ -70,7 +71,7 @@ router.get('/:merchantId/invoices', async (req: Request, res: Response) => {
     });
     res.json(invoices);
   } catch (error: unknown) {
-    console.error('[Invoice] List error:', error);
+    logger.error('[Invoice] List error:', error);
     res.status(500).json({ error: 'Failed to list invoices' });
   }
 });
@@ -128,7 +129,7 @@ router.post('/:merchantId/invoices', async (req: Request, res: Response) => {
 
     res.status(201).json(invoice);
   } catch (error: unknown) {
-    console.error('[Invoice] Create error:', error);
+    logger.error('[Invoice] Create error:', error);
     res.status(500).json({ error: 'Failed to create invoice' });
   }
 });
@@ -159,7 +160,7 @@ router.patch('/:merchantId/invoices/:invoiceId', async (req: Request, res: Respo
       res.status(404).json({ error: 'Invoice not found' });
       return;
     }
-    console.error('[Invoice] Update error:', error);
+    logger.error('[Invoice] Update error:', error);
     res.status(500).json({ error: 'Failed to update invoice' });
   }
 });
@@ -179,7 +180,7 @@ router.post('/:merchantId/invoices/:invoiceId/send', async (req: Request, res: R
       res.status(404).json({ error: 'Invoice not found' });
       return;
     }
-    console.error('[Invoice] Send error:', error);
+    logger.error('[Invoice] Send error:', error);
     res.status(500).json({ error: 'Failed to send invoice' });
   }
 });
@@ -232,7 +233,7 @@ router.post('/:merchantId/invoices/:invoiceId/payment', async (req: Request, res
       res.status(404).json({ error: message });
       return;
     }
-    console.error('[Invoice] Payment error:', error);
+    logger.error('[Invoice] Payment error:', error);
     res.status(500).json({ error: 'Failed to record payment' });
   }
 });
@@ -251,7 +252,7 @@ router.delete('/:merchantId/invoices/:invoiceId', async (req: Request, res: Resp
       res.status(404).json({ error: 'Invoice not found' });
       return;
     }
-    console.error('[Invoice] Cancel error:', error);
+    logger.error('[Invoice] Cancel error:', error);
     res.status(500).json({ error: 'Failed to cancel invoice' });
   }
 });
@@ -268,7 +269,7 @@ router.get('/:merchantId/house-accounts', async (req: Request, res: Response) =>
     });
     res.json(accounts);
   } catch (error: unknown) {
-    console.error('[HouseAccount] List error:', error);
+    logger.error('[HouseAccount] List error:', error);
     res.status(500).json({ error: 'Failed to list house accounts' });
   }
 });
@@ -291,7 +292,7 @@ router.post('/:merchantId/house-accounts', async (req: Request, res: Response) =
     });
     res.status(201).json(account);
   } catch (error: unknown) {
-    console.error('[HouseAccount] Create error:', error);
+    logger.error('[HouseAccount] Create error:', error);
     res.status(500).json({ error: 'Failed to create house account' });
   }
 });
@@ -316,7 +317,7 @@ router.patch('/:merchantId/house-accounts/:accountId', async (req: Request, res:
       res.status(404).json({ error: 'House account not found' });
       return;
     }
-    console.error('[HouseAccount] Update error:', error);
+    logger.error('[HouseAccount] Update error:', error);
     res.status(500).json({ error: 'Failed to update house account' });
   }
 });
@@ -335,7 +336,7 @@ router.delete('/:merchantId/house-accounts/:accountId', async (req: Request, res
       res.status(404).json({ error: 'House account not found' });
       return;
     }
-    console.error('[HouseAccount] Delete error:', error);
+    logger.error('[HouseAccount] Delete error:', error);
     res.status(500).json({ error: 'Failed to close house account' });
   }
 });

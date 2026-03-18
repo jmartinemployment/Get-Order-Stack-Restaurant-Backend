@@ -6,6 +6,7 @@
 import { PrismaClient } from '@prisma/client';
 import { aiConfigService } from './ai-config.service';
 import { aiUsageService } from './ai-usage.service';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
@@ -48,7 +49,7 @@ export class TaxService {
         };
       }
     } catch (error) {
-      console.error('[TaxService] DB lookup failed:', error);
+      logger.error('[TaxService] DB lookup failed:', error);
       // Continue to AI lookup
     }
 
@@ -61,12 +62,12 @@ export class TaxService {
         return { ...aiResult, source: 'ai' };
       }
     } catch (error) {
-      console.error('[TaxService] AI lookup failed:', error);
+      logger.error('[TaxService] AI lookup failed:', error);
       // Continue to fallback
     }
 
     // 3. Fallback to default
-    console.warn('[TaxService] Using fallback rate (ZIP/state lookup failed)');
+    logger.warn('[TaxService] Using fallback rate (ZIP/state lookup failed)');
     return {
       rate: DEFAULT_RATE,
       state,
@@ -120,7 +121,7 @@ The rate should be a decimal (e.g., 0.07 for 7%). Include the breakdown of state
       
       // Validate the response
       if (typeof parsed.rate !== 'number' || parsed.rate < 0 || parsed.rate > 0.15) {
-        console.error('[TaxService] Invalid rate from AI:', parsed.rate);
+        logger.error('[TaxService] Invalid rate from AI:', parsed.rate);
         return null;
       }
 
@@ -133,7 +134,7 @@ The rate should be a decimal (e.g., 0.07 for 7%). Include the breakdown of state
       };
     } catch {
       // JSON.parse failed — AI returned non-JSON; log the raw text for debugging
-      console.error('[TaxService] Failed to parse AI response:', content.text);
+      logger.error('[TaxService] Failed to parse AI response:', content.text);
       return null;
     }
   }
@@ -159,9 +160,9 @@ The rate should be a decimal (e.g., 0.07 for 7%). Include the breakdown of state
           verifiedAt: null
         }
       });
-      console.log('[TaxService] Saved tax rate to database');
+      logger.info('[TaxService] Saved tax rate to database');
     } catch (error) {
-      console.error('[TaxService] Failed to save tax jurisdiction:', error);
+      logger.error('[TaxService] Failed to save tax jurisdiction:', error);
       // Non-fatal - we still have the rate to return
     }
   }

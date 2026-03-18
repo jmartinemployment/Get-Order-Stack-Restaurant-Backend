@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { cloudPrntService } from '../services/cloudprnt.service';
+import { logger } from '../utils/logger';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -38,7 +39,7 @@ router.get('/cloudprnt', async (req: Request, res: Response) => {
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[CloudPRNT Poll] Error', { error: message });
+    logger.error('[CloudPRNT Poll] Error', { error: message });
     res.status(500).json({ error: message });
   }
 });
@@ -87,7 +88,7 @@ router.get('/cloudprnt/job/:mac', async (req: Request, res: Response) => {
     res.set('X-Star-Printer-JobId', job.id);
     res.send(receiptBuffer);
 
-    console.log('[CloudPRNT] Job downloaded', {
+    logger.info('[CloudPRNT] Job downloaded', {
       jobId: job.id,
       printerId: printer.id,
       mac,
@@ -95,7 +96,7 @@ router.get('/cloudprnt/job/:mac', async (req: Request, res: Response) => {
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[CloudPRNT Job Download] Error', { error: message });
+    logger.error('[CloudPRNT Job Download] Error', { error: message });
     res.status(500).json({ error: message });
   }
 });
@@ -113,10 +114,10 @@ router.delete('/cloudprnt/job/:jobId', async (req: Request, res: Response) => {
 
     res.json({ success: true });
 
-    console.log('[CloudPRNT] Job completed', { jobId });
+    logger.info('[CloudPRNT] Job completed', { jobId });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[CloudPRNT Job Completion] Error', { error: message });
+    logger.error('[CloudPRNT Job Completion] Error', { error: message });
     res.status(500).json({ error: message });
   }
 });

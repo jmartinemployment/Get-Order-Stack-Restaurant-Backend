@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import Anthropic from '@anthropic-ai/sdk';
 import multer from 'multer';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
@@ -101,7 +102,7 @@ router.get('/:merchantId/vendors', async (req: Request, res: Response) => {
     });
     res.json(vendors);
   } catch (error: unknown) {
-    console.error('[FoodCost] List vendors error:', error);
+    logger.error('[FoodCost] List vendors error:', error);
     res.status(500).json({ error: 'Failed to list vendors' });
   }
 });
@@ -121,7 +122,7 @@ router.post('/:merchantId/vendors', async (req: Request, res: Response) => {
     });
     res.status(201).json(vendor);
   } catch (error: unknown) {
-    console.error('[FoodCost] Create vendor error:', error);
+    logger.error('[FoodCost] Create vendor error:', error);
     res.status(500).json({ error: 'Failed to create vendor' });
   }
 });
@@ -146,7 +147,7 @@ router.patch('/:merchantId/vendors/:vendorId', async (req: Request, res: Respons
       res.status(404).json({ error: 'Vendor not found' });
       return;
     }
-    console.error('[FoodCost] Update vendor error:', error);
+    logger.error('[FoodCost] Update vendor error:', error);
     res.status(500).json({ error: 'Failed to update vendor' });
   }
 });
@@ -162,7 +163,7 @@ router.delete('/:merchantId/vendors/:vendorId', async (req: Request, res: Respon
       res.status(404).json({ error: 'Vendor not found' });
       return;
     }
-    console.error('[FoodCost] Delete vendor error:', error);
+    logger.error('[FoodCost] Delete vendor error:', error);
     res.status(500).json({ error: 'Failed to delete vendor' });
   }
 });
@@ -182,7 +183,7 @@ router.get('/:merchantId/purchase-invoices', async (req: Request, res: Response)
     });
     res.json(invoices);
   } catch (error: unknown) {
-    console.error('[FoodCost] List invoices error:', error);
+    logger.error('[FoodCost] List invoices error:', error);
     res.status(500).json({ error: 'Failed to list invoices' });
   }
 });
@@ -232,7 +233,7 @@ router.post('/:merchantId/purchase-invoices', async (req: Request, res: Response
       res.status(409).json({ error: 'Invoice number already exists for this restaurant' });
       return;
     }
-    console.error('[FoodCost] Create invoice error:', error);
+    logger.error('[FoodCost] Create invoice error:', error);
     res.status(500).json({ error: 'Failed to create invoice' });
   }
 });
@@ -359,7 +360,7 @@ If you cannot extract a field, use reasonable defaults. invoiceDate defaults to 
 
     res.status(201).json(invoice);
   } catch (error: unknown) {
-    console.error('[FoodCost] OCR upload error:', error);
+    logger.error('[FoodCost] OCR upload error:', error);
     res.status(500).json({ error: 'Failed to process invoice image' });
   }
 });
@@ -379,7 +380,7 @@ router.patch('/:merchantId/purchase-invoices/:id/approve', async (req: Request, 
       res.status(404).json({ error: 'Invoice not found' });
       return;
     }
-    console.error('[FoodCost] Approve invoice error:', error);
+    logger.error('[FoodCost] Approve invoice error:', error);
     res.status(500).json({ error: 'Failed to approve invoice' });
   }
 });
@@ -399,7 +400,7 @@ router.patch('/:merchantId/purchase-invoices/:id/paid', async (req: Request, res
       res.status(404).json({ error: 'Invoice not found' });
       return;
     }
-    console.error('[FoodCost] Mark paid error:', error);
+    logger.error('[FoodCost] Mark paid error:', error);
     res.status(500).json({ error: 'Failed to mark invoice paid' });
   }
 });
@@ -415,7 +416,7 @@ router.delete('/:merchantId/purchase-invoices/:id', async (req: Request, res: Re
       res.status(404).json({ error: 'Invoice not found' });
       return;
     }
-    console.error('[FoodCost] Delete invoice error:', error);
+    logger.error('[FoodCost] Delete invoice error:', error);
     res.status(500).json({ error: 'Failed to delete invoice' });
   }
 });
@@ -449,7 +450,7 @@ router.get('/:merchantId/purchase-invoices/price-history', async (req: Request, 
 
     res.json(history);
   } catch (error: unknown) {
-    console.error('[FoodCost] Price history error:', error);
+    logger.error('[FoodCost] Price history error:', error);
     res.status(500).json({ error: 'Failed to load price history' });
   }
 });
@@ -490,7 +491,7 @@ router.get('/:merchantId/recipes', async (req: Request, res: Response) => {
 
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[FoodCost] List recipes error:', error);
+    logger.error('[FoodCost] List recipes error:', error);
     res.status(500).json({ error: 'Failed to list recipes' });
   }
 });
@@ -537,7 +538,7 @@ router.post('/:merchantId/recipes', async (req: Request, res: Response) => {
 
     res.status(201).json(recipe);
   } catch (error: unknown) {
-    console.error('[FoodCost] Create recipe error:', error);
+    logger.error('[FoodCost] Create recipe error:', error);
     res.status(500).json({ error: 'Failed to create recipe' });
   }
 });
@@ -591,7 +592,7 @@ router.patch('/:merchantId/recipes/:id', async (req: Request, res: Response) => 
       res.status(404).json({ error: 'Recipe not found' });
       return;
     }
-    console.error('[FoodCost] Update recipe error:', error);
+    logger.error('[FoodCost] Update recipe error:', error);
     res.status(500).json({ error: 'Failed to update recipe' });
   }
 });
@@ -607,7 +608,7 @@ router.delete('/:merchantId/recipes/:id', async (req: Request, res: Response) =>
       res.status(404).json({ error: 'Recipe not found' });
       return;
     }
-    console.error('[FoodCost] Delete recipe error:', error);
+    logger.error('[FoodCost] Delete recipe error:', error);
     res.status(500).json({ error: 'Failed to delete recipe' });
   }
 });
@@ -789,7 +790,7 @@ router.get('/:merchantId/food-cost-report', async (req: Request, res: Response) 
       costedItems: costedItemCount,
     });
   } catch (error: unknown) {
-    console.error('[FoodCost] Report error:', error);
+    logger.error('[FoodCost] Report error:', error);
     res.status(500).json({ error: 'Failed to generate food cost report' });
   }
 });

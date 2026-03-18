@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { authService } from '../services/auth.service';
 import { DEFAULT_PERMISSION_SETS, LEGACY_SET_RENAME } from '../data/default-permission-sets';
 import { toErrorMessage } from '../utils/errors';
+import { logger } from '../utils/logger';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -159,7 +160,7 @@ router.get('/:merchantId/team-members', async (req: Request, res: Response) => {
     res.json(members.map(formatTeamMember));
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error getting team members:', message);
+    logger.error('Error getting team members:', message);
     res.status(500).json({ error: 'Failed to get team members' });
   }
 });
@@ -245,7 +246,7 @@ router.post('/:merchantId/team-members', async (req: Request, res: Response) => 
     res.status(201).json(formatTeamMember(member));
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error creating team member:', message);
+    logger.error('Error creating team member:', message);
     res.status(500).json({ error: 'Failed to create team member' });
   }
 });
@@ -376,7 +377,7 @@ router.patch('/:merchantId/team-members/:id', async (req: Request, res: Response
     res.json(formatTeamMember(member));
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error updating team member:', message);
+    logger.error('Error updating team member:', message);
     res.status(500).json({ error: 'Failed to update team member' });
   }
 });
@@ -403,7 +404,7 @@ router.delete('/:merchantId/team-members/:id', async (req: Request, res: Respons
     res.json({ success: true });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error deleting team member:', message);
+    logger.error('Error deleting team member:', message);
     res.status(500).json({ error: 'Failed to delete team member' });
   }
 });
@@ -432,7 +433,7 @@ router.post('/:merchantId/team-members/:memberId/jobs', async (req: Request, res
     res.status(201).json(formatTeamMember(member));
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error adding job:', message);
+    logger.error('Error adding job:', message);
     res.status(500).json({ error: 'Failed to add job' });
   }
 });
@@ -452,7 +453,7 @@ router.patch('/:merchantId/team-members/:memberId/jobs/:jobId', async (req: Requ
     res.json({ success: true });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error updating job:', message);
+    logger.error('Error updating job:', message);
     res.status(500).json({ error: 'Failed to update job' });
   }
 });
@@ -540,7 +541,7 @@ router.post('/:merchantId/permission-sets/seed-defaults', async (req: Request, r
     });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error seeding default permission sets:', message);
+    logger.error('Error seeding default permission sets:', message);
     res.status(500).json({ error: 'Failed to seed default permission sets' });
   }
 });
@@ -555,7 +556,7 @@ router.get('/:merchantId/permission-sets', async (req: Request, res: Response) =
     res.json(sets);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error getting permission sets:', message);
+    logger.error('Error getting permission sets:', message);
     res.status(500).json({ error: 'Failed to get permission sets' });
   }
 });
@@ -580,7 +581,7 @@ router.post('/:merchantId/permission-sets', async (req: Request, res: Response) 
     res.status(201).json(set);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error creating permission set:', message);
+    logger.error('Error creating permission set:', message);
     res.status(500).json({ error: 'Failed to create permission set' });
   }
 });
@@ -604,7 +605,7 @@ router.patch('/:merchantId/permission-sets/:id', async (req: Request, res: Respo
     res.json(set);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('[TeamManagement] Error updating permission set', { error: message });
+    logger.error('[TeamManagement] Error updating permission set', { error: message });
     res.status(500).json({ error: 'Failed to update permission set' });
   }
 });
@@ -616,7 +617,7 @@ router.delete('/:merchantId/permission-sets/:id', async (req: Request, res: Resp
     res.json({ success: true });
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('Error deleting permission set:', message);
+    logger.error('Error deleting permission set:', message);
     res.status(500).json({ error: 'Failed to delete permission set' });
   }
 });
@@ -628,7 +629,7 @@ router.post('/:merchantId/pos/login', async (req: Request, res: Response) => {
     const restaurantId = req.params.merchantId;
     const { passcode, staffPinId } = req.body;
 
-    console.log(`[POS Login] merchantId=${restaurantId}, staffPinId=${staffPinId}, passcode length=${passcode?.length}`);
+    logger.info(`[POS Login] merchantId=${restaurantId}, staffPinId=${staffPinId}, passcode length=${passcode?.length}`);
 
     if (!passcode) {
       res.status(400).json({ error: 'Passcode is required' });
@@ -641,7 +642,7 @@ router.post('/:merchantId/pos/login', async (req: Request, res: Response) => {
     }
 
     const result = await authService.posLogin(restaurantId, passcode, staffPinId);
-    console.log(`[POS Login] result=${result ? 'success' : 'null (no match)'}`);
+    logger.info(`[POS Login] result=${result ? 'success' : 'null (no match)'}`);
 
     if (!result) {
       res.status(401).json({ error: 'Invalid passcode' });
@@ -651,7 +652,7 @@ router.post('/:merchantId/pos/login', async (req: Request, res: Response) => {
     res.json(result);
   } catch (error: unknown) {
     const message = toErrorMessage(error);
-    console.error('POS login error:', message);
+    logger.error('POS login error:', message);
     res.status(500).json({ error: 'POS login failed' });
   }
 });

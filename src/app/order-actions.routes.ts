@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { broadcastToSourceAndKDS } from '../services/socket.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
 import { updateOrderStatus } from '../services/order-status.service';
+import { logger } from '../utils/logger';
 
 const router = Router({ mergeParams: true });
 const prisma = new PrismaClient();
@@ -69,7 +70,7 @@ router.patch('/:orderId/delivery-status', async (req: Request, res: Response) =>
 
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[Order Actions] Error updating delivery status:', error);
+    logger.error('[Order Actions] Error updating delivery status:', error);
     res.status(500).json({ error: 'Failed to update delivery status' });
   }
 });
@@ -127,7 +128,7 @@ router.patch('/:orderId/approval', async (req: Request, res: Response) => {
       res.status(500).json({ error: 'Failed to fetch updated order' });
     }
   } catch (error: unknown) {
-    console.error('[Order Actions] Error updating approval:', error);
+    logger.error('[Order Actions] Error updating approval:', error);
     res.status(500).json({ error: 'Failed to update approval status' });
   }
 });
@@ -160,7 +161,7 @@ router.patch('/:orderId/arrival', async (req: Request, res: Response) => {
 
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[Order Actions] Error notifying arrival:', error);
+    logger.error('[Order Actions] Error notifying arrival:', error);
     res.status(500).json({ error: 'Failed to notify arrival' });
   }
 });

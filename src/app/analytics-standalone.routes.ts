@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { requireAuth } from '../middleware/auth.middleware';
 import { toErrorMessage } from '../utils/errors';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -25,7 +26,7 @@ router.get('/pinned-widgets', requireAuth, async (req: Request, res: Response) =
     const widgets = (profile.pinnedWidgets as unknown[]) ?? [];
     res.json(widgets);
   } catch (error: unknown) {
-    console.error('[Analytics] Pinned widgets error:', toErrorMessage(error));
+    logger.error('[Analytics] Pinned widgets error:', toErrorMessage(error));
     res.json([]);
   }
 });
@@ -57,7 +58,7 @@ router.post('/pinned-widgets', requireAuth, async (req: Request, res: Response) 
 
     res.json(widget);
   } catch (error: unknown) {
-    console.error('[Analytics] Save pinned widget error:', toErrorMessage(error));
+    logger.error('[Analytics] Save pinned widget error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to save pinned widget' });
   }
 });
@@ -90,7 +91,7 @@ router.delete('/pinned-widgets/:widgetId', requireAuth, async (req: Request, res
 
     res.json({ success: true });
   } catch (error: unknown) {
-    console.error('[Analytics] Delete pinned widget error:', toErrorMessage(error));
+    logger.error('[Analytics] Delete pinned widget error:', toErrorMessage(error));
     res.status(500).json({ error: 'Failed to delete pinned widget' });
   }
 });
@@ -141,7 +142,7 @@ router.get('/proactive-insights', requireAuth, async (req: Request, res: Respons
 
     res.json(insights);
   } catch (error: unknown) {
-    console.error('[Analytics] Proactive insights error:', toErrorMessage(error));
+    logger.error('[Analytics] Proactive insights error:', toErrorMessage(error));
     res.json([]);
   }
 });

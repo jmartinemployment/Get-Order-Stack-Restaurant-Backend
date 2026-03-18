@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 interface EmailJob {
   title: string;
   clientEmail: string;
@@ -21,7 +22,7 @@ const FROM_ADDRESS = 'noreply@getorderstack.com';
 async function sendEmail(to: string, subject: string, html: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.warn('[Email] RESEND_API_KEY not set — skipping email send');
+    logger.warn('[Email] RESEND_API_KEY not set — skipping email send');
     return;
   }
 
@@ -41,7 +42,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
 
   if (!response.ok) {
     const body = await response.text();
-    console.error(`[Email] Resend API error: ${response.status} ${body}`);
+    logger.error(`[Email] Resend API error: ${response.status} ${body}`);
   }
 }
 

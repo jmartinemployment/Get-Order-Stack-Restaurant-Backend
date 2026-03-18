@@ -9,6 +9,7 @@
 import { PrismaClient } from '@prisma/client';
 import { aiConfigService } from './ai-config.service';
 import { aiUsageService } from './ai-usage.service';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
@@ -237,7 +238,7 @@ export class SalesInsightsService {
         recommendations
       };
     } catch (error) {
-      console.error('Error generating daily insights:', error);
+      logger.error('Error generating daily insights:', error);
       return null;
     }
   }
@@ -306,7 +307,7 @@ export class SalesInsightsService {
         recommendations
       };
     } catch (error) {
-      console.error('Error generating weekly insights:', error);
+      logger.error('Error generating weekly insights:', error);
       return null;
     }
   }
@@ -439,7 +440,7 @@ Format: ["Recommendation 1", "Recommendation 2", "Recommendation 3"]`;
 
       return JSON.parse(content.text.slice(start, end + 1));
     } catch (error) {
-      console.error('AI recommendations failed:', error);
+      logger.error('AI recommendations failed:', error);
       return this.generateBasicRecommendations(summary);
     }
   }

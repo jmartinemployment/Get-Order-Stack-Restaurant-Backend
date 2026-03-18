@@ -10,6 +10,7 @@
 import { PrismaClient } from '@prisma/client';
 import { aiConfigService } from './ai-config.service';
 import { aiUsageService } from './ai-usage.service';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
@@ -259,7 +260,7 @@ export class MenuEngineeringService {
 
       return report;
     } catch (error) {
-      console.error('Error generating menu engineering report:', error);
+      logger.error('Error generating menu engineering report:', error);
       return null;
     }
   }
@@ -307,7 +308,7 @@ export class MenuEngineeringService {
 
       return suggestions;
     } catch (error) {
-      console.error('Error getting upsell suggestions:', error);
+      logger.error('Error getting upsell suggestions:', error);
       return [];
     }
   }
@@ -413,7 +414,7 @@ Example format:
 
       return JSON.parse(content.text.slice(start, end + 1));
     } catch (error) {
-      console.error('AI insights generation failed:', error);
+      logger.error('AI insights generation failed:', error);
       return this.generateBasicInsights(items, quadrants);
     }
   }

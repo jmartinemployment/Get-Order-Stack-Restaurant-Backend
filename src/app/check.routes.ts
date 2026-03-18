@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { authService } from '../services/auth.service';
 import { broadcastToSourceAndKDS } from '../services/socket.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
+import { logger } from '../utils/logger';
 
 const router = Router({ mergeParams: true });
 const prisma = new PrismaClient();
@@ -240,7 +241,7 @@ router.post('/:orderId/checks', async (req: Request, res: Response) => {
     await fetchAndBroadcast(orderId, restaurantId);
     res.status(201).json(check);
   } catch (error: unknown) {
-    console.error('[Check] Error creating check:', error);
+    logger.error('[Check] Error creating check:', error);
     res.status(500).json({ error: 'Failed to create check' });
   }
 });
@@ -326,7 +327,7 @@ router.post('/:orderId/checks/:checkGuid/items', async (req: Request, res: Respo
 
     res.status(201).json(item);
   } catch (error: unknown) {
-    console.error('[Check] Error adding item:', error);
+    logger.error('[Check] Error adding item:', error);
     res.status(500).json({ error: 'Failed to add item to check' });
   }
 });
@@ -467,7 +468,7 @@ router.patch('/:orderId/checks/:checkGuid/split', async (req: Request, res: Resp
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[Check] Error splitting check:', error);
+    logger.error('[Check] Error splitting check:', error);
     res.status(500).json({ error: 'Failed to split check' });
   }
 });
@@ -525,7 +526,7 @@ router.post('/:orderId/checks/:checkGuid/merge', async (req: Request, res: Respo
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[Check] Error merging checks:', error);
+    logger.error('[Check] Error merging checks:', error);
     res.status(500).json({ error: 'Failed to merge checks' });
   }
 });
@@ -622,7 +623,7 @@ router.post('/:orderId/checks/:checkGuid/transfer', async (req: Request, res: Re
 
     res.json({ sourceOrderId: orderId, targetOrderId: targetOrder.id, enriched });
   } catch (error: unknown) {
-    console.error('[Check] Error transferring check:', error);
+    logger.error('[Check] Error transferring check:', error);
     res.status(500).json({ error: 'Failed to transfer check' });
   }
 });
@@ -706,7 +707,7 @@ router.patch('/:orderId/checks/:checkGuid/items/:itemGuid/void', async (req: Req
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[Check] Error voiding item:', error);
+    logger.error('[Check] Error voiding item:', error);
     res.status(500).json({ error: 'Failed to void item' });
   }
 });
@@ -760,7 +761,7 @@ router.patch('/:orderId/checks/:checkGuid/items/:itemGuid/comp', async (req: Req
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[Check] Error comping item:', error);
+    logger.error('[Check] Error comping item:', error);
     res.status(500).json({ error: 'Failed to comp item' });
   }
 });
@@ -815,7 +816,7 @@ router.post('/:orderId/checks/:checkGuid/discount', async (req: Request, res: Re
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[Check] Error applying discount:', error);
+    logger.error('[Check] Error applying discount:', error);
     res.status(500).json({ error: 'Failed to apply discount' });
   }
 });
@@ -853,7 +854,7 @@ router.post('/:orderId/preauth', async (req: Request, res: Response) => {
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[Check] Error opening tab:', error);
+    logger.error('[Check] Error opening tab:', error);
     res.status(500).json({ error: 'Failed to open tab' });
   }
 });
@@ -890,7 +891,7 @@ router.post('/:orderId/close-tab', async (req: Request, res: Response) => {
     const enriched = await fetchAndBroadcast(orderId, restaurantId);
     res.json(enriched);
   } catch (error: unknown) {
-    console.error('[Check] Error closing tab:', error);
+    logger.error('[Check] Error closing tab:', error);
     res.status(500).json({ error: 'Failed to close tab' });
   }
 });

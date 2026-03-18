@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
@@ -62,7 +63,7 @@ router.get('/:merchantId/campaigns', async (req: Request, res: Response) => {
     });
     res.json(campaigns);
   } catch (error: unknown) {
-    console.error('[Marketing] List error:', error);
+    logger.error('[Marketing] List error:', error);
     res.status(500).json({ error: 'Failed to list campaigns' });
   }
 });
@@ -85,7 +86,7 @@ router.post('/:merchantId/campaigns', async (req: Request, res: Response) => {
     });
     res.status(201).json(campaign);
   } catch (error: unknown) {
-    console.error('[Marketing] Create error:', error);
+    logger.error('[Marketing] Create error:', error);
     res.status(500).json({ error: 'Failed to create campaign' });
   }
 });
@@ -110,7 +111,7 @@ router.patch('/:merchantId/campaigns/:campaignId', async (req: Request, res: Res
       res.status(404).json({ error: 'Campaign not found' });
       return;
     }
-    console.error('[Marketing] Update error:', error);
+    logger.error('[Marketing] Update error:', error);
     res.status(500).json({ error: 'Failed to update campaign' });
   }
 });
@@ -129,7 +130,7 @@ router.delete('/:merchantId/campaigns/:campaignId', async (req: Request, res: Re
       res.status(404).json({ error: 'Campaign not found' });
       return;
     }
-    console.error('[Marketing] Cancel error:', error);
+    logger.error('[Marketing] Cancel error:', error);
     res.status(500).json({ error: 'Failed to cancel campaign' });
   }
 });
@@ -167,7 +168,7 @@ router.post('/:merchantId/campaigns/:campaignId/send', async (req: Request, res:
 
     res.json(updated);
   } catch (error: unknown) {
-    console.error('[Marketing] Send error:', error);
+    logger.error('[Marketing] Send error:', error);
     res.status(500).json({ error: 'Failed to send campaign' });
   }
 });
@@ -195,7 +196,7 @@ router.post('/:merchantId/campaigns/:campaignId/schedule', async (req: Request, 
       res.status(404).json({ error: 'Campaign not found' });
       return;
     }
-    console.error('[Marketing] Schedule error:', error);
+    logger.error('[Marketing] Schedule error:', error);
     res.status(500).json({ error: 'Failed to schedule campaign' });
   }
 });
@@ -213,7 +214,7 @@ router.get('/:merchantId/campaigns/:campaignId/performance', async (req: Request
     }
     res.json(performance);
   } catch (error: unknown) {
-    console.error('[Marketing] Performance error:', error);
+    logger.error('[Marketing] Performance error:', error);
     res.status(500).json({ error: 'Failed to get performance data' });
   }
 });
@@ -263,7 +264,7 @@ router.post('/:merchantId/campaigns/audience-estimate', async (req: Request, res
     const count = await prisma.customer.count({ where });
     res.json({ estimatedRecipients: count });
   } catch (error: unknown) {
-    console.error('[Marketing] Audience estimate error:', error);
+    logger.error('[Marketing] Audience estimate error:', error);
     res.status(500).json({ error: 'Failed to estimate audience' });
   }
 });
@@ -302,7 +303,7 @@ router.get('/:merchantId/marketing/automations', async (req: Request, res: Respo
     });
     res.json(automations);
   } catch (error: unknown) {
-    console.error('[Marketing] Automations list error:', error);
+    logger.error('[Marketing] Automations list error:', error);
     res.status(500).json({ error: 'Failed to list automations' });
   }
 });
@@ -328,7 +329,7 @@ router.post('/:merchantId/marketing/automations', async (req: Request, res: Resp
     });
     res.status(201).json(automation);
   } catch (error: unknown) {
-    console.error('[Marketing] Create automation error:', error);
+    logger.error('[Marketing] Create automation error:', error);
     res.status(500).json({ error: 'Failed to create automation' });
   }
 });
@@ -353,7 +354,7 @@ router.patch('/:merchantId/marketing/automations/:automationId', async (req: Req
       res.status(404).json({ error: 'Automation not found' });
       return;
     }
-    console.error('[Marketing] Update automation error:', error);
+    logger.error('[Marketing] Update automation error:', error);
     res.status(500).json({ error: 'Failed to update automation' });
   }
 });
@@ -371,7 +372,7 @@ router.delete('/:merchantId/marketing/automations/:automationId', async (req: Re
       res.status(404).json({ error: 'Automation not found' });
       return;
     }
-    console.error('[Marketing] Delete automation error:', error);
+    logger.error('[Marketing] Delete automation error:', error);
     res.status(500).json({ error: 'Failed to delete automation' });
   }
 });

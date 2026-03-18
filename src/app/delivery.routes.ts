@@ -4,6 +4,7 @@ import { deliveryService } from '../services/delivery.service';
 import { deliveryCredentialsService } from '../services/delivery-credentials.service';
 import { requireAuth, requireMerchantManager } from '../middleware/auth.middleware';
 import { toErrorMessage } from '../utils/errors';
+import { logger } from '../utils/logger';
 
 const router = Router({ mergeParams: true });
 
@@ -58,7 +59,7 @@ router.get('/config-status', async (req: Request, res: Response) => {
     const status = await deliveryService.getConfigStatus(restaurantId);
     res.json(status);
   } catch (error: unknown) {
-    console.error('[Delivery] Config status error:', error);
+    logger.error('[Delivery] Config status error:', error);
     res.status(500).json({ error: 'Failed to get config status' });
   }
 });
@@ -71,7 +72,7 @@ router.get('/credentials', requireAuth, requireMerchantManager, async (req: Requ
     const summary = await deliveryCredentialsService.getSummary(restaurantId);
     res.json(summary);
   } catch (error: unknown) {
-    console.error('[Delivery] Credentials status error:', error);
+    logger.error('[Delivery] Credentials status error:', error);
     res.status(500).json({ error: 'Failed to load delivery credentials' });
   }
 });
@@ -82,7 +83,7 @@ router.get('/credentials/security-profile', requireAuth, requireMerchantManager,
     const profile = await deliveryCredentialsService.getSecurityProfile(restaurantId);
     res.json(profile);
   } catch (error: unknown) {
-    console.error('[Delivery] Security profile load error:', error);
+    logger.error('[Delivery] Security profile load error:', error);
     res.status(500).json({ error: 'Failed to load credential security profile' });
   }
 });
@@ -104,7 +105,7 @@ router.put('/credentials/security-profile', requireAuth, requireMerchantManager,
     res.json(profile);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to update credential security profile';
-    console.error('[Delivery] Security profile update error:', message);
+    logger.error('[Delivery] Security profile update error:', message);
     if (message.includes('not configured')) {
       res.status(400).json({ error: message });
       return;
@@ -130,7 +131,7 @@ router.put('/credentials/doordash', requireAuth, requireMerchantManager, async (
     res.json(summary);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to save DoorDash credentials';
-    console.error('[Delivery] Save DoorDash credentials error:', message);
+    logger.error('[Delivery] Save DoorDash credentials error:', message);
     if (message.includes('require') || message.includes('not configured')) {
       res.status(400).json({ error: message });
       return;
@@ -148,7 +149,7 @@ router.delete('/credentials/doordash', requireAuth, requireMerchantManager, asyn
     );
     res.json(summary);
   } catch (error: unknown) {
-    console.error('[Delivery] Delete DoorDash credentials error:', error);
+    logger.error('[Delivery] Delete DoorDash credentials error:', error);
     res.status(500).json({ error: 'Failed to delete DoorDash credentials' });
   }
 });
@@ -170,7 +171,7 @@ router.put('/credentials/uber', requireAuth, requireMerchantManager, async (req:
     res.json(summary);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to save Uber credentials';
-    console.error('[Delivery] Save Uber credentials error:', message);
+    logger.error('[Delivery] Save Uber credentials error:', message);
     if (message.includes('require') || message.includes('not configured')) {
       res.status(400).json({ error: message });
       return;
@@ -188,7 +189,7 @@ router.delete('/credentials/uber', requireAuth, requireMerchantManager, async (r
     );
     res.json(summary);
   } catch (error: unknown) {
-    console.error('[Delivery] Delete Uber credentials error:', error);
+    logger.error('[Delivery] Delete Uber credentials error:', error);
     res.status(500).json({ error: 'Failed to delete Uber credentials' });
   }
 });
@@ -207,7 +208,7 @@ router.post('/quote', async (req: Request, res: Response) => {
     res.json(quote);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to get delivery quote';
-    console.error('[Delivery] Quote error:', message);
+    logger.error('[Delivery] Quote error:', message);
 
     if (message.includes('not configured')) {
       res.status(503).json({ error: message });
@@ -233,7 +234,7 @@ router.post('/dispatch', async (req: Request, res: Response) => {
     res.json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to dispatch delivery';
-    console.error('[Delivery] Dispatch error:', message);
+    logger.error('[Delivery] Dispatch error:', message);
 
     if (message.includes('not found')) {
       res.status(404).json({ error: message });
@@ -258,7 +259,7 @@ router.get('/:orderId/status', async (req: Request, res: Response) => {
 
     res.json(status);
   } catch (error: unknown) {
-    console.error('[Delivery] Status error:', error);
+    logger.error('[Delivery] Status error:', error);
     res.status(500).json({ error: 'Failed to get delivery status' });
   }
 });
@@ -276,7 +277,7 @@ router.post('/:orderId/cancel', async (req: Request, res: Response) => {
 
     res.json({ success: true });
   } catch (error: unknown) {
-    console.error('[Delivery] Cancel error:', error);
+    logger.error('[Delivery] Cancel error:', error);
     res.status(500).json({ error: 'Failed to cancel delivery' });
   }
 });
@@ -295,7 +296,7 @@ router.get('/assignments', async (req: Request, res: Response) => {
     res.json(assignments);
   } catch (error: unknown) {
     // Service may not implement this yet — return empty array
-    console.error('[Delivery] Assignments error:', toErrorMessage(error));
+    logger.error('[Delivery] Assignments error:', toErrorMessage(error));
     res.json([]);
   }
 });
@@ -313,7 +314,7 @@ router.get('/drivers', async (req: Request, res: Response) => {
     res.json(drivers);
   } catch (error: unknown) {
     // Service may not implement this yet — return empty array
-    console.error('[Delivery] Drivers error:', toErrorMessage(error));
+    logger.error('[Delivery] Drivers error:', toErrorMessage(error));
     res.json([]);
   }
 });
@@ -383,7 +384,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       byProvider,
     });
   } catch (error: unknown) {
-    console.error('[Delivery] Analytics error:', error);
+    logger.error('[Delivery] Analytics error:', error);
     res.status(500).json({ error: 'Failed to get delivery analytics' });
   }
 });

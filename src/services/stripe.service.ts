@@ -2,12 +2,13 @@ import Stripe from 'stripe';
 import { PrismaClient } from '@prisma/client';
 import { calculatePlatformFee } from '../config/platform-fees';
 import { getSecret } from '../utils/secrets';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
 const stripeKey = getSecret('STRIPE_SECRET_KEY');
 if (!stripeKey) {
-  console.warn('[Stripe] STRIPE_SECRET_KEY is not set — Stripe payment operations will fail');
+  logger.warn('[Stripe] STRIPE_SECRET_KEY is not set — Stripe payment operations will fail');
 }
 
 const stripe = new Stripe(stripeKey, {
@@ -97,7 +98,7 @@ export const stripeService = {
         }
       });
 
-      console.log(`[Stripe] Created PaymentIntent ${paymentIntent.id} for order ${order.orderNumber}`);
+      logger.info(`[Stripe] Created PaymentIntent ${paymentIntent.id} for order ${order.orderNumber}`);
 
       return {
         success: true,
@@ -105,7 +106,7 @@ export const stripeService = {
         paymentIntentId: paymentIntent.id
       };
     } catch (error) {
-      console.error('[Stripe] Error creating PaymentIntent:', error);
+      logger.error('[Stripe] Error creating PaymentIntent:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create payment intent'
@@ -121,7 +122,7 @@ export const stripeService = {
       const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
       return { success: true, paymentIntent };
     } catch (error) {
-      console.error('[Stripe] Error retrieving PaymentIntent:', error);
+      logger.error('[Stripe] Error retrieving PaymentIntent:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to retrieve payment intent'
@@ -135,10 +136,10 @@ export const stripeService = {
   async cancelPaymentIntent(paymentIntentId: string): Promise<{ success: boolean; error?: string }> {
     try {
       await stripe.paymentIntents.cancel(paymentIntentId);
-      console.log(`[Stripe] Cancelled PaymentIntent ${paymentIntentId}`);
+      logger.info(`[Stripe] Cancelled PaymentIntent ${paymentIntentId}`);
       return { success: true };
     } catch (error) {
-      console.error('[Stripe] Error cancelling PaymentIntent:', error);
+      logger.error('[Stripe] Error cancelling PaymentIntent:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to cancel payment intent'
@@ -164,7 +165,7 @@ export const stripeService = {
                 paymentMethod: paymentIntent.payment_method_types[0] || 'card'
               }
             });
-            console.log(`[Stripe Webhook] Payment succeeded for order ${orderId}`);
+            logger.info(`[Stripe Webhook] Payment succeeded for order ${orderId}`);
           }
           break;
         }
@@ -178,7 +179,7 @@ export const stripeService = {
               where: { id: orderId },
               data: { paymentStatus: 'failed' }
             });
-            console.log(`[Stripe Webhook] Payment failed for order ${orderId}`);
+            logger.info(`[Stripe Webhook] Payment failed for order ${orderId}`);
           }
           break;
         }
@@ -192,18 +193,18 @@ export const stripeService = {
               where: { id: orderId },
               data: { paymentStatus: 'cancelled' }
             });
-            console.log(`[Stripe Webhook] Payment cancelled for order ${orderId}`);
+            logger.info(`[Stripe Webhook] Payment cancelled for order ${orderId}`);
           }
           break;
         }
 
         default:
-          console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
+          logger.info(`[Stripe Webhook] Unhandled event type: ${event.type}`);
       }
 
       return { success: true };
     } catch (error) {
-      console.error('[Stripe Webhook] Error processing event:', error);
+      logger.error('[Stripe Webhook] Error processing event:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to process webhook'
@@ -218,12 +219,12 @@ export const stripeService = {
     try {
       const webhookSecret = getSecret('STRIPE_WEBHOOK_SECRET');
       if (!webhookSecret || webhookSecret === 'whsec_placeholder') {
-        console.error('[Stripe] Webhook secret not configured — rejecting unverified event');
+        logger.error('[Stripe] Webhook secret not configured — rejecting unverified event');
         return null;
       }
       return stripe.webhooks.constructEvent(payload, signature, webhookSecret);
     } catch (error) {
-      console.error('[Stripe] Webhook signature verification failed:', error);
+      logger.error('[Stripe] Webhook signature verification failed:', error);
       return null;
     }
   },
@@ -242,11 +243,11 @@ export const stripeService = {
       }
 
       const refund = await stripe.refunds.create(refundParams);
-      console.log(`[Stripe] Created refund ${refund.id} for PaymentIntent ${paymentIntentId}`);
+      logger.info(`[Stripe] Created refund ${refund.id} for PaymentIntent ${paymentIntentId}`);
 
       return { success: true, refund };
     } catch (error) {
-      console.error('[Stripe] Error creating refund:', error);
+      logger.error('[Stripe] Error creating refund:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create refund'

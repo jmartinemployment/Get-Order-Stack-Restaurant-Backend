@@ -1,5 +1,6 @@
 import { PrismaClient, Order } from '@prisma/client';
 import { marketplaceService } from './marketplace.service';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
@@ -10,7 +11,7 @@ function queueMarketplaceStatusSync(orderId: string, restaurantId: string): void
       return marketplaceService.processDueStatusSyncJobs({ restaurantId, limit: 5 });
     })
     .catch((error: unknown) => {
-      console.error('[Marketplace] Failed to queue outbound status sync:', error);
+      logger.error('[Marketplace] Failed to queue outbound status sync:', error);
     });
 }
 

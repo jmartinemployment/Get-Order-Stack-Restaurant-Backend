@@ -3,6 +3,7 @@ import { generateReceipt, generateTestReceipt } from '../utils/star-line-mode';
 import { PRINT_JOB_TIMEOUT_MS } from '../utils/constants';
 
 import { emitToPrinter } from './socket.service';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
@@ -11,7 +12,7 @@ export class CloudPrntService {
    * Queue a print job when order is marked ready
    */
   async queuePrintJob(orderId: string, printerId?: string): Promise<string | null> {
-    console.log('[CloudPRNT] Queuing print job for order', { orderId, printerId });
+    logger.info('[CloudPRNT] Queuing print job for order', { orderId, printerId });
 
     // Fetch order with all related data
     const order = await prisma.order.findUnique({
@@ -40,7 +41,7 @@ export class CloudPrntService {
     );
 
     if (!printer) {
-      console.log('[CloudPRNT] No active printers configured for restaurant', {
+      logger.info('[CloudPRNT] No active printers configured for restaurant', {
         restaurantId: order.restaurantId,
         orderId,
       });
@@ -58,7 +59,7 @@ export class CloudPrntService {
       },
     });
 
-    console.log('[CloudPRNT] Print job queued', {
+    logger.info('[CloudPRNT] Print job queued', {
       jobId: printJob.id,
       orderId,
       printerId: printer.id,
@@ -72,7 +73,7 @@ export class CloudPrntService {
    * Queue a test print job
    */
   async queueTestPrint(printerId: string): Promise<string> {
-    console.log('[CloudPRNT] Queuing test print job', { printerId });
+    logger.info('[CloudPRNT] Queuing test print job', { printerId });
 
     const printer = await prisma.printer.findUnique({
       where: { id: printerId },
@@ -108,7 +109,7 @@ export class CloudPrntService {
       },
     });
 
-    console.log('[CloudPRNT] Test print job queued', {
+    logger.info('[CloudPRNT] Test print job queued', {
       jobId: printJob.id,
       printerId,
       printerName: printer.name,
@@ -133,7 +134,7 @@ export class CloudPrntService {
     });
 
     if (!printer) {
-      console.warn('[CloudPRNT] Unknown printer MAC address polling', { macAddress });
+      logger.warn('[CloudPRNT] Unknown printer MAC address polling', { macAddress });
       return null;
     }
 
@@ -161,7 +162,7 @@ export class CloudPrntService {
       },
     });
 
-    console.log('[CloudPRNT] Print job picked up by printer', {
+    logger.info('[CloudPRNT] Print job picked up by printer', {
       jobId: job.id,
       printerId: printer.id,
       printerName: printer.name,
@@ -201,7 +202,7 @@ export class CloudPrntService {
     });
 
     if (!job) {
-      console.warn('[CloudPRNT] Job not found for completion', { jobId });
+      logger.warn('[CloudPRNT] Job not found for completion', { jobId });
       return;
     }
 
@@ -213,7 +214,7 @@ export class CloudPrntService {
       },
     });
 
-    console.log('[CloudPRNT] Print job completed', {
+    logger.info('[CloudPRNT] Print job completed', {
       jobId,
       orderId: job.orderId,
       attemptCount: job.attemptCount,
@@ -247,7 +248,7 @@ export class CloudPrntService {
     });
 
     if (!job) {
-      console.warn('[CloudPRNT] Job not found for failure', { jobId });
+      logger.warn('[CloudPRNT] Job not found for failure', { jobId });
       return;
     }
 
@@ -260,7 +261,7 @@ export class CloudPrntService {
       },
     });
 
-    console.error('[CloudPRNT] Print job failed', {
+    logger.error('[CloudPRNT] Print job failed', {
       jobId,
       orderId: job.orderId,
       attemptCount: job.attemptCount,
@@ -307,7 +308,7 @@ export class CloudPrntService {
       return 0;
     }
 
-    console.log('[CloudPRNT] Cleaning up stale print jobs', {
+    logger.info('[CloudPRNT] Cleaning up stale print jobs', {
       count: staleJobs.length,
       cutoffTime,
     });

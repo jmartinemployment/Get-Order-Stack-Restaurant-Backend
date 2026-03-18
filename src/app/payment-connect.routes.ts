@@ -2,13 +2,14 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import Stripe from 'stripe';
 import { getSecret } from '../utils/secrets';
+import { logger } from '../utils/logger';
 
 const router = Router({ mergeParams: true });
 const prisma = new PrismaClient();
 
 const stripeKey = getSecret('STRIPE_SECRET_KEY');
 if (!stripeKey) {
-  console.warn('[Stripe Connect] STRIPE_SECRET_KEY is not set — Stripe Connect operations will fail');
+  logger.warn('[Stripe Connect] STRIPE_SECRET_KEY is not set — Stripe Connect operations will fail');
 }
 
 const stripe = new Stripe(stripeKey, {
@@ -90,10 +91,10 @@ router.post('/:merchantId/connect/stripe/create-account', async (req: Request, r
       },
     });
 
-    console.log(`[Stripe Connect] Created account ${account.id} for restaurant ${restaurant.name}`);
+    logger.info(`[Stripe Connect] Created account ${account.id} for restaurant ${restaurant.name}`);
     res.json({ accountId: account.id });
   } catch (error: unknown) {
-    console.error('[Stripe Connect] Error creating account:', error);
+    logger.error('[Stripe Connect] Error creating account:', error);
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create Stripe account' });
   }
 });
@@ -125,7 +126,7 @@ router.post('/:merchantId/connect/stripe/account-link', async (req: Request, res
 
     res.json({ url: accountLink.url });
   } catch (error: unknown) {
-    console.error('[Stripe Connect] Error creating account link:', error);
+    logger.error('[Stripe Connect] Error creating account link:', error);
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create account link' });
   }
 });
@@ -157,7 +158,7 @@ router.get('/:merchantId/connect/stripe/status', async (req: Request, res: Respo
       accountId: account.id,
     });
   } catch (error: unknown) {
-    console.error('[Stripe Connect] Error retrieving status:', error);
+    logger.error('[Stripe Connect] Error retrieving status:', error);
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to retrieve account status' });
   }
 });
@@ -224,7 +225,7 @@ router.post('/:merchantId/connect/paypal/create-referral', async (req: Request, 
 
     if (!response.ok) {
       const text = await response.text();
-      console.error(`[PayPal Connect] Referral creation failed (${response.status}):`, text);
+      logger.error(`[PayPal Connect] Referral creation failed (${response.status}):`, text);
       res.status(500).json({ error: `PayPal API error: ${response.status}` });
       return;
     }
@@ -240,10 +241,10 @@ router.post('/:merchantId/connect/paypal/create-referral', async (req: Request, 
       return;
     }
 
-    console.log(`[PayPal Connect] Created referral for restaurant ${restaurant.name}`);
+    logger.info(`[PayPal Connect] Created referral for restaurant ${restaurant.name}`);
     res.json({ actionUrl });
   } catch (error: unknown) {
-    console.error('[PayPal Connect] Error creating referral:', error);
+    logger.error('[PayPal Connect] Error creating referral:', error);
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create PayPal referral' });
   }
 });
@@ -296,7 +297,7 @@ router.get('/:merchantId/connect/paypal/status', async (req: Request, res: Respo
       merchantId: restaurant.paypalMerchantId,
     });
   } catch (error: unknown) {
-    console.error('[PayPal Connect] Error retrieving status:', error);
+    logger.error('[PayPal Connect] Error retrieving status:', error);
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to retrieve PayPal status' });
   }
 });
@@ -332,10 +333,10 @@ router.post('/:merchantId/connect/paypal/complete', async (req: Request, res: Re
       },
     });
 
-    console.log(`[PayPal Connect] Merchant ${merchantId} linked to restaurant ${restaurant.name}`);
+    logger.info(`[PayPal Connect] Merchant ${merchantId} linked to restaurant ${restaurant.name}`);
     res.json({ success: true, merchantId });
   } catch (error: unknown) {
-    console.error('[PayPal Connect] Error completing connection:', error);
+    logger.error('[PayPal Connect] Error completing connection:', error);
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to complete PayPal connection' });
   }
 });

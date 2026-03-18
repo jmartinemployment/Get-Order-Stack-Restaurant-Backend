@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'node:http';
 import { Server, Socket } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
@@ -34,7 +35,7 @@ export function initializeSocketServer(httpServer: HttpServer, corsOrigins: any)
   });
 
   io.on('connection', (socket: Socket) => {
-    console.log(`[Socket.io] Client connected: ${socket.id}`);
+    logger.info(`[Socket.io] Client connected: ${socket.id}`);
 
     // Handle device joining a restaurant room
     socket.on('join-restaurant', async (data: { restaurantId: string; deviceId: string; deviceType: string }) => {
@@ -62,10 +63,10 @@ export function initializeSocketServer(httpServer: HttpServer, corsOrigins: any)
           data: { lastSeenAt: new Date() }
         });
       } catch (err) {
-        console.error('[Socket.io] Error updating device status:', err);
+        logger.error('[Socket.io] Error updating device status:', err);
       }
 
-      console.log(`[Socket.io] Device ${deviceType}:${deviceId} joined restaurant ${restaurantId}`);
+      logger.info(`[Socket.io] Device ${deviceType}:${deviceId} joined restaurant ${restaurantId}`);
 
       // Notify other devices in the room
       socket.to(`restaurant:${restaurantId}`).emit('device-connected', {
@@ -98,10 +99,10 @@ export function initializeSocketServer(httpServer: HttpServer, corsOrigins: any)
           data: { lastSeenAt: new Date() }
         });
       } catch (err) {
-        console.error('[Socket.io] Error updating device status:', err);
+        logger.error('[Socket.io] Error updating device status:', err);
       }
 
-      console.log(`[Socket.io] Device ${deviceId} left restaurant ${restaurantId}`);
+      logger.info(`[Socket.io] Device ${deviceId} left restaurant ${restaurantId}`);
     });
 
     // Handle heartbeat
@@ -140,28 +141,28 @@ export function initializeSocketServer(httpServer: HttpServer, corsOrigins: any)
           timestamp: new Date().toISOString()
         });
 
-        console.log(`[Socket.io] Device ${info.deviceType}:${info.deviceId} disconnected (${reason})`);
+        logger.info(`[Socket.io] Device ${info.deviceType}:${info.deviceId} disconnected (${reason})`);
       } else {
-        console.log(`[Socket.io] Client disconnected: ${socket.id} (${reason})`);
+        logger.info(`[Socket.io] Client disconnected: ${socket.id} (${reason})`);
       }
     });
   });
 
-  console.log('[Socket.io] WebSocket server initialized');
+  logger.info('[Socket.io] WebSocket server initialized');
   return io;
 }
 
 // Broadcast an order event to all devices in a restaurant
 export function broadcastOrderEvent(restaurantId: string, eventType: string, order: any) {
   if (!io) {
-    console.warn('[Socket.io] Server not initialized, cannot broadcast');
+    logger.warn('[Socket.io] Server not initialized, cannot broadcast');
     return;
   }
 
   const room = `restaurant:${restaurantId}`;
   const connectedCount = restaurantSockets.get(restaurantId)?.size || 0;
 
-  console.log(`[Socket.io] Broadcasting ${eventType} to ${connectedCount} devices in restaurant ${restaurantId}`);
+  logger.info(`[Socket.io] Broadcasting ${eventType} to ${connectedCount} devices in restaurant ${restaurantId}`);
 
   io.to(room).emit(eventType, {
     order,
@@ -172,14 +173,14 @@ export function broadcastOrderEvent(restaurantId: string, eventType: string, ord
 // Send an order event to a specific device only
 export function sendOrderEventToDevice(restaurantId: string, targetDeviceId: string, eventType: string, order: any) {
   if (!io) {
-    console.warn('[Socket.io] Server not initialized, cannot send');
+    logger.warn('[Socket.io] Server not initialized, cannot send');
     return false;
   }
 
   // Find the socket ID for the target device
   const sockets = restaurantSockets.get(restaurantId);
   if (!sockets) {
-    console.log('[Socket.io] No sockets found for restaurant', { restaurantId });
+    logger.info('[Socket.io] No sockets found for restaurant', { restaurantId });
     return false;
   }
 
@@ -193,11 +194,11 @@ export function sendOrderEventToDevice(restaurantId: string, targetDeviceId: str
   }
 
   if (!targetSocketId) {
-    console.log('[Socket.io] Device not found in restaurant', { targetDeviceId, restaurantId });
+    logger.info('[Socket.io] Device not found in restaurant', { targetDeviceId, restaurantId });
     return false;
   }
 
-  console.log(`[Socket.io] Sending ${eventType} to device ${targetDeviceId} (socket ${targetSocketId})`);
+  logger.info(`[Socket.io] Sending ${eventType} to device ${targetDeviceId} (socket ${targetSocketId})`);
 
   io.to(targetSocketId).emit(eventType, {
     order,
@@ -210,7 +211,7 @@ export function sendOrderEventToDevice(restaurantId: string, targetDeviceId: str
 // Broadcast to all devices EXCEPT a specific one (useful for new orders - notify KDS but not source)
 export function broadcastOrderEventExcept(restaurantId: string, excludeDeviceId: string, eventType: string, order: any) {
   if (!io) {
-    console.warn('[Socket.io] Server not initialized, cannot broadcast');
+    logger.warn('[Socket.io] Server not initialized, cannot broadcast');
     return;
   }
 
@@ -229,35 +230,35 @@ export function broadcastOrderEventExcept(restaurantId: string, excludeDeviceId:
     }
   }
 
-  console.log(`[Socket.io] Broadcast ${eventType} to ${sentCount} devices (excluding ${excludeDeviceId})`);
+  logger.info(`[Socket.io] Broadcast ${eventType} to ${sentCount} devices (excluding ${excludeDeviceId})`);
 }
 
 // Emit print events to restaurant (order:printed, order:print_failed)
 export function emitToPrinter(restaurantId: string, eventType: string, data: any) {
   if (!io) {
-    console.warn('[Socket.io] Server not initialized, cannot emit print event');
+    logger.warn('[Socket.io] Server not initialized, cannot emit print event');
     return;
   }
   const room = `restaurant:${restaurantId}`;
-  console.log(`[Socket.io] Emitting ${eventType} to restaurant ${restaurantId}`);
+  logger.info(`[Socket.io] Emitting ${eventType} to restaurant ${restaurantId}`);
   io.to(room).emit(eventType, { ...data, timestamp: new Date().toISOString() });
 }
 
 // Send order event to source device AND all KDS devices (not other POS devices)
 export function broadcastToSourceAndKDS(restaurantId: string, sourceDeviceId: string | null, eventType: string, order: any) {
   if (!io) {
-    console.warn('[Socket.io] Server not initialized, cannot broadcast');
+    logger.warn('[Socket.io] Server not initialized, cannot broadcast');
     return;
   }
 
   const sockets = restaurantSockets.get(restaurantId);
   if (!sockets) {
-    console.log('[Socket.io] No sockets for restaurant', { restaurantId });
+    logger.info('[Socket.io] No sockets for restaurant', { restaurantId });
     return;
   }
 
-  console.log('[Socket.io] broadcastToSourceAndKDS', { restaurantId, sourceDeviceId, eventType });
-  console.log(`[Socket.io] Connected sockets for restaurant: ${sockets.size}`);
+  logger.info('[Socket.io] broadcastToSourceAndKDS', { restaurantId, sourceDeviceId, eventType });
+  logger.info(`[Socket.io] Connected sockets for restaurant: ${sockets.size}`);
 
   let sentCount = 0;
   let skippedCount = 0;
@@ -274,7 +275,7 @@ export function broadcastToSourceAndKDS(restaurantId: string, sourceDeviceId: st
     // No sourceDeviceId = no POS/SOS notifications
     if (isPOS && !isSourceDevice) {
       skippedCount++;
-      console.log(`[Socket.io] SKIPPED POS ${info.deviceId} (not source device)`);
+      logger.info(`[Socket.io] SKIPPED POS ${info.deviceId} (not source device)`);
       continue;
     }
 
@@ -284,14 +285,14 @@ export function broadcastToSourceAndKDS(restaurantId: string, sourceDeviceId: st
         timestamp: new Date().toISOString()
       });
       sentCount++;
-      console.log(`[Socket.io] SENT ${eventType} to ${info.deviceType}:${info.deviceId}`);
+      logger.info(`[Socket.io] SENT ${eventType} to ${info.deviceType}:${info.deviceId}`);
     } else {
       skippedCount++;
-      console.log(`[Socket.io] SKIPPED ${info.deviceType}:${info.deviceId} (not KDS and not source device)`);
+      logger.info(`[Socket.io] SKIPPED ${info.deviceType}:${info.deviceId} (not KDS and not source device)`);
     }
   }
 
-  console.log(`[Socket.io] Broadcast complete: sent=${sentCount}, skipped=${skippedCount}`);
+  logger.info(`[Socket.io] Broadcast complete: sent=${sentCount}, skipped=${skippedCount}`);
 }
 
 // Get count of connected devices for a restaurant

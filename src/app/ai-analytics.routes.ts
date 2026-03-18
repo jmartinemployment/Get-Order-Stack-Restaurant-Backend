@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import { menuEngineeringService } from '../services/menu-engineering.service';
 import { salesInsightsService } from '../services/sales-insights.service';
 import { inventoryService } from '../services/inventory.service';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -33,7 +34,7 @@ router.get('/:merchantId/analytics/menu-engineering', async (req: Request, res: 
 
     res.json(report);
   } catch (error) {
-    console.error('Error generating menu engineering report:', error);
+    logger.error('Error generating menu engineering report:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
 });
@@ -58,7 +59,7 @@ router.get('/:merchantId/analytics/upsell-suggestions', async (req: Request, res
 
     res.json(suggestions);
   } catch (error) {
-    console.error('Error getting upsell suggestions:', error);
+    logger.error('Error getting upsell suggestions:', error);
     res.status(500).json({ error: 'Failed to get upsell suggestions' });
   }
 });
@@ -84,7 +85,7 @@ router.get('/:merchantId/analytics/sales/daily', async (req: Request, res: Respo
 
     res.json(insights);
   } catch (error) {
-    console.error('Error generating daily insights:', error);
+    logger.error('Error generating daily insights:', error);
     res.status(500).json({ error: 'Failed to generate daily insights' });
   }
 });
@@ -110,7 +111,7 @@ router.get('/:merchantId/analytics/sales/weekly', async (req: Request, res: Resp
 
     res.json(insights);
   } catch (error) {
-    console.error('Error generating weekly insights:', error);
+    logger.error('Error generating weekly insights:', error);
     res.status(500).json({ error: 'Failed to generate weekly insights' });
   }
 });
@@ -137,7 +138,7 @@ router.get('/:merchantId/analytics/sales/summary', async (req: Request, res: Res
 
     res.json(summary);
   } catch (error) {
-    console.error('Error generating sales summary:', error);
+    logger.error('Error generating sales summary:', error);
     res.status(500).json({ error: 'Failed to generate sales summary' });
   }
 });
@@ -154,7 +155,7 @@ router.get('/:merchantId/inventory', async (req: Request, res: Response) => {
     const items = await inventoryService.getInventory(restaurantId);
     res.json(items);
   } catch (error) {
-    console.error('Error fetching inventory:', error);
+    logger.error('Error fetching inventory:', error);
     res.status(500).json({ error: 'Failed to fetch inventory' });
   }
 });
@@ -175,7 +176,7 @@ router.get('/:merchantId/inventory/:itemId', async (req: Request, res: Response)
     
     res.json(item);
   } catch (error) {
-    console.error('Error fetching inventory item:', error);
+    logger.error('Error fetching inventory item:', error);
     res.status(500).json({ error: 'Failed to fetch inventory item' });
   }
 });
@@ -204,7 +205,7 @@ router.post('/:merchantId/inventory', async (req: Request, res: Response) => {
 
     res.status(201).json(item);
   } catch (error) {
-    console.error('Error creating inventory item:', error);
+    logger.error('Error creating inventory item:', error);
     res.status(500).json({ error: 'Failed to create inventory item' });
   }
 });
@@ -226,7 +227,7 @@ router.patch('/:merchantId/inventory/:itemId/stock', async (req: Request, res: R
     const item = await inventoryService.updateStock(itemId, newStock, reason);
     res.json(item);
   } catch (error) {
-    console.error('Error updating stock:', error);
+    logger.error('Error updating stock:', error);
     res.status(500).json({ error: 'Failed to update stock' });
   }
 });
@@ -248,7 +249,7 @@ router.post('/:merchantId/inventory/:itemId/usage', async (req: Request, res: Re
     const item = await inventoryService.recordUsage(itemId, quantity, reason);
     res.json(item);
   } catch (error) {
-    console.error('Error recording usage:', error);
+    logger.error('Error recording usage:', error);
     res.status(500).json({ error: 'Failed to record usage' });
   }
 });
@@ -270,7 +271,7 @@ router.post('/:merchantId/inventory/:itemId/restock', async (req: Request, res: 
     const item = await inventoryService.recordRestock(itemId, quantity, invoiceNumber);
     res.json(item);
   } catch (error) {
-    console.error('Error recording restock:', error);
+    logger.error('Error recording restock:', error);
     res.status(500).json({ error: 'Failed to record restock' });
   }
 });
@@ -285,7 +286,7 @@ router.get('/:merchantId/inventory/alerts', async (req: Request, res: Response) 
     const alerts = await inventoryService.getAlerts(restaurantId);
     res.json(alerts);
   } catch (error) {
-    console.error('Error fetching inventory alerts:', error);
+    logger.error('Error fetching inventory alerts:', error);
     res.status(500).json({ error: 'Failed to fetch alerts' });
   }
 });
@@ -300,7 +301,7 @@ router.get('/:merchantId/inventory/predictions', async (req: Request, res: Respo
     const predictions = await inventoryService.getStockPredictions(restaurantId);
     res.json(predictions);
   } catch (error) {
-    console.error('Error fetching predictions:', error);
+    logger.error('Error fetching predictions:', error);
     res.status(500).json({ error: 'Failed to fetch predictions' });
   }
 });
@@ -315,7 +316,7 @@ router.get('/:merchantId/inventory/report', async (req: Request, res: Response) 
     const report = await inventoryService.generateReport(restaurantId);
     res.json(report);
   } catch (error) {
-    console.error('Error generating inventory report:', error);
+    logger.error('Error generating inventory report:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
 });
@@ -330,7 +331,7 @@ router.get('/:merchantId/inventory/:itemId/prediction', async (req: Request, res
     const prediction = await inventoryService.predictItemRunout(itemId);
     res.json({ message: prediction });
   } catch (error) {
-    console.error('Error predicting runout:', error);
+    logger.error('Error predicting runout:', error);
     res.status(500).json({ error: 'Failed to predict runout' });
   }
 });

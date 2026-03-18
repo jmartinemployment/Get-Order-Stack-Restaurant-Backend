@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { printerService } from '../services/printer.service';
 import { cloudPrntService } from '../services/cloudprnt.service';
+import { logger } from '../utils/logger';
 
 const router = Router({ mergeParams: true });
 
@@ -15,7 +16,7 @@ router.get('/:merchantId/printers', async (req: Request, res: Response) => {
     res.json(printers);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to list printers';
-    console.error('[PrinterRoutes] Error listing printers', { error: message });
+    logger.error('[PrinterRoutes] Error listing printers', { error: message });
     res.status(500).json({ error: message });
   }
 });
@@ -46,7 +47,7 @@ router.post('/:merchantId/printers', async (req: Request, res: Response) => {
     res.status(201).json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to register printer';
-    console.error('[PrinterRoutes] Error registering printer', { error: message });
+    logger.error('[PrinterRoutes] Error registering printer', { error: message });
     res.status(400).json({ error: message });
   }
 });
@@ -71,7 +72,7 @@ router.patch('/:merchantId/printers/:printerId', async (req: Request, res: Respo
     res.json(printer);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to update printer';
-    console.error('[PrinterRoutes] Error updating printer', { error: message });
+    logger.error('[PrinterRoutes] Error updating printer', { error: message });
     res.status(400).json({ error: message });
   }
 });
@@ -87,7 +88,7 @@ router.delete('/:merchantId/printers/:printerId', async (req: Request, res: Resp
     res.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to delete printer';
-    console.error('[PrinterRoutes] Error deleting printer', { error: message });
+    logger.error('[PrinterRoutes] Error deleting printer', { error: message });
     res.status(400).json({ error: message });
   }
 });
@@ -103,7 +104,7 @@ router.post('/:merchantId/printers/:printerId/test', async (req: Request, res: R
     res.json({ success: true, jobId });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to create test print';
-    console.error('[PrinterRoutes] Error creating test print', { error: message });
+    logger.error('[PrinterRoutes] Error creating test print', { error: message });
     res.status(400).json({ error: message });
   }
 });

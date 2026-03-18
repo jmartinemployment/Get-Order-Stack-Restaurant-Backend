@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -110,7 +111,7 @@ router.get('/:merchantId/retail/items', async (req: Request, res: Response) => {
     });
     res.json(items);
   } catch (error: unknown) {
-    console.error('[Retail] Error listing items:', error);
+    logger.error('[Retail] Error listing items:', error);
     res.status(500).json({ error: 'Failed to list retail items' });
   }
 });
@@ -129,7 +130,7 @@ router.post('/:merchantId/retail/items', async (req: Request, res: Response) => 
     });
     res.status(201).json(item);
   } catch (error: unknown) {
-    console.error('[Retail] Error creating item:', error);
+    logger.error('[Retail] Error creating item:', error);
     res.status(500).json({ error: 'Failed to create retail item' });
   }
 });
@@ -153,7 +154,7 @@ router.patch('/:merchantId/retail/items/:itemId', async (req: Request, res: Resp
       res.status(404).json({ error: 'Retail item not found' });
       return;
     }
-    console.error('[Retail] Error updating item:', error);
+    logger.error('[Retail] Error updating item:', error);
     res.status(500).json({ error: 'Failed to update retail item' });
   }
 });
@@ -168,7 +169,7 @@ router.delete('/:merchantId/retail/items/:itemId', async (req: Request, res: Res
       res.status(404).json({ error: 'Retail item not found' });
       return;
     }
-    console.error('[Retail] Error deleting item:', error);
+    logger.error('[Retail] Error deleting item:', error);
     res.status(500).json({ error: 'Failed to delete retail item' });
   }
 });
@@ -185,7 +186,7 @@ router.get('/:merchantId/retail/categories', async (req: Request, res: Response)
     });
     res.json(categories);
   } catch (error: unknown) {
-    console.error('[Retail] Error listing categories:', error);
+    logger.error('[Retail] Error listing categories:', error);
     res.status(500).json({ error: 'Failed to list retail categories' });
   }
 });
@@ -203,7 +204,7 @@ router.post('/:merchantId/retail/categories', async (req: Request, res: Response
     });
     res.status(201).json(category);
   } catch (error: unknown) {
-    console.error('[Retail] Error creating category:', error);
+    logger.error('[Retail] Error creating category:', error);
     res.status(500).json({ error: 'Failed to create retail category' });
   }
 });
@@ -226,7 +227,7 @@ router.patch('/:merchantId/retail/categories/:catId', async (req: Request, res: 
       res.status(404).json({ error: 'Retail category not found' });
       return;
     }
-    console.error('[Retail] Error updating category:', error);
+    logger.error('[Retail] Error updating category:', error);
     res.status(500).json({ error: 'Failed to update retail category' });
   }
 });
@@ -241,7 +242,7 @@ router.delete('/:merchantId/retail/categories/:catId', async (req: Request, res:
       res.status(404).json({ error: 'Retail category not found' });
       return;
     }
-    console.error('[Retail] Error deleting category:', error);
+    logger.error('[Retail] Error deleting category:', error);
     res.status(500).json({ error: 'Failed to delete retail category' });
   }
 });
@@ -258,7 +259,7 @@ router.get('/:merchantId/retail/option-sets', async (req: Request, res: Response
     });
     res.json(sets);
   } catch (error: unknown) {
-    console.error('[Retail] Error listing option sets:', error);
+    logger.error('[Retail] Error listing option sets:', error);
     res.status(500).json({ error: 'Failed to list option sets' });
   }
 });
@@ -282,7 +283,7 @@ router.post('/:merchantId/retail/option-sets', async (req: Request, res: Respons
     });
     res.status(201).json(set);
   } catch (error: unknown) {
-    console.error('[Retail] Error creating option set:', error);
+    logger.error('[Retail] Error creating option set:', error);
     res.status(500).json({ error: 'Failed to create option set' });
   }
 });
@@ -318,7 +319,7 @@ router.patch('/:merchantId/retail/option-sets/:setId', async (req: Request, res:
       res.status(404).json({ error: 'Option set not found' });
       return;
     }
-    console.error('[Retail] Error updating option set:', error);
+    logger.error('[Retail] Error updating option set:', error);
     res.status(500).json({ error: 'Failed to update option set' });
   }
 });
@@ -333,7 +334,7 @@ router.delete('/:merchantId/retail/option-sets/:setId', async (req: Request, res
       res.status(404).json({ error: 'Option set not found' });
       return;
     }
-    console.error('[Retail] Error deleting option set:', error);
+    logger.error('[Retail] Error deleting option set:', error);
     res.status(500).json({ error: 'Failed to delete option set' });
   }
 });
@@ -349,7 +350,7 @@ router.get('/:merchantId/retail/inventory/stock', async (req: Request, res: Resp
     });
     res.json(stock);
   } catch (error: unknown) {
-    console.error('[Retail] Error listing stock:', error);
+    logger.error('[Retail] Error listing stock:', error);
     res.status(500).json({ error: 'Failed to list retail stock' });
   }
 });
@@ -373,7 +374,7 @@ router.get('/:merchantId/retail/inventory/alerts', async (req: Request, res: Res
       }));
     res.json(alerts);
   } catch (error: unknown) {
-    console.error('[Retail] Error getting stock alerts:', error);
+    logger.error('[Retail] Error getting stock alerts:', error);
     res.status(500).json({ error: 'Failed to get stock alerts' });
   }
 });
@@ -389,7 +390,7 @@ router.get('/:merchantId/retail/layaways', async (req: Request, res: Response) =
     });
     res.json(layaways);
   } catch (error: unknown) {
-    console.error('[Retail] Error listing layaways:', error);
+    logger.error('[Retail] Error listing layaways:', error);
     res.status(500).json({ error: 'Failed to list layaways' });
   }
 });
@@ -407,7 +408,7 @@ router.post('/:merchantId/retail/layaways', async (req: Request, res: Response) 
     });
     res.status(201).json(layaway);
   } catch (error: unknown) {
-    console.error('[Retail] Error creating layaway:', error);
+    logger.error('[Retail] Error creating layaway:', error);
     res.status(500).json({ error: 'Failed to create layaway' });
   }
 });
@@ -423,7 +424,7 @@ router.get('/:merchantId/retail/quick-keys', async (req: Request, res: Response)
     });
     res.json(keys);
   } catch (error: unknown) {
-    console.error('[Retail] Error listing quick keys:', error);
+    logger.error('[Retail] Error listing quick keys:', error);
     res.status(500).json({ error: 'Failed to list quick keys' });
   }
 });
@@ -448,7 +449,7 @@ router.put('/:merchantId/retail/quick-keys', async (req: Request, res: Response)
     });
     res.json(keys);
   } catch (error: unknown) {
-    console.error('[Retail] Error saving quick keys:', error);
+    logger.error('[Retail] Error saving quick keys:', error);
     res.status(500).json({ error: 'Failed to save quick keys' });
   }
 });
@@ -465,7 +466,7 @@ router.get('/:merchantId/retail/receipt-template', async (req: Request, res: Res
     const profile = restaurant?.merchantProfile as Record<string, unknown> | null;
     res.json(profile?.retailReceiptTemplate ?? { header: '', footer: '', showLogo: true, showAddress: true });
   } catch (error: unknown) {
-    console.error('[Retail] Error getting receipt template:', error);
+    logger.error('[Retail] Error getting receipt template:', error);
     res.status(500).json({ error: 'Failed to get receipt template' });
   }
 });
@@ -490,7 +491,7 @@ router.put('/:merchantId/retail/receipt-template', async (req: Request, res: Res
     });
     res.json(parsed.data);
   } catch (error: unknown) {
-    console.error('[Retail] Error saving receipt template:', error);
+    logger.error('[Retail] Error saving receipt template:', error);
     res.status(500).json({ error: 'Failed to save receipt template' });
   }
 });
@@ -507,7 +508,7 @@ router.get('/:merchantId/retail/return-policy', async (req: Request, res: Respon
     const profile = restaurant?.merchantProfile as Record<string, unknown> | null;
     res.json(profile?.retailReturnPolicy ?? { returnWindowDays: 30, requireReceipt: true, restockingFeePercent: 0, exchangeOnly: false });
   } catch (error: unknown) {
-    console.error('[Retail] Error getting return policy:', error);
+    logger.error('[Retail] Error getting return policy:', error);
     res.status(500).json({ error: 'Failed to get return policy' });
   }
 });
@@ -532,7 +533,7 @@ router.put('/:merchantId/retail/return-policy', async (req: Request, res: Respon
     });
     res.json(parsed.data);
   } catch (error: unknown) {
-    console.error('[Retail] Error saving return policy:', error);
+    logger.error('[Retail] Error saving return policy:', error);
     res.status(500).json({ error: 'Failed to save return policy' });
   }
 });
@@ -573,7 +574,7 @@ router.get('/:merchantId/retail/reports/sales', async (req: Request, res: Respon
       orders: orders.slice(0, 50),
     });
   } catch (error: unknown) {
-    console.error('[Retail] Error getting sales report:', error);
+    logger.error('[Retail] Error getting sales report:', error);
     res.status(500).json({ error: 'Failed to get retail sales report' });
   }
 });
@@ -594,7 +595,7 @@ router.get('/:merchantId/retail/ecommerce/orders', async (req: Request, res: Res
     });
     res.json(orders);
   } catch (error: unknown) {
-    console.error('[Retail] Error listing ecommerce orders:', error);
+    logger.error('[Retail] Error listing ecommerce orders:', error);
     res.status(500).json({ error: 'Failed to list ecommerce orders' });
   }
 });

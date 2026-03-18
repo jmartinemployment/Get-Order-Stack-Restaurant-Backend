@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 /**
  * Google Cloud Translation Service
  * Handles Spanish <-> English translations for menu items and categories
@@ -24,7 +25,7 @@ export class TranslationService {
   constructor() {
     this.apiKey = process.env.GOOGLE_TRANSLATE_API_KEY || '';
     if (!this.apiKey) {
-      console.warn('GOOGLE_TRANSLATE_API_KEY not set - translations will be disabled');
+      logger.warn('GOOGLE_TRANSLATE_API_KEY not set - translations will be disabled');
     }
   }
 
@@ -58,7 +59,7 @@ export class TranslationService {
 
       if (!response.ok) {
         const error = await response.text();
-        console.error('Translation API error:', error);
+        logger.error('Translation API error:', error);
         return null;
       }
 
@@ -70,7 +71,7 @@ export class TranslationService {
         detectedSourceLanguage: translation.detectedSourceLanguage,
       };
     } catch (error) {
-      console.error('Translation failed:', error);
+      logger.error('Translation failed:', error);
       return null;
     }
   }
@@ -121,14 +122,14 @@ export class TranslationService {
       });
 
       if (!response.ok) {
-        console.error('Batch translation API error:', await response.text());
+        logger.error('Batch translation API error:', await response.text());
         return texts.map(() => null);
       }
 
       const data = await response.json() as GoogleTranslateResponse;
       return data.data.translations.map((t) => t.translatedText);
     } catch (error) {
-      console.error('Batch translation failed:', error);
+      logger.error('Batch translation failed:', error);
       return texts.map(() => null);
     }
   }

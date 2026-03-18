@@ -7,6 +7,7 @@ import {
   DoorDashRuntimeCredentials,
   UberRuntimeCredentials,
 } from './delivery-credentials.service';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
@@ -114,7 +115,7 @@ async function doordashRequestQuote(
 
   if (!response.ok) {
     const errBody = await response.text();
-    console.error('[DoorDash] Quote request failed:', errBody);
+    logger.error('[DoorDash] Quote request failed:', errBody);
     throw new Error(`DoorDash quote failed: ${response.status}`);
   }
 
@@ -148,7 +149,7 @@ async function doordashAcceptQuote(
 
   if (!response.ok) {
     const errBody = await response.text();
-    console.error('[DoorDash] Accept failed:', errBody);
+    logger.error('[DoorDash] Accept failed:', errBody);
     throw new Error(`DoorDash accept failed: ${response.status}`);
   }
 
@@ -282,7 +283,7 @@ async function uberRequestQuote(
 
   if (!response.ok) {
     const errBody = await response.text();
-    console.error('[Uber] Quote request failed:', errBody);
+    logger.error('[Uber] Quote request failed:', errBody);
     throw new Error(`Uber quote failed: ${response.status}`);
   }
 
@@ -328,7 +329,7 @@ async function uberAcceptQuote(
 
   if (!response.ok) {
     const errBody = await response.text();
-    console.error('[Uber] Accept failed:', errBody);
+    logger.error('[Uber] Accept failed:', errBody);
     throw new Error(`Uber accept failed: ${response.status}`);
   }
 
@@ -555,7 +556,7 @@ export const deliveryService = {
     });
 
     if (!order) {
-      console.warn('[Delivery] Webhook for unknown delivery', { orderId });
+      logger.warn('[Delivery] Webhook for unknown delivery', { orderId });
       return;
     }
 
