@@ -406,3 +406,149 @@ describe('changePassword — password history check', () => {
     expect(mockPrismaTeamMember.update).not.toHaveBeenCalled();
   });
 });
+
+// =============================================================================
+// B1 — resetPasswordWithToken: null token handling (token not found / already used)
+// =============================================================================
+
+describe('resetPasswordWithToken — null token handling', () => {
+  it('returns error when token does not exist in database', async () => {
+    // findUnique returns null — token hash not found
+    mockPrismaPasswordResetToken.findUnique.mockResolvedValue(null);
+
+    const result = await authService.resetPasswordWithToken(
+      'nonexistent-token-value',
+      'ValidPassword1!', // NOSONAR - valid strength so we reach the DB lookup
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Invalid or expired reset link. Please request a new one.');
+    // Must NOT throw a TypeError when resetToken is null
+    expect(mockPrismaTeamMember.update).not.toHaveBeenCalled();
+  });
+
+  it('returns error when token has already been used', async () => {
+    // findUnique returns a token record with usedAt set (already consumed)
+    mockPrismaPasswordResetToken.findUnique.mockResolvedValue({
+      id: 'prt-1',
+      token: 'hashed-token',
+      teamMemberId: 'tm-reset',
+      usedAt: new Date('2026-03-10T00:00:00Z'),
+      expiresAt: new Date('2026-04-01T00:00:00Z'),
+      createdAt: new Date(),
+      teamMember: { id: 'tm-reset', isActive: true },
+    });
+
+    const result = await authService.resetPasswordWithToken(
+      'already-used-token-value',
+      'ValidPassword1!', // NOSONAR - valid strength so we reach the DB lookup
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Invalid or expired reset link. Please request a new one.');
+    // Password should NOT have been updated
+    expect(mockPrismaTeamMember.update).not.toHaveBeenCalled();
+  });
+});
+
+// =============================================================================
+// B5 — loginUser: MFA enrollment enforcement for privileged roles
+// =============================================================================
+
+describe('loginUser — MFA enrollment enforcement for privileged roles', () => {
+  // Base member factory — reusable across tests
+  const baseMember = (overrides: Record<string, unknown> = {}) => ({
+    id: 'tm-mfa',
+    email: 'admin@test.com',
+    passwordHash: 'hashed-password',
+    isActive: true,
+    mustChangePassword: false,
+    passwordChangedAt: new Date(),
+    tempPasswordExpiresAt: null,
+    mfaEnabled: false,
+    mfaGraceDeadline: null,
+    role: 'owner',
+    restaurantGroupId: null,
+    restaurantGroup: null,
+    restaurantAccess: [],
+    restaurantId: null,
+    firstName: 'Admin',
+    lastName: 'User',
+    ...overrides,
+  });
+
+  it('sets mfaGraceDeadline and returns mfaEnrollmentRequired when admin has no MFA', async () => {
+    mockPrismaTeamMember.findUnique.mockResolvedValue(baseMember());
+    mockPrismaTeamMember.update.mockResolvedValue({});
+    mockPrismaUserSession.create.mockResolvedValue({
+      id: 'sess-mfa-1', token: 'session-token', isActive: true, createdAt: new Date(),
+    });
+    mockPrismaUserSession.findMany.mockResolvedValue([
+      { id: 'sess-mfa-1', createdAt: new Date() },
+    ]);
+
+    const result = await authService.loginUser('admin@test.com', 'SomePassword1!');
+
+    expect(result.success).toBe(true);
+    expect(result.mfaEnrollmentRequired).toBe(true);
+    expect(result.mfaGraceDeadline).toBeDefined();
+    // Verify the grace deadline was persisted via teamMember.update
+    expect(mockPrismaTeamMember.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'tm-mfa' },
+        data: expect.objectContaining({ mfaGraceDeadline: expect.any(Date) }),
+      }),
+    );
+  });
+
+  it('blocks login when grace period has expired', async () => {
+    const pastDeadline = new Date(Date.now() - 24 * 60 * 60 * 1000); // 1 day ago
+    mockPrismaTeamMember.findUnique.mockResolvedValue(
+      baseMember({ mfaGraceDeadline: pastDeadline }),
+    );
+
+    const result = await authService.loginUser('admin@test.com', 'SomePassword1!');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('MFA_ENROLLMENT_REQUIRED');
+    // No session should have been created
+    expect(mockPrismaUserSession.create).not.toHaveBeenCalled();
+  });
+
+  it('allows login within grace period and returns enrollment flag', async () => {
+    const futureDeadline = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days from now
+    mockPrismaTeamMember.findUnique.mockResolvedValue(
+      baseMember({ mfaGraceDeadline: futureDeadline }),
+    );
+    mockPrismaUserSession.create.mockResolvedValue({
+      id: 'sess-mfa-2', token: 'session-token', isActive: true, createdAt: new Date(),
+    });
+    mockPrismaUserSession.findMany.mockResolvedValue([
+      { id: 'sess-mfa-2', createdAt: new Date() },
+    ]);
+
+    const result = await authService.loginUser('admin@test.com', 'SomePassword1!');
+
+    expect(result.success).toBe(true);
+    expect(result.mfaEnrollmentRequired).toBe(true);
+    expect(result.mfaGraceDeadline).toBe(futureDeadline.toISOString());
+  });
+
+  it('does not require MFA enrollment for staff role', async () => {
+    mockPrismaTeamMember.findUnique.mockResolvedValue(
+      baseMember({ role: 'staff', mfaEnabled: false, mfaGraceDeadline: null }),
+    );
+    mockPrismaUserSession.create.mockResolvedValue({
+      id: 'sess-mfa-3', token: 'session-token', isActive: true, createdAt: new Date(),
+    });
+    mockPrismaUserSession.findMany.mockResolvedValue([
+      { id: 'sess-mfa-3', createdAt: new Date() },
+    ]);
+
+    const result = await authService.loginUser('staff@test.com', 'SomePassword1!');
+
+    expect(result.success).toBe(true);
+    expect(result.mfaEnrollmentRequired).toBeUndefined();
+    expect(result.mfaGraceDeadline).toBeUndefined();
+  });
+});
