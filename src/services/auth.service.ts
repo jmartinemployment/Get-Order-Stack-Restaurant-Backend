@@ -267,8 +267,10 @@ class AuthService {
       // PCI DSS 8.4.2: MFA enrollment enforcement for privileged roles.
       // Admin/owner/manager accounts MUST enable MFA. A 7-day grace period is
       // granted on first login; after that, login is blocked until MFA is set up.
+      // Skip for accounts with no restaurant access (still onboarding).
       const MFA_REQUIRED_ROLES = ['super_admin', 'owner', 'manager'];
-      if (MFA_REQUIRED_ROLES.includes(member.role) && !member.mfaEnabled) {
+      const hasRestaurantAccess = member.restaurantAccess.length > 0 || !!member.restaurantGroupId || !!member.restaurantId;
+      if (MFA_REQUIRED_ROLES.includes(member.role) && !member.mfaEnabled && hasRestaurantAccess) {
         const now = new Date();
 
         if (!member.mfaGraceDeadline) {
