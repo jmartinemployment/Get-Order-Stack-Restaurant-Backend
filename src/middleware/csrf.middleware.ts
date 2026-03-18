@@ -7,14 +7,17 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 // Paths that are exempt from CSRF validation.
 // These are either unauthenticated (no session to hijack) or use their own
 // signature verification (webhooks).
+// Paths exempt from CSRF validation.
+// NOTE: Express strips the mount prefix when middleware is mounted via app.use('/api/', fn),
+// so req.path is relative (e.g. '/auth/login', not '/api/auth/login').
 const CSRF_EXEMPT_PATHS = [
-  '/api/webhooks/',       // HMAC-signed webhooks
-  '/api/auth/login',      // Unauthenticated — rate-limited instead
-  '/api/auth/signup',     // Unauthenticated — rate-limited instead
-  '/api/auth/forgot-password', // Unauthenticated — rate-limited instead
-  '/api/auth/reset-password',  // Token-based verification, no session
-  '/api/auth/mfa/challenge',   // MFA token-based, not session-based
-  '/api/csrf-token',      // Token generation endpoint itself
+  '/webhooks/',            // HMAC-signed webhooks
+  '/auth/login',           // Unauthenticated — rate-limited instead
+  '/auth/signup',          // Unauthenticated — rate-limited instead
+  '/auth/forgot-password', // Unauthenticated — rate-limited instead
+  '/auth/reset-password',  // Token-based verification, no session
+  '/auth/mfa/challenge',   // MFA token-based, not session-based
+  '/csrf-token',           // Token generation endpoint itself
 ];
 
 // Only initialize csrf-csrf if CSRF_SECRET is available.
