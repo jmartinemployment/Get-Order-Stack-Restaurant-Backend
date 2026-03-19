@@ -487,6 +487,7 @@ function buildProfileUpdates(
   if (menuTemplateId !== undefined) updates['menuTemplateId'] = menuTemplateId;
   if (ownerPin !== undefined) updates['ownerPin'] = ownerPin;
   if ((body as Record<string, unknown>)['wizardStep'] !== undefined) updates['wizardStep'] = (body as Record<string, unknown>)['wizardStep'];
+  if ((body as Record<string, unknown>)['onboardingComplete'] === true) updates['onboardingComplete'] = true;
   return updates;
 }
 
