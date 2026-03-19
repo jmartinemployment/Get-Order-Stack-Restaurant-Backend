@@ -15,7 +15,9 @@ import { logger } from '../utils/logger';
  * blocks because the attacker's origin is not in our CORS allowlist.
  */
 
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+// DELETE is safe from CSRF form attacks — HTML forms only support GET/POST.
+// CORS allowlist + SameSite cookies cover it without needing a body Content-Type check.
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'DELETE']);
 
 /**
  * Require Content-Type: application/json or multipart/form-data on state-changing requests.
