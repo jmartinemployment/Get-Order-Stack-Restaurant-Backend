@@ -2,13 +2,23 @@ import { PrismaClient } from '@prisma/client';
 import { generateSecret, generateURI, verifySync } from 'otplib';
 import * as QRCode from 'qrcode';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import bcrypt from 'bcryptjs';
 import { logger } from '../utils/logger';
 import { auditLog } from '../utils/audit';
 
 const prisma = new PrismaClient();
 
-const MFA_ENCRYPTION_KEY = process.env.MFA_ENCRYPTION_KEY;
+function loadMfaEncryptionKey(): string | undefined {
+  if (process.env.MFA_ENCRYPTION_KEY) return process.env.MFA_ENCRYPTION_KEY;
+  try {
+    return fs.readFileSync('/etc/secrets/MFA_ENCRYPTION_KEY', 'utf8').trim();
+  } catch {
+    return undefined;
+  }
+}
+
+const MFA_ENCRYPTION_KEY = loadMfaEncryptionKey();
 const APP_NAME = 'OrderStack';
 
 // ============ Encryption helpers ============
