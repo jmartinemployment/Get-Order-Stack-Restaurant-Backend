@@ -869,6 +869,7 @@ router.post('/mfa/setup', requireAuth, async (req: Request, res: Response) => {
 
     const result = await mfaService.setupMfa(req.user!.teamMemberId, member.email);
     res.json({
+      secret: result.secret,
       qrCodeDataUrl: result.qrCodeDataUrl,
       backupCodes: result.backupCodes,
     });
