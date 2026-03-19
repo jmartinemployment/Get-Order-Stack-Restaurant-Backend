@@ -976,11 +976,12 @@ router.patch('/:merchantId/menu/items/:itemId', async (req: Request, res: Respon
     const { merchantId: restaurantId, itemId } = req.params;
     const {
       categoryId, name, nameEn, description, descriptionEn, price, cost, image,
-      available, eightySixed, eightySixReason, popular, dietary, displayOrder,
+      available: availableRaw, isActive, eightySixed, eightySixReason, popular, dietary, displayOrder,
       prepTimeMinutes, modifierGroupIds, cateringPricing,
       menuType, cateringPricingModel,
       itemCategory, beverageType, vendorId, allergens, cateringAllergens, dietaryFlags,
     } = req.body;
+    const available = availableRaw !== undefined ? availableRaw : isActive;
 
     const typeError = validateMenuTypeFields(menuType, cateringPricingModel);
     if (typeError) {
