@@ -259,13 +259,16 @@ router.post('/reset-password', authRateLimiter, async (req: Request, res: Respon
 // Logout (invalidate session)
 router.post('/logout', async (req: Request, res: Response) => {
   try {
+    // Read token from cookie first (PCI DSS), fall back to Authorization header
+    const cookieToken = req.cookies?.os_auth as string | undefined;
     const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
+    const token = cookieToken ?? (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined);
+
+    if (!token) {
       res.status(401).json({ error: 'No token provided' });
       return;
     }
 
-    const token = authHeader.substring(7);
     const payload = authService.verifyToken(token);
 
     if (!payload) {
@@ -289,13 +292,16 @@ router.post('/logout', async (req: Request, res: Response) => {
 // Validate token and get current user
 router.get('/me', async (req: Request, res: Response) => {
   try {
+    // Read token from cookie first (PCI DSS), fall back to Authorization header
+    const cookieToken = req.cookies?.os_auth as string | undefined;
     const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
+    const token = cookieToken ?? (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined);
+
+    if (!token) {
       res.status(401).json({ error: 'No token provided' });
       return;
     }
 
-    const token = authHeader.substring(7);
     const payload = authService.verifyToken(token);
 
     if (!payload) {
