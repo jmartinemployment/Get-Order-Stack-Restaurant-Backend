@@ -652,7 +652,7 @@ router.post('/:merchantId/menu/categories', async (req: Request, res: Response) 
 
 router.patch('/:merchantId/menu/categories/:categoryId', async (req: Request, res: Response) => {
   try {
-    const { restaurantId, categoryId } = req.params;
+    const { merchantId, categoryId } = req.params;
     const { name, nameEn, description, descriptionEn, image, active, displayOrder } = req.body;
 
     let generatedDescEn: string | null | undefined = descriptionEn;
@@ -660,14 +660,14 @@ router.patch('/:merchantId/menu/categories/:categoryId', async (req: Request, re
     // Regenerate English description if description changed and no manual override
     if (description !== undefined && descriptionEn === undefined) {
       const restaurant = await prisma.restaurant.findUnique({
-        where: { id: restaurantId }
+        where: { id: merchantId }
       });
       const category = await prisma.menuCategory.findUnique({
         where: { id: categoryId }
       });
       generatedDescEn = description
         ? await aiCostService.generateEnglishDescription(
-            restaurantId,
+            merchantId,
             name || category?.name || '',
             description,
             restaurant?.cuisineType || undefined
