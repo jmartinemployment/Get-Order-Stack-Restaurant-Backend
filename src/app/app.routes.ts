@@ -877,7 +877,7 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
     const {
-      categoryId, name, nameEn, description, descriptionEn,
+      categoryId, name, nameEn, description = '', descriptionEn,
       price, cost, image, available = true, dietary = [],
       prepTimeMinutes, modifierGroupIds = [], cateringPricing,
       menuType = 'standard', cateringPricingModel,
