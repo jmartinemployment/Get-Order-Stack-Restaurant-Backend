@@ -492,7 +492,7 @@ function buildProfileUpdates(
 }
 
 function buildDirectDbUpdates(body: Record<string, unknown>): Record<string, unknown> {
-  const { businessName, address, taxLocale, businessHours } = body as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { businessName, address, taxLocale, businessHours, businessCategory } = body as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   const direct: Record<string, unknown> = {};
   if (typeof businessName === 'string' && businessName.trim()) direct['name'] = businessName.trim();
   if (address?.street) direct['address'] = address.street;
@@ -502,6 +502,7 @@ function buildDirectDbUpdates(body: Record<string, unknown>): Record<string, unk
   if (address?.phone) direct['phone'] = address.phone;
   if (taxLocale?.taxRate !== undefined) direct['taxRate'] = taxLocale.taxRate / 100;
   if (businessHours !== undefined) direct['businessHours'] = businessHours;
+  if (typeof businessCategory === 'string') direct['businessCategory'] = businessCategory;
   return direct;
 }
 
