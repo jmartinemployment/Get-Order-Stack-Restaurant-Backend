@@ -92,7 +92,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    // Create the user as an owner
+    // Create user + restaurant + link in one atomic transaction
     const createResult = await authService.createUser({
       email,
       password,
@@ -102,43 +102,46 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
     });
 
     if (!createResult.success) {
-      // Timing-safe: delay to match bcrypt hashing time on the success path
       await new Promise(resolve => setTimeout(resolve, 200));
       res.status(200).json({ message: 'If this email is not already registered, your account has been created.' });
       return;
     }
 
-    // Create a restaurant and link it to the new owner
     const slug = businessName.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replaceAll(/^-|-$/g, '');
-    const restaurant = await prisma.restaurant.create({
-      data: {
-        name: businessName,
-        slug: `${slug}-${Date.now()}`,
-        email,
-        address: '',
-        city: '',
-        state: '',
-        zip: '',
-        merchantProfile: { onboardingComplete: false },
-      },
-    });
+    const teamMemberId = createResult.user!.id;
 
-    // Link owner to restaurant
-    await prisma.userRestaurantAccess.create({
-      data: {
-        teamMemberId: createResult.user!.id,
-        restaurantId: restaurant.id,
-        role: 'owner',
-      },
-    });
+    const restaurant = await prisma.$transaction(async (tx) => {
+      const r = await tx.restaurant.create({
+        data: {
+          name: businessName,
+          slug: `${slug}-${Date.now()}`,
+          email,
+          address: '',
+          city: '',
+          state: '',
+          zip: '',
+          merchantProfile: { onboardingComplete: false },
+        },
+      });
 
-    await prisma.teamMember.update({
-      where: { id: createResult.user!.id },
-      data: { restaurantId: restaurant.id },
+      await tx.userRestaurantAccess.create({
+        data: {
+          teamMemberId,
+          restaurantId: r.id,
+          role: 'owner',
+        },
+      });
+
+      await tx.teamMember.update({
+        where: { id: teamMemberId },
+        data: { restaurantId: r.id },
+      });
+
+      return r;
     });
 
     await auditLog('signup_with_restaurant', {
-      userId: createResult.user!.id,
+      userId: teamMemberId,
       metadata: { email, restaurantId: restaurant.id, businessName },
     });
 
