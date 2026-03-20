@@ -19,7 +19,7 @@ interface EmailMilestone {
 }
 
 const DEFAULT_BRAND_COLOR = '#2563eb';
-const FROM_ADDRESS = process.env.EMAIL_FROM ?? 'OrderStack <onboarding@resend.dev>';
+const FROM_ADDRESS = process.env.EMAIL_FROM ?? 'OrderStack <noreply@geekatyourspot.com>';
 const RESEND_API_KEY = getSecret('RESEND_API_KEY');
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
