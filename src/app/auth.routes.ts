@@ -21,8 +21,9 @@ function setAuthCookie(res: Response, token: string): void {
   res.cookie('os_auth', token, {
     httpOnly: true,
     secure: IS_PRODUCTION,
-    sameSite: IS_PRODUCTION ? 'none' : 'lax',
-    path: '/api',
+    sameSite: 'lax',
+    domain: IS_PRODUCTION ? '.getorderstack.com' : undefined,
+    path: '/',
     maxAge: COOKIE_MAX_AGE_MS,
   });
 }
@@ -31,6 +32,7 @@ function setAuthCookie(res: Response, token: string): void {
 function clearAuthCookie(res: Response): void {
   res.clearCookie('os_auth', {
     httpOnly: true,
+    domain: IS_PRODUCTION ? '.getorderstack.com' : undefined,
     secure: IS_PRODUCTION,
     sameSite: IS_PRODUCTION ? 'none' : 'lax',
     path: '/api',
@@ -160,6 +162,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
 
     setAuthCookie(res, loginResult.token!);
     res.status(201).json({
+      token: loginResult.token,
       user: loginResult.user,
       restaurants: loginResult.restaurants,
     });
@@ -210,6 +213,7 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
 
     setAuthCookie(res, result.token!);
     res.json({
+      token: result.token,
       user: result.user,
       restaurants: result.restaurants,
       ...(result.mfaEnrollmentRequired ? {
@@ -1063,6 +1067,7 @@ router.post('/mfa/challenge', async (req: Request, res: Response) => {
     await auditLog('mfa_challenge_success', { userId: payload.teamMemberId, ip: req.ip });
 
     res.json({
+      token: fullToken,
       user: {
         id: member!.id,
         email: member!.email,
