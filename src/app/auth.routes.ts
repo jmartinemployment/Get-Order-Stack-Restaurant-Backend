@@ -21,9 +21,8 @@ function setAuthCookie(res: Response, token: string): void {
   res.cookie('os_auth', token, {
     httpOnly: true,
     secure: IS_PRODUCTION,
-    sameSite: 'lax',
-    domain: IS_PRODUCTION ? '.getorderstack.com' : undefined,
-    path: '/',
+    sameSite: IS_PRODUCTION ? 'none' : 'lax',
+    path: '/api',
     maxAge: COOKIE_MAX_AGE_MS,
   });
 }
@@ -32,7 +31,6 @@ function setAuthCookie(res: Response, token: string): void {
 function clearAuthCookie(res: Response): void {
   res.clearCookie('os_auth', {
     httpOnly: true,
-    domain: IS_PRODUCTION ? '.getorderstack.com' : undefined,
     secure: IS_PRODUCTION,
     sameSite: IS_PRODUCTION ? 'none' : 'lax',
     path: '/api',
