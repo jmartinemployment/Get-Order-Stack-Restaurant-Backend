@@ -2375,25 +2375,28 @@ router.get('/:merchantId/reports/tax-service-charges', async (req: Request, res:
 router.get('/:merchantId/analytics/conversion-funnel', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
+    const startDate = (req.query.startDate as string) ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const endDate = (req.query.endDate as string) ?? new Date().toISOString();
 
-    // Derive from order data: views -> cart -> checkout -> completed
+    const dateFilter = { gte: new Date(startDate), lte: new Date(endDate) };
     const completedStatuses = ['completed', 'delivered'];
-    const allOrders = await prisma.order.count({ where: { restaurantId } });
+    const allOrders = await prisma.order.count({ where: { restaurantId, createdAt: dateFilter } });
     const completedOrders = await prisma.order.count({
-      where: { restaurantId, status: { in: completedStatuses } },
+      where: { restaurantId, status: { in: completedStatuses }, createdAt: dateFilter },
     });
     const cancelledOrders = await prisma.order.count({
-      where: { restaurantId, status: 'cancelled' },
+      where: { restaurantId, status: 'cancelled', createdAt: dateFilter },
     });
+    const inProgress = allOrders - completedOrders - cancelledOrders;
 
-    res.json({
-      stages: [
-        { name: 'Orders Placed', count: allOrders },
-        { name: 'Completed', count: completedOrders },
-        { name: 'Cancelled', count: cancelledOrders },
-      ],
-      conversionRate: allOrders > 0 ? Math.round((completedOrders / allOrders) * 1000) / 10 : 0,
-    });
+    const overallRate = allOrders > 0 ? Math.round((completedOrders / allOrders) * 1000) / 10 : 0;
+    const steps = [
+      { name: 'Orders Placed', count: allOrders, conversionRate: 100, dropOffRate: 0 },
+      { name: 'In Progress', count: inProgress, conversionRate: allOrders > 0 ? Math.round((inProgress / allOrders) * 1000) / 10 : 0, dropOffRate: allOrders > 0 ? Math.round((cancelledOrders / allOrders) * 1000) / 10 : 0 },
+      { name: 'Completed', count: completedOrders, conversionRate: overallRate, dropOffRate: allOrders > 0 ? Math.round(((allOrders - completedOrders) / allOrders) * 1000) / 10 : 0 },
+    ];
+
+    res.json({ steps, overallConversionRate: overallRate, periodStart: startDate, periodEnd: endDate });
   } catch (error: unknown) {
     logger.error('[Analytics] Error getting conversion funnel:', error);
     res.status(500).json({ error: 'Failed to get conversion funnel' });
@@ -2403,8 +2406,8 @@ router.get('/:merchantId/analytics/conversion-funnel', async (req: Request, res:
 router.get('/:merchantId/analytics/forecast/revenue', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
+    const days = Number.parseInt(req.query.days as string ?? '14', 10);
 
-    // Simple forecast: average daily revenue over last 30 days projected forward
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -2414,27 +2417,30 @@ router.get('/:merchantId/analytics/forecast/revenue', async (req: Request, res: 
         status: { in: ['completed', 'delivered'] },
         createdAt: { gte: thirtyDaysAgo },
       },
-      select: { total: true, createdAt: true },
+      select: { total: true },
     });
 
     const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total), 0);
-    const avgDailyRevenue = orders.length > 0 ? totalRevenue / 30 : 0;
+    const avgDaily = orders.length > 0 ? totalRevenue / 30 : 0;
+    const variance = avgDaily * 0.15; // 15% variance band
 
-    const forecast = Array.from({ length: 7 }, (_, i) => {
+    const dataPoints = Array.from({ length: days }, (_, i) => {
       const date = new Date();
       date.setDate(date.getDate() + i + 1);
       return {
         date: date.toISOString().split('T')[0],
-        projectedRevenue: Math.round(avgDailyRevenue * 100) / 100,
+        predicted: Math.round(avgDaily * 100) / 100,
+        lower: Math.round((avgDaily - variance) * 100) / 100,
+        upper: Math.round((avgDaily + variance) * 100) / 100,
       };
     });
 
-    const forecastConfidence = orders.length > 0 ? 'low' : null;
+    const confidence = orders.length > 100 ? 0.75 : orders.length > 0 ? 0.4 : 0;
     res.json({
-      forecast,
-      avgDailyRevenue: Math.round(avgDailyRevenue * 100) / 100,
-      basedOnDays: 30,
-      confidence: orders.length > 100 ? 'medium' : forecastConfidence,
+      forecastDays: days,
+      dataPoints,
+      totalPredicted: Math.round(avgDaily * days * 100) / 100,
+      confidence,
     });
   } catch (error: unknown) {
     logger.error('[Analytics] Error getting revenue forecast:', error);
@@ -2449,35 +2455,43 @@ router.get('/:merchantId/analytics/forecast/demand', async (req: Request, res: R
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const orders = await prisma.order.findMany({
+    // Get completed orders with their items
+    const orderItems = await prisma.orderItem.findMany({
       where: {
-        restaurantId,
-        status: { in: ['completed', 'delivered'] },
-        createdAt: { gte: thirtyDaysAgo },
+        order: {
+          restaurantId,
+          status: { in: ['completed', 'delivered'] },
+          createdAt: { gte: thirtyDaysAgo },
+        },
       },
-      select: { createdAt: true },
+      select: { menuItemId: true, menuItemName: true, quantity: true, order: { select: { createdAt: true } } },
     });
 
-    // Group by day of week
-    const byDayOfWeek: Record<number, number> = {};
-    for (const order of orders) {
-      const dow = order.createdAt.getDay();
-      byDayOfWeek[dow] = (byDayOfWeek[dow] ?? 0) + 1;
+    // Aggregate by item
+    const itemMap = new Map<string, { name: string; total: number; byDow: Record<number, number> }>();
+    for (const oi of orderItems) {
+      const key = oi.menuItemId ?? oi.menuItemName;
+      const entry = itemMap.get(key) ?? { name: oi.menuItemName, total: 0, byDow: {} };
+      entry.total += oi.quantity;
+      const dow = oi.order.createdAt.getDay();
+      entry.byDow[dow] = (entry.byDow[dow] ?? 0) + oi.quantity;
+      itemMap.set(key, entry);
     }
 
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const forecast = dayNames.map((name, i) => ({
-      dayOfWeek: i,
-      dayName: name,
-      avgOrders: Math.round(((byDayOfWeek[i] ?? 0) / 4) * 10) / 10, // ~4 weeks in 30 days
-    }));
-
-    const demandConfidence = orders.length > 0 ? 'low' : null;
-    res.json({
-      forecast,
-      basedOnDays: 30,
-      confidence: orders.length > 100 ? 'medium' : demandConfidence,
+    // Return as DemandForecastItem[] — frontend expects a flat array
+    const items = [...itemMap.entries()].map(([itemId, data]) => {
+      const dowValues = Object.values(data.byDow);
+      const dayOfWeekAvg = dowValues.length > 0 ? dowValues.reduce((a, b) => a + b, 0) / 7 / 4 : 0;
+      return {
+        itemId,
+        itemName: data.name,
+        predictedQuantity: Math.round((data.total / 30) * 10) / 10,
+        confidence: orderItems.length > 100 ? 0.7 : orderItems.length > 0 ? 0.35 : 0,
+        dayOfWeekAvg: Math.round(dayOfWeekAvg * 10) / 10,
+      };
     });
+
+    res.json(items);
   } catch (error: unknown) {
     logger.error('[Analytics] Error getting demand forecast:', error);
     res.status(500).json({ error: 'Failed to get demand forecast' });
@@ -2487,43 +2501,51 @@ router.get('/:merchantId/analytics/forecast/demand', async (req: Request, res: R
 router.get('/:merchantId/analytics/forecast/staffing', async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
+    const date = (req.query.date as string) ?? new Date().toISOString().split('T')[0];
+    const hourlyRate = 15; // default hourly rate estimate
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Get order demand by day of week
     const orders = await prisma.order.findMany({
       where: {
         restaurantId,
         status: { in: ['completed', 'delivered'] },
         createdAt: { gte: thirtyDaysAgo },
       },
-      select: { createdAt: true },
+      select: { createdAt: true, total: true },
     });
 
-    const byDayOfWeek: Record<number, number> = {};
+    // Group by hour of day (averaged over ~4 weeks)
+    const byHour: Record<number, { count: number; revenue: number }> = {};
     for (const order of orders) {
-      const dow = order.createdAt.getDay();
-      byDayOfWeek[dow] = (byDayOfWeek[dow] ?? 0) + 1;
+      const hour = order.createdAt.getHours();
+      const entry = byHour[hour] ?? { count: 0, revenue: 0 };
+      entry.count += 1;
+      entry.revenue += Number(order.total);
+      byHour[hour] = entry;
     }
 
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    // Rough heuristic: 1 staff per 10 orders/day
-    const forecast = dayNames.map((name, i) => {
-      const avgOrders = ((byDayOfWeek[i] ?? 0) / 4);
+    const hourlyBreakdown = Array.from({ length: 24 }, (_, hour) => {
+      const data = byHour[hour] ?? { count: 0, revenue: 0 };
+      const avgOrders = data.count / 30;
+      const avgRevenue = data.revenue / 30;
+      const recommended = Math.max(1, Math.ceil(avgOrders / 5)); // 1 staff per 5 orders/hour
       return {
-        dayOfWeek: i,
-        dayName: name,
-        avgOrders: Math.round(avgOrders * 10) / 10,
-        recommendedStaff: Math.max(1, Math.ceil(avgOrders / 10)),
+        hour,
+        recommendedStaff: recommended,
+        predictedOrders: Math.round(avgOrders * 10) / 10,
+        predictedRevenue: Math.round(avgRevenue * 100) / 100,
       };
     });
 
-    const staffingConfidence = orders.length > 0 ? 'low' : null;
+    const totalRecommendedHours = hourlyBreakdown.reduce((sum, h) => sum + h.recommendedStaff, 0);
+
     res.json({
-      forecast,
-      basedOnDays: 30,
-      confidence: orders.length > 100 ? 'medium' : staffingConfidence,
+      date,
+      hourlyBreakdown,
+      totalRecommendedHours,
+      estimatedLaborCost: Math.round(totalRecommendedHours * hourlyRate * 100) / 100,
     });
   } catch (error: unknown) {
     logger.error('[Analytics] Error getting staffing forecast:', error);
