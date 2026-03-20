@@ -37,6 +37,7 @@ export interface AuthResult {
     lastName: string | null;
     role: string;
     restaurantGroupId: string | null;
+    mfaEnabled: boolean;
   };
   restaurants?: Array<{
     id: string;
@@ -259,6 +260,7 @@ class AuthService {
             lastName: member.lastName,
             role: member.role,
             restaurantGroupId: member.restaurantGroupId,
+            mfaEnabled: true,
           },
           mfaRequired: true,
         };
@@ -413,6 +415,7 @@ class AuthService {
           lastName: member.lastName,
           role: member.role,
           restaurantGroupId: member.restaurantGroupId,
+          mfaEnabled: member.mfaEnabled,
         },
         restaurants,
       };
@@ -583,7 +586,8 @@ class AuthService {
           email: member.email,
           firstName: member.firstName,
           lastName: member.lastName,
-          role: member.role
+          role: member.role,
+          mfaEnabled: false,
         }
       };
     } catch (error) {

@@ -5,6 +5,7 @@ import { initializeSocketServer } from './services/socket.service';
 import { startPrintJobCleanup } from './jobs/print-job-cleanup';
 import { startMarketplaceStatusSyncJob } from './jobs/marketplace-status-sync';
 import { startMilestoneReminderCron } from './jobs/milestone-reminders';
+import { startSignupCleanupJob } from './jobs/account-maintenance';
 import { getSecret } from './utils/secrets';
 import { logger } from './utils/logger';
 
@@ -58,4 +59,7 @@ httpServer.listen(config.port, () => {
 
   // Start milestone payment reminder cron (daily at 9am)
   startMilestoneReminderCron();
+
+  // Purge abandoned signups (MFA not verified after 10 min)
+  startSignupCleanupJob();
 });

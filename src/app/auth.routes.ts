@@ -396,6 +396,7 @@ router.get('/me', async (req: Request, res: Response) => {
         lastName: member.lastName,
         role: member.role,
         restaurantGroupId: member.restaurantGroupId,
+        mfaEnabled: member.mfaEnabled,
       },
       restaurants
     });
@@ -1030,6 +1031,7 @@ router.post('/mfa/challenge', async (req: Request, res: Response) => {
         lastName: member!.lastName,
         role: member!.role,
         restaurantGroupId: member!.restaurantGroupId,
+        mfaEnabled: member!.mfaEnabled,
       },
       restaurants,
     });
