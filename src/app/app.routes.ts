@@ -912,6 +912,18 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
       return;
     }
 
+    if (categoryId === 'uncategorized') {
+      res.status(400).json({ error: 'Cannot add items to the virtual "Other" category. Please select or create a real category first.' });
+      return;
+    }
+
+    // Verify category exists
+    const categoryExists = await prisma.menuCategory.findUnique({ where: { id: categoryId }, select: { id: true } });
+    if (!categoryExists) {
+      res.status(400).json({ error: `Category ${categoryId} not found` });
+      return;
+    }
+
     const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId } });
     const cuisineType = restaurant?.cuisineType || undefined;
 
@@ -931,7 +943,10 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
     const item = await prisma.menuItem.create({
       data: {
         restaurantId, categoryId, name, nameEn, description,
-        descriptionEn: generatedDescEn, price, cost, image,
+        descriptionEn: generatedDescEn,
+        price: price ?? 0,
+        cost: cost ?? null,
+        image,
         available, dietary, eightySixed: false, prepTimeMinutes,
         menuType,
         ...(cateringPricingModel !== undefined && { cateringPricingModel }),
