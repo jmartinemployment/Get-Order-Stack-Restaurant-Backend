@@ -191,11 +191,19 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
 
     // Check if MFA is required before issuing full session
     if (result.user && result.mfaRequired) {
-      // Return partial auth — client must complete MFA challenge
+      // Send email OTP for the login challenge
+      const mfaMember = await prisma.teamMember.findUnique({
+        where: { id: result.user.id },
+        select: { email: true, firstName: true },
+      });
+      if (mfaMember?.email) {
+        await mfaService.sendOtp(result.user.id, mfaMember.email, mfaMember.firstName);
+      }
       res.json({
         mfaRequired: true,
-        mfaSessionToken: result.token, // short-lived token for MFA verification only
-        user: { id: result.user.id }, // minimal user info
+        mfaToken: result.token, // short-lived token for MFA verification only
+        maskedEmail: mfaMember?.email ? mfaService.maskEmail(mfaMember.email) : undefined,
+        user: { id: result.user.id },
       });
       return;
     }
@@ -849,12 +857,12 @@ router.get('/groups', requireAuth, requireSuperAdmin, async (req: Request, res: 
 
 // ============ MFA (PCI DSS 8.4.2) ============
 
-// Setup MFA — generates TOTP secret and QR code
+// Setup MFA — sends a 6-digit OTP to the user's email address
 router.post('/mfa/setup', requireAuth, async (req: Request, res: Response) => {
   try {
     const member = await prisma.teamMember.findUnique({
       where: { id: req.user!.teamMemberId },
-      select: { email: true, mfaEnabled: true },
+      select: { email: true, firstName: true, mfaEnabled: true },
     });
 
     if (!member?.email) {
@@ -867,12 +875,8 @@ router.post('/mfa/setup', requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await mfaService.setupMfa(req.user!.teamMemberId, member.email);
-    res.json({
-      secret: result.secret,
-      qrCodeDataUrl: result.qrCodeDataUrl,
-      backupCodes: result.backupCodes,
-    });
+    await mfaService.sendOtp(req.user!.teamMemberId, member.email, member.firstName);
+    res.json({ sent: true, maskedEmail: mfaService.maskEmail(member.email) });
   } catch (error) {
     logger.error('MFA setup error:', { error });
     res.status(500).json({ error: 'Failed to set up MFA' });
@@ -902,18 +906,52 @@ router.post('/mfa/verify-setup', requireAuth, async (req: Request, res: Response
   }
 });
 
-// MFA challenge — verify TOTP code after login to get full session
+// MFA challenge resend — send a fresh OTP to the user's email
+router.post('/mfa/challenge/resend', authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { mfaToken } = req.body;
+
+    if (!mfaToken) {
+      res.status(400).json({ error: 'MFA token is required' });
+      return;
+    }
+
+    const payload = authService.verifyToken(mfaToken);
+    if (!payload) {
+      res.status(401).json({ error: 'Invalid or expired MFA session' });
+      return;
+    }
+
+    const member = await prisma.teamMember.findUnique({
+      where: { id: payload.teamMemberId },
+      select: { email: true, firstName: true },
+    });
+
+    if (!member?.email) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    await mfaService.sendOtp(payload.teamMemberId, member.email, member.firstName);
+    res.json({ sent: true, maskedEmail: mfaService.maskEmail(member.email) });
+  } catch (error) {
+    logger.error('MFA challenge resend error:', { error });
+    res.status(500).json({ error: 'Failed to resend code' });
+  }
+});
+
+// MFA challenge — verify email OTP after login to get full session
 router.post('/mfa/challenge', async (req: Request, res: Response) => {
   try {
-    const { mfaSessionToken, code } = req.body;
+    const { mfaToken, code } = req.body;
 
-    if (!mfaSessionToken || !code) {
-      res.status(400).json({ error: 'MFA session token and code are required' });
+    if (!mfaToken || !code) {
+      res.status(400).json({ error: 'MFA token and code are required' });
       return;
     }
 
     // Verify the MFA session token
-    const payload = authService.verifyToken(mfaSessionToken);
+    const payload = authService.verifyToken(mfaToken);
     if (!payload) {
       res.status(401).json({ error: 'Invalid or expired MFA session' });
       return;
@@ -1001,7 +1039,7 @@ router.post('/mfa/challenge', async (req: Request, res: Response) => {
   }
 });
 
-// Disable MFA — requires password verification
+// Disable MFA
 // PCI DSS 8.4.2: Privileged roles (super_admin, owner, manager) cannot disable MFA.
 router.post('/mfa/disable', requireAuth, authRateLimiter, async (req: Request, res: Response) => {
   try {
@@ -1009,28 +1047,6 @@ router.post('/mfa/disable', requireAuth, authRateLimiter, async (req: Request, r
     const MFA_REQUIRED_ROLES = ['super_admin', 'owner', 'manager'];
     if (MFA_REQUIRED_ROLES.includes(req.user!.role)) {
       res.status(403).json({ error: 'MFA is required for your role and cannot be disabled.' });
-      return;
-    }
-
-    const { password } = req.body;
-    if (!password) {
-      res.status(400).json({ error: 'Password is required to disable MFA' });
-      return;
-    }
-
-    const member = await prisma.teamMember.findUnique({
-      where: { id: req.user!.teamMemberId },
-      select: { passwordHash: true },
-    });
-
-    if (!member?.passwordHash) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    const verified = await authService.verifyPassword(password, member.passwordHash);
-    if (!verified) {
-      res.status(401).json({ error: 'Invalid password' });
       return;
     }
 

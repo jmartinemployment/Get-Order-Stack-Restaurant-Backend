@@ -183,3 +183,28 @@ export async function sendPasswordResetEmail(
   const html = emailWrapper('#006aff', content);
   await sendEmail(toEmail, 'Reset your OrderStack password', html);
 }
+
+export async function sendMfaOtpEmail(
+  toEmail: string,
+  firstName: string | null,
+  code: string,
+): Promise<void> {
+  const content = `
+    <h2 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 16px;">Your verification code</h2>
+    <p style="color:#374151;font-size:15px;margin:0 0 12px;">Hi ${firstName ?? 'there'},</p>
+    <p style="color:#374151;font-size:15px;margin:0 0 24px;">
+      Use the code below to verify your identity. This code expires in 10 minutes.
+    </p>
+    <div style="text-align:center;margin:0 0 24px;">
+      <div style="display:inline-block;background:#f3f4f6;border:2px solid #e5e7eb;border-radius:8px;
+                  padding:16px 32px;font-size:36px;font-weight:700;letter-spacing:10px;color:#111827;
+                  font-family:monospace;">
+        ${code}
+      </div>
+    </div>
+    <p style="color:#6b7280;font-size:14px;margin:0;">
+      If you didn&rsquo;t request this code, you can safely ignore this email.
+    </p>`;
+  const html = emailWrapper('#006aff', content);
+  await sendEmail(toEmail, 'Your OrderStack verification code', html);
+}
