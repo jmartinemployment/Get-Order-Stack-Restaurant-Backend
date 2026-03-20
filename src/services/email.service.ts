@@ -1,4 +1,7 @@
+import { Resend } from 'resend';
 import { logger } from '../utils/logger';
+import { getSecret } from '../utils/secrets';
+
 interface EmailJob {
   title: string;
   clientEmail: string;
@@ -15,35 +18,31 @@ interface EmailMilestone {
   dueDate: string;
 }
 
-const RESEND_API_URL = 'https://api.resend.com/emails';
 const DEFAULT_BRAND_COLOR = '#2563eb';
-const FROM_ADDRESS = 'noreply@getorderstack.com';
+const FROM_ADDRESS = process.env.EMAIL_FROM ?? 'OrderStack <onboarding@resend.dev>';
+const RESEND_API_KEY = getSecret('RESEND_API_KEY');
+
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
+  if (!resend) {
     logger.warn('[Email] RESEND_API_KEY not set — skipping email send');
     return;
   }
 
-  const response = await fetch(RESEND_API_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: FROM_ADDRESS,
-      to: [to],
-      subject,
-      html,
-    }),
+  const { data, error } = await resend.emails.send({
+    from: FROM_ADDRESS,
+    to: [to],
+    subject,
+    html,
   });
 
-  if (!response.ok) {
-    const body = await response.text();
-    logger.error(`[Email] Resend API error: ${response.status} ${body}`);
+  if (error) {
+    logger.error('[Email] Resend error:', { error });
+    return;
   }
+
+  logger.info('[Email] Sent', { id: data?.id, to, subject });
 }
 
 function formatCents(cents: number): string {

@@ -1,17 +1,25 @@
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { logger } from './logger';
+
+const isProduction = process.env.NODE_ENV === 'production';
 
 /**
- * Read a secret value. Checks Render secret files first (`/etc/secrets/<name>`),
- * then falls back to `process.env[name]`.
+ * Read a secret value.
  *
- * Render stores secret files as plaintext at `/etc/secrets/<filename>`.
- * This lets sensitive values stay out of environment variable listings
- * while still working seamlessly in local dev via `.env`.
+ * Production: Render Secret Files at `/etc/secrets/<name>`.
+ * Localhost: environment variable of the same name.
+ *
+ * No fallback between the two — each environment uses exactly one source.
  */
 export function getSecret(name: string): string {
-  const filePath = `/etc/secrets/${name}`;
-  if (existsSync(filePath)) {
-    return readFileSync(filePath, 'utf-8').trim();
+  if (isProduction) {
+    try {
+      return readFileSync(`/etc/secrets/${name}`, 'utf-8').trim();
+    } catch {
+      logger.error(`[Secrets] ${name} not found at /etc/secrets/${name}`);
+      return '';
+    }
   }
+
   return process.env[name] ?? '';
 }
