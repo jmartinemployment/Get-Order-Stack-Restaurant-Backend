@@ -907,21 +907,27 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
       return;
     }
 
-    if (!categoryId) {
-      res.status(400).json({ error: 'categoryId is required' });
-      return;
-    }
+    // Auto-create "General" category if none provided or none exist
+    let resolvedCategoryId = categoryId;
 
-    if (categoryId === 'uncategorized') {
-      res.status(400).json({ error: 'Cannot add items to the virtual "Other" category. Please select or create a real category first.' });
-      return;
-    }
-
-    // Verify category exists
-    const categoryExists = await prisma.menuCategory.findUnique({ where: { id: categoryId }, select: { id: true } });
-    if (!categoryExists) {
-      res.status(400).json({ error: `Category ${categoryId} not found` });
-      return;
+    if (!resolvedCategoryId || resolvedCategoryId === 'uncategorized') {
+      let defaultCat = await prisma.menuCategory.findFirst({
+        where: { restaurantId, name: 'General' },
+        select: { id: true },
+      });
+      if (!defaultCat) {
+        defaultCat = await prisma.menuCategory.create({
+          data: { restaurantId, name: 'General', active: true, displayOrder: 0 },
+          select: { id: true },
+        });
+      }
+      resolvedCategoryId = defaultCat.id;
+    } else {
+      const categoryExists = await prisma.menuCategory.findUnique({ where: { id: resolvedCategoryId }, select: { id: true } });
+      if (!categoryExists) {
+        res.status(400).json({ error: `Category ${resolvedCategoryId} not found` });
+        return;
+      }
     }
 
     const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId } });
@@ -936,13 +942,13 @@ router.post('/:merchantId/menu/items', async (req: Request, res: Response) => {
       : await estimateAiCost(restaurantId, name, description, Number(price), cuisineType);
 
     const maxOrder = await prisma.menuItem.aggregate({
-      where: { restaurantId, categoryId },
+      where: { restaurantId, categoryId: resolvedCategoryId },
       _max: { displayOrder: true },
     });
 
     const item = await prisma.menuItem.create({
       data: {
-        restaurantId, categoryId, name, nameEn, description,
+        restaurantId, categoryId: resolvedCategoryId, name, nameEn, description,
         descriptionEn: generatedDescEn,
         price: price ?? 0,
         cost: cost ?? null,
