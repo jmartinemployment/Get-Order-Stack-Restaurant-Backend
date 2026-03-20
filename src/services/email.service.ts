@@ -207,3 +207,45 @@ export async function sendMfaOtpEmail(
   const html = emailWrapper('#006aff', content);
   await sendEmail(toEmail, 'Your OrderStack verification code', html);
 }
+
+export async function sendSignupNotification(
+  ownerEmail: string,
+  firstName: string | null,
+  businessName: string,
+): Promise<void> {
+  // Notify OrderStack admin of new signup
+  const adminContent = `
+    <h2 style="font-size:18px;font-weight:700;color:#111827;margin:0 0 16px;">New Signup</h2>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+      <tr><td style="padding:8px 0;color:#71717a;">Name</td><td style="padding:8px 0;color:#18181b;font-weight:500;">${firstName ?? 'N/A'}</td></tr>
+      <tr><td style="padding:8px 0;color:#71717a;">Email</td><td style="padding:8px 0;color:#18181b;">${ownerEmail}</td></tr>
+      <tr><td style="padding:8px 0;color:#71717a;">Business</td><td style="padding:8px 0;color:#18181b;">${businessName}</td></tr>
+      <tr><td style="padding:8px 0;color:#71717a;">Time</td><td style="padding:8px 0;color:#18181b;">${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}</td></tr>
+    </table>`;
+  const adminHtml = emailWrapper('#006aff', adminContent);
+  await sendEmail('jmartinpersonal@yahoo.com', `New OrderStack signup: ${businessName}`, adminHtml);
+
+  // Auto-reply welcome email to the new merchant
+  const welcomeContent = `
+    <h2 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 16px;">Welcome to OrderStack!</h2>
+    <p style="color:#374151;font-size:15px;margin:0 0 12px;">Hi ${firstName ?? 'there'},</p>
+    <p style="color:#374151;font-size:15px;margin:0 0 24px;">
+      Your 30-day free trial for <strong>${businessName}</strong> is now active. You have full access to
+      every feature &mdash; POS, online ordering, KDS, analytics, and more.
+    </p>
+    <p style="color:#374151;font-size:15px;margin:0 0 24px;">
+      No credit card required. When you&rsquo;re ready, subscribe for just $50/month to keep everything running.
+    </p>
+    <p style="text-align:center;margin:0 0 24px;">
+      <a href="https://www.getorderstack.com/login"
+         style="background:#006aff;color:#fff;text-decoration:none;padding:12px 28px;
+                border-radius:100px;font-weight:600;font-size:15px;display:inline-block;">
+        Get Started
+      </a>
+    </p>
+    <p style="color:#6b7280;font-size:14px;margin:0;">
+      Questions? Just reply to this email &mdash; we&rsquo;re here to help.
+    </p>`;
+  const welcomeHtml = emailWrapper('#006aff', welcomeContent);
+  await sendEmail(ownerEmail, 'Welcome to OrderStack — your 30-day trial is active', welcomeHtml);
+}

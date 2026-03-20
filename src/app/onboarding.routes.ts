@@ -7,6 +7,7 @@ import { requireAuth, optionalAuth } from '../middleware/auth.middleware';
 import { logger } from '../utils/logger';
 import { auditLog } from '../utils/audit';
 import { auditCtx } from '../utils/audit-context';
+import { sendSignupNotification } from '../services/email.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -418,6 +419,10 @@ router.post('/restaurant', requireAuth, async (req: Request, res: Response) => {
       .replaceAll(/[^a-z0-9]+/g, '-')
       .replaceAll(/^-|-$/g, '');
 
+    const TRIAL_DAYS = 30;
+    const trialStartedAt = new Date();
+    const trialEndsAt = new Date(trialStartedAt.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+
     const vertical = primaryVertical ?? 'food_and_drink';
     const restaurant = await prisma.$transaction(async (tx) => {
       const r = await tx.restaurant.create({
@@ -432,6 +437,9 @@ router.post('/restaurant', requireAuth, async (req: Request, res: Response) => {
           phone: address?.phone ?? '',
           taxRate: 0,
           active: true,
+          trialStartedAt,
+          trialEndsAt,
+          hasUsedTrial: true,
           merchantProfile: {
             id: crypto.randomUUID(),
             businessName,
@@ -455,10 +463,24 @@ router.post('/restaurant', requireAuth, async (req: Request, res: Response) => {
         data: { teamMemberId, restaurantId: r.id, role: 'owner' },
       });
 
+      await tx.subscription.create({
+        data: {
+          restaurantId: r.id,
+          status: 'trialing',
+          planPrice: 5000,
+        },
+      });
+
       return r;
     });
 
     await auditLog('onboarding_restaurant_created', { ...auditCtx(req), metadata: { restaurantId: restaurant.id, teamMemberId } });
+
+    // Send signup notification + welcome email (fire-and-forget)
+    sendSignupNotification(member.email, null, businessName).catch(err => {
+      logger.error('[Onboarding] Signup notification failed:', { error: err });
+    });
+
     res.status(201).json({ restaurantId: restaurant.id, name: restaurant.name, slug: restaurant.slug });
   } catch (error) {
     logger.error('Create onboarding restaurant error:', { error });

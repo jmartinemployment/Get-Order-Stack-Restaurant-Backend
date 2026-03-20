@@ -193,7 +193,11 @@ class AuthService {
           restaurantAccess: {
             include: {
               restaurant: {
-                select: { id: true, name: true, slug: true, merchantProfile: true }
+                select: {
+                  id: true, name: true, slug: true, merchantProfile: true,
+                  trialEndsAt: true, trialExpiredAt: true,
+                  subscription: { select: { status: true } },
+                }
               }
             }
           }
@@ -350,13 +354,18 @@ class AuthService {
       });
 
       // Get accessible restaurants
-      let restaurants: Array<{ id: string; name: string; slug: string; role: string; onboardingComplete: boolean }> = [];
+      let restaurants: Array<{ id: string; name: string; slug: string; role: string; onboardingComplete: boolean; subscriptionStatus: string; trialEndsAt: string | null }> = [];
+
+      const restaurantSelect = {
+        id: true, name: true, slug: true, merchantProfile: true,
+        trialEndsAt: true, trialExpiredAt: true,
+        subscription: { select: { status: true } },
+      } as const;
 
       if (member.role === 'super_admin') {
-        // Super admin can access all restaurants
         const allRestaurants = await prisma.restaurant.findMany({
           where: { active: true },
-          select: { id: true, name: true, slug: true, merchantProfile: true }
+          select: restaurantSelect,
         });
         restaurants = allRestaurants.map(r => ({
           id: r.id,
@@ -364,21 +373,23 @@ class AuthService {
           slug: r.slug,
           role: 'super_admin',
           onboardingComplete: this.extractOnboardingComplete(r.merchantProfile),
+          subscriptionStatus: this.deriveSubscriptionStatus(r),
+          trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
         }));
       } else if (member.restaurantAccess.length > 0) {
-        // Member has specific restaurant access
         restaurants = member.restaurantAccess.map(access => ({
           id: access.restaurant.id,
           name: access.restaurant.name,
           slug: access.restaurant.slug,
           role: access.role,
           onboardingComplete: this.extractOnboardingComplete(access.restaurant.merchantProfile),
+          subscriptionStatus: this.deriveSubscriptionStatus(access.restaurant),
+          trialEndsAt: access.restaurant.trialEndsAt?.toISOString() ?? null,
         }));
       } else if (member.restaurantGroupId) {
-        // Member belongs to a group - can access all restaurants in group
         const groupRestaurants = await prisma.restaurant.findMany({
           where: { restaurantGroupId: member.restaurantGroupId, active: true },
-          select: { id: true, name: true, slug: true, merchantProfile: true }
+          select: restaurantSelect,
         });
         restaurants = groupRestaurants.map(r => ({
           id: r.id,
@@ -386,13 +397,13 @@ class AuthService {
           slug: r.slug,
           role: member.role,
           onboardingComplete: this.extractOnboardingComplete(r.merchantProfile),
+          subscriptionStatus: this.deriveSubscriptionStatus(r),
+          trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
         }));
       } else if (member.restaurantId) {
-        // Fallback: member has a direct restaurantId (e.g. created during onboarding
-        // but UserRestaurantAccess entry is missing)
         const directRestaurant = await prisma.restaurant.findUnique({
           where: { id: member.restaurantId },
-          select: { id: true, name: true, slug: true, merchantProfile: true, active: true },
+          select: { ...restaurantSelect, active: true },
         });
         if (directRestaurant?.active) {
           restaurants = [{
@@ -401,6 +412,8 @@ class AuthService {
             slug: directRestaurant.slug,
             role: member.role,
             onboardingComplete: this.extractOnboardingComplete(directRestaurant.merchantProfile),
+            subscriptionStatus: this.deriveSubscriptionStatus(directRestaurant),
+            trialEndsAt: directRestaurant.trialEndsAt?.toISOString() ?? null,
           }];
         }
       }
@@ -910,6 +923,13 @@ class AuthService {
     if (!merchantProfile || typeof merchantProfile !== 'object') return false;
     const profile = merchantProfile as Record<string, unknown>;
     return profile['onboardingComplete'] === true;
+  }
+
+  private deriveSubscriptionStatus(r: { trialEndsAt: Date | null; trialExpiredAt: Date | null; subscription: { status: string } | null }): string {
+    if (r.subscription?.status) return r.subscription.status;
+    const now = new Date();
+    if (r.trialEndsAt && r.trialEndsAt > now && r.trialExpiredAt === null) return 'trialing';
+    return 'suspended';
   }
 
   private generateSessionToken(): string {

@@ -1,15 +1,23 @@
+/**
+ * Platform fees are deprecated. OrderStack charges $0.00 platform fee.
+ * Merchants pay PayPal processing rates directly.
+ * Kept for backward compatibility with existing code references.
+ */
 export const PLATFORM_FEE_TIERS = {
-  free:    { percent: 2.6, fixedCents: 10 },
-  plus:    { percent: 2.5, fixedCents: 10 },
-  premium: { percent: 2.4, fixedCents: 10 },
+  free:    { percent: 0, fixedCents: 0 },
+  plus:    { percent: 0, fixedCents: 0 },
+  premium: { percent: 0, fixedCents: 0 },
 } as const;
 
 export type PlatformFeeTier = keyof typeof PLATFORM_FEE_TIERS;
 
 export function calculatePlatformFee(
-  amountCents: number,
-  feePercent: number,
-  feeFixedCents: number,
+  _amountCents: number,
+  _feePercent: number,
+  _feeFixedCents: number,
 ): number {
-  return Math.round(amountCents * feePercent / 100) + feeFixedCents;
+  return 0;
 }
+
+/** Monthly subscription price in cents */
+export const PLAN_PRICE_CENTS = 5000; // $50.00

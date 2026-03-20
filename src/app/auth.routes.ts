@@ -334,11 +334,15 @@ router.get('/me', async (req: Request, res: Response) => {
         restaurantAccess: {
           include: {
             restaurant: {
-              select: { id: true, name: true, slug: true, merchantProfile: true }
-            }
-          }
-        }
-      }
+              select: {
+                id: true, name: true, slug: true, merchantProfile: true,
+                trialEndsAt: true, trialExpiredAt: true,
+                subscription: { select: { status: true } },
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!member?.isActive) {
@@ -346,18 +350,30 @@ router.get('/me', async (req: Request, res: Response) => {
       return;
     }
 
-    // Get accessible restaurants
-    let restaurants: Array<{ id: string; name: string; slug: string; role: string; onboardingComplete: boolean }> = [];
-
     const extractOnboardingComplete = (merchantProfile: unknown): boolean => {
       if (!merchantProfile || typeof merchantProfile !== 'object') return false;
       return (merchantProfile as Record<string, unknown>)['onboardingComplete'] === true;
     };
 
+    const deriveStatus = (r: { trialEndsAt: Date | null; trialExpiredAt: Date | null; subscription: { status: string } | null }): string => {
+      if (r.subscription?.status) return r.subscription.status;
+      const now = new Date();
+      if (r.trialEndsAt && r.trialEndsAt > now && r.trialExpiredAt === null) return 'trialing';
+      return 'suspended';
+    };
+
+    const restaurantSelect = {
+      id: true, name: true, slug: true, merchantProfile: true,
+      trialEndsAt: true, trialExpiredAt: true,
+      subscription: { select: { status: true } },
+    } as const;
+
+    let restaurants: Array<{ id: string; name: string; slug: string; role: string; onboardingComplete: boolean; subscriptionStatus: string; trialEndsAt: string | null }> = [];
+
     if (member.role === 'super_admin') {
       const allRestaurants = await prisma.restaurant.findMany({
         where: { active: true },
-        select: { id: true, name: true, slug: true, merchantProfile: true }
+        select: restaurantSelect,
       });
       restaurants = allRestaurants.map(r => ({
         id: r.id,
@@ -365,6 +381,8 @@ router.get('/me', async (req: Request, res: Response) => {
         slug: r.slug,
         role: 'super_admin',
         onboardingComplete: extractOnboardingComplete(r.merchantProfile),
+        subscriptionStatus: deriveStatus(r),
+        trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
       }));
     } else if (member.restaurantAccess.length > 0) {
       restaurants = member.restaurantAccess.map(access => ({
@@ -373,11 +391,13 @@ router.get('/me', async (req: Request, res: Response) => {
         slug: access.restaurant.slug,
         role: access.role,
         onboardingComplete: extractOnboardingComplete(access.restaurant.merchantProfile),
+        subscriptionStatus: deriveStatus(access.restaurant),
+        trialEndsAt: access.restaurant.trialEndsAt?.toISOString() ?? null,
       }));
     } else if (member.restaurantGroupId) {
       const groupRestaurants = await prisma.restaurant.findMany({
         where: { restaurantGroupId: member.restaurantGroupId, active: true },
-        select: { id: true, name: true, slug: true, merchantProfile: true }
+        select: restaurantSelect,
       });
       restaurants = groupRestaurants.map(r => ({
         id: r.id,
@@ -385,6 +405,8 @@ router.get('/me', async (req: Request, res: Response) => {
         slug: r.slug,
         role: member.role,
         onboardingComplete: extractOnboardingComplete(r.merchantProfile),
+        subscriptionStatus: deriveStatus(r),
+        trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
       }));
     }
 
@@ -1004,21 +1026,38 @@ router.post('/mfa/challenge', async (req: Request, res: Response) => {
       where: { id: payload.teamMemberId },
       include: {
         restaurantAccess: {
-          include: { restaurant: { select: { id: true, name: true, slug: true, merchantProfile: true } } },
+          include: {
+            restaurant: {
+              select: {
+                id: true, name: true, slug: true, merchantProfile: true,
+                trialEndsAt: true, trialExpiredAt: true,
+                subscription: { select: { status: true } },
+              },
+            },
+          },
         },
       },
     });
 
-    const restaurants = (member?.restaurantAccess ?? []).map(a => ({
-      id: a.restaurant.id,
-      name: a.restaurant.name,
-      slug: a.restaurant.slug,
-      role: a.role,
-      onboardingComplete: (() => {
-        const p = a.restaurant.merchantProfile as Record<string, unknown> | null;
-        return p?.['onboardingComplete'] === true;
-      })(),
-    }));
+    const restaurants = (member?.restaurantAccess ?? []).map(a => {
+      const now = new Date();
+      const inTrial = a.restaurant.trialEndsAt !== null
+        && a.restaurant.trialEndsAt > now
+        && a.restaurant.trialExpiredAt === null;
+      const subStatus = a.restaurant.subscription?.status ?? (inTrial ? 'trialing' : 'suspended');
+      return {
+        id: a.restaurant.id,
+        name: a.restaurant.name,
+        slug: a.restaurant.slug,
+        role: a.role,
+        onboardingComplete: (() => {
+          const p = a.restaurant.merchantProfile as Record<string, unknown> | null;
+          return p?.['onboardingComplete'] === true;
+        })(),
+        subscriptionStatus: subStatus,
+        trialEndsAt: a.restaurant.trialEndsAt?.toISOString() ?? null,
+      };
+    });
 
     setAuthCookie(res, fullToken);
     await auditLog('mfa_challenge_success', { userId: payload.teamMemberId, ip: req.ip });

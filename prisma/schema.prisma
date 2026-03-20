@@ -120,12 +120,41 @@ model Restaurant {
   // Payment Connect (Stripe Connect / PayPal Partner Referrals)
   stripeConnectedAccountId  String?  @map("stripe_connected_account_id")
   paypalMerchantId          String?  @map("paypal_merchant_id")
-  planTier                  String   @default("free") @map("plan_tier")  // 'free' | 'plus' | 'premium'
   paymentProcessor          String?  @map("payment_processor")  // 'stripe' | 'paypal' | 'none'
-  platformFeePercent        Float    @default(2.6) @map("platform_fee_percent")
-  platformFeeFixed          Int      @default(10)  @map("platform_fee_fixed")  // cents
+
+  // Trial tracking
+  trialStartedAt    DateTime?  @map("trial_started_at")
+  trialEndsAt       DateTime?  @map("trial_ends_at")
+  hasUsedTrial      Boolean    @default(false) @map("has_used_trial")
+  trialExpiredAt    DateTime?  @map("trial_expired_at")
+
+  // Subscription (relation)
+  subscription      Subscription?
+
+  // Deprecated — platform fees removed, kept for migration compatibility
+  planTier                  String   @default("free") @map("plan_tier")
+  platformFeePercent        Float    @default(0) @map("platform_fee_percent")
+  platformFeeFixed          Int      @default(0)  @map("platform_fee_fixed")
 
   @@map("restaurants")
+}
+
+model Subscription {
+  id                   String    @id @default(uuid())
+  restaurantId         String    @unique @map("restaurant_id")
+  status               String    @default("trialing") // trialing, active, canceled, suspended
+  planPrice            Int       @default(5000) @map("plan_price") // cents ($50.00)
+  currentPeriodStart   DateTime? @map("current_period_start")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  canceledAt           DateTime? @map("canceled_at")
+  cancelAtPeriodEnd    Boolean   @default(false) @map("cancel_at_period_end")
+  paypalSubscriptionId String?   @map("paypal_subscription_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  restaurant           Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
 }
 
 model RestaurantDeliveryCredentials {
