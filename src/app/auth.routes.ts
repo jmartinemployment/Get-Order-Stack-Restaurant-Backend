@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import rateLimit from 'express-rate-limit';
-import { authService } from '../services/auth.service';
+import { authService, MFA_REQUIRED_ROLES, RESTAURANT_SELECT } from '../services/auth.service';
 import { requireAuth, requireAdmin, requireSuperAdmin, requireMerchantManager } from '../middleware/auth.middleware';
 import { auditLog } from '../utils/audit';
 import { logger } from '../utils/logger';
@@ -83,16 +83,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    if (password.length < 12) {
-      res.status(400).json({ error: 'Password must be at least 12 characters' });
-      return;
-    }
-    if (!/[A-Z]/.exec(password) || !/[a-z]/.exec(password) || !/\d/.exec(password) || !/[^A-Za-z0-9]/.exec(password)) {
-      res.status(400).json({ error: 'Password must contain uppercase, lowercase, number, and special character' });
-      return;
-    }
-
-    // Create user + restaurant + link in one atomic transaction
+    // Password validation is handled by authService.createUser()
     const createResult = await authService.createUser({
       email,
       password,
@@ -102,7 +93,8 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
     });
 
     if (!createResult.success) {
-      res.status(409).json({ error: createResult.error ?? 'Email already registered' });
+      const status = createResult.error === 'Email already registered' ? 409 : 400;
+      res.status(status).json({ error: createResult.error });
       return;
     }
 
@@ -181,8 +173,9 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
 
     const deviceInfo = req.headers['user-agent'] || undefined;
     const ipAddress = req.ip || req.socket.remoteAddress || undefined;
+    const deviceInfoHeader = req.headers['x-device-info'] as string | undefined;
 
-    const result = await authService.loginUser(email, password, deviceInfo, ipAddress);
+    const result = await authService.loginUser(email, password, deviceInfo, ipAddress, deviceInfo, deviceInfoHeader);
 
     if (!result.success) {
       res.status(401).json({ error: result.error, requiresPasswordChange: result.requiresPasswordChange });
@@ -351,65 +344,7 @@ router.get('/me', async (req: Request, res: Response) => {
       return;
     }
 
-    const extractOnboardingComplete = (merchantProfile: unknown): boolean => {
-      if (!merchantProfile || typeof merchantProfile !== 'object') return false;
-      return (merchantProfile as Record<string, unknown>)['onboardingComplete'] === true;
-    };
-
-    const deriveStatus = (r: { trialEndsAt: Date | null; trialExpiredAt: Date | null; subscription: { status: string } | null }): string => {
-      if (r.subscription?.status) return r.subscription.status;
-      const now = new Date();
-      if (r.trialEndsAt && r.trialEndsAt > now && r.trialExpiredAt === null) return 'trialing';
-      return 'suspended';
-    };
-
-    const restaurantSelect = {
-      id: true, name: true, slug: true, merchantProfile: true,
-      trialEndsAt: true, trialExpiredAt: true,
-      subscription: { select: { status: true } },
-    } as const;
-
-    let restaurants: Array<{ id: string; name: string; slug: string; role: string; onboardingComplete: boolean; subscriptionStatus: string; trialEndsAt: string | null }> = [];
-
-    if (member.role === 'super_admin') {
-      const allRestaurants = await prisma.restaurant.findMany({
-        where: { active: true },
-        select: restaurantSelect,
-      });
-      restaurants = allRestaurants.map(r => ({
-        id: r.id,
-        name: r.name,
-        slug: r.slug,
-        role: 'super_admin',
-        onboardingComplete: extractOnboardingComplete(r.merchantProfile),
-        subscriptionStatus: deriveStatus(r),
-        trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
-      }));
-    } else if (member.restaurantAccess.length > 0) {
-      restaurants = member.restaurantAccess.map(access => ({
-        id: access.restaurant.id,
-        name: access.restaurant.name,
-        slug: access.restaurant.slug,
-        role: access.role,
-        onboardingComplete: extractOnboardingComplete(access.restaurant.merchantProfile),
-        subscriptionStatus: deriveStatus(access.restaurant),
-        trialEndsAt: access.restaurant.trialEndsAt?.toISOString() ?? null,
-      }));
-    } else if (member.restaurantGroupId) {
-      const groupRestaurants = await prisma.restaurant.findMany({
-        where: { restaurantGroupId: member.restaurantGroupId, active: true },
-        select: restaurantSelect,
-      });
-      restaurants = groupRestaurants.map(r => ({
-        id: r.id,
-        name: r.name,
-        slug: r.slug,
-        role: member.role,
-        onboardingComplete: extractOnboardingComplete(r.merchantProfile),
-        subscriptionStatus: deriveStatus(r),
-        trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
-      }));
-    }
+    const restaurants = await authService.buildRestaurantList(member);
 
     res.json({
       user: {
@@ -907,29 +842,6 @@ router.post('/mfa/setup', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// Verify MFA setup — user provides a TOTP code to confirm setup
-router.post('/mfa/verify-setup', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const { code } = req.body;
-    if (!code) {
-      res.status(400).json({ error: 'Verification code is required' });
-      return;
-    }
-
-    const result = await mfaService.verifyAndEnable(req.user!.teamMemberId, code);
-
-    if (!result.success) {
-      res.status(400).json({ error: result.error });
-      return;
-    }
-
-    res.json({ success: true, message: 'MFA is now enabled.' });
-  } catch (error) {
-    logger.error('MFA verify-setup error:', { error });
-    res.status(500).json({ error: 'Failed to verify MFA setup' });
-  }
-});
-
 // MFA challenge resend — send a fresh OTP to the user's email
 router.post('/mfa/challenge/resend', authRateLimiter, async (req: Request, res: Response) => {
   try {
@@ -964,120 +876,139 @@ router.post('/mfa/challenge/resend', authRateLimiter, async (req: Request, res: 
   }
 });
 
-// MFA challenge — verify email OTP after login to get full session
-router.post('/mfa/challenge', async (req: Request, res: Response) => {
+// Unified MFA verify — handles both setup (Bearer token) and login challenge (mfaToken).
+// Discriminator: mfaToken in body → login challenge. Absent → setup verification.
+router.post('/mfa/verify', async (req: Request, res: Response) => {
   try {
-    const { mfaToken, code } = req.body;
+    const { code, mfaToken } = req.body;
 
-    if (!mfaToken || !code) {
-      res.status(400).json({ error: 'MFA token and code are required' });
+    if (!code) {
+      res.status(400).json({ error: 'Verification code is required' });
       return;
     }
 
-    // Verify the MFA session token
-    const payload = authService.verifyToken(mfaToken);
-    if (!payload) {
-      res.status(401).json({ error: 'Invalid or expired MFA session' });
-      return;
-    }
+    if (mfaToken) {
+      // ---- Login challenge flow ----
+      const payload = authService.verifyToken(mfaToken);
+      if (!payload) {
+        res.status(401).json({ error: 'Invalid or expired MFA session' });
+        return;
+      }
 
-    // Validate the MFA session is still active
-    const sessionValid = await authService.validateSession(payload.sessionId);
-    if (!sessionValid) {
-      res.status(401).json({ error: 'MFA session expired. Please log in again.' });
-      return;
-    }
+      const sessionValid = await authService.validateSession(payload.sessionId);
+      if (!sessionValid) {
+        res.status(401).json({ error: 'MFA session expired. Please log in again.' });
+        return;
+      }
 
-    // Verify the TOTP code
-    const isValid = await mfaService.verifyCode(payload.teamMemberId, code);
-    if (!isValid) {
-      await auditLog('mfa_challenge_failed', { userId: payload.teamMemberId, ip: req.ip });
-      trackMfaFailed(payload.teamMemberId, req.ip ?? undefined);
-      res.status(401).json({ error: 'Invalid MFA code' });
-      return;
-    }
+      const result = await mfaService.verifyOtp(payload.teamMemberId, code);
+      if (!result.success) {
+        await auditLog('mfa_challenge_failed', { userId: payload.teamMemberId, ip: req.ip });
+        trackMfaFailed(payload.teamMemberId, req.ip ?? undefined);
+        res.status(401).json({ error: result.error });
+        return;
+      }
 
-    // Invalidate the short-lived MFA session
-    await prisma.userSession.update({
-      where: { id: payload.sessionId },
-      data: { isActive: false },
-    });
+      // Invalidate the short-lived MFA session
+      await prisma.userSession.update({
+        where: { id: payload.sessionId },
+        data: { isActive: false },
+      });
 
-    // Create a full session
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+      // Create a full session
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
 
-    const session = await prisma.userSession.create({
-      data: {
-        userId: payload.teamMemberId,
-        token: randomBytes(32).toString('hex'),
-        deviceInfo: req.headers['user-agent'] ?? undefined,
-        ipAddress: req.ip ?? undefined,
-        expiresAt,
-      },
-    });
+      const session = await prisma.userSession.create({
+        data: {
+          userId: payload.teamMemberId,
+          token: randomBytes(32).toString('hex'),
+          deviceInfo: req.headers['user-agent'] ?? undefined,
+          ipAddress: req.ip ?? undefined,
+          expiresAt,
+        },
+      });
 
-    const fullToken = authService.generateToken(
-      { teamMemberId: payload.teamMemberId, email: payload.email, role: payload.role, type: 'user' },
-      session.id,
-    );
+      const fullToken = authService.generateToken(
+        { teamMemberId: payload.teamMemberId, email: payload.email, role: payload.role, type: 'user' },
+        session.id,
+      );
 
-    // Get full user + restaurants
-    const member = await prisma.teamMember.findUnique({
-      where: { id: payload.teamMemberId },
-      include: {
-        restaurantAccess: {
-          include: {
-            restaurant: {
-              select: {
-                id: true, name: true, slug: true, merchantProfile: true,
-                trialEndsAt: true, trialExpiredAt: true,
-                subscription: { select: { status: true } },
-              },
+      // Get full user + restaurants via shared builder
+      const member = await prisma.teamMember.findUnique({
+        where: { id: payload.teamMemberId },
+        include: {
+          restaurantAccess: {
+            include: {
+              restaurant: { select: RESTAURANT_SELECT },
             },
           },
         },
-      },
-    });
+      });
 
-    const restaurants = (member?.restaurantAccess ?? []).map(a => {
-      const now = new Date();
-      const inTrial = a.restaurant.trialEndsAt !== null
-        && a.restaurant.trialEndsAt > now
-        && a.restaurant.trialExpiredAt === null;
-      const subStatus = a.restaurant.subscription?.status ?? (inTrial ? 'trialing' : 'suspended');
-      return {
-        id: a.restaurant.id,
-        name: a.restaurant.name,
-        slug: a.restaurant.slug,
-        role: a.role,
-        onboardingComplete: (() => {
-          const p = a.restaurant.merchantProfile as Record<string, unknown> | null;
-          return p?.['onboardingComplete'] === true;
-        })(),
-        subscriptionStatus: subStatus,
-        trialEndsAt: a.restaurant.trialEndsAt?.toISOString() ?? null,
-      };
-    });
+      const restaurants = await authService.buildRestaurantList(member!);
 
-    setAuthCookie(res, fullToken);
-    await auditLog('mfa_challenge_success', { userId: payload.teamMemberId, ip: req.ip });
+      setAuthCookie(res, fullToken);
+      await auditLog('mfa_challenge_success', { userId: payload.teamMemberId, ip: req.ip });
 
-    res.json({
-      token: fullToken,
-      user: {
-        id: member!.id,
-        email: member!.email,
-        firstName: member!.firstName,
-        lastName: member!.lastName,
-        role: member!.role,
-        restaurantGroupId: member!.restaurantGroupId,
-        mfaEnabled: member!.mfaEnabled,
-      },
-      restaurants,
-    });
+      // Create trusted device record so this browser/IP skips MFA for 90 days
+      const challengeDeviceInfoHeader = req.headers['x-device-info'] as string | undefined;
+      await authService.createTrust(
+        payload.teamMemberId,
+        req.headers['user-agent'] as string | undefined,
+        challengeDeviceInfoHeader,
+        req.ip ?? undefined,
+      );
+
+      res.json({
+        token: fullToken,
+        user: {
+          id: member!.id,
+          email: member!.email,
+          firstName: member!.firstName,
+          lastName: member!.lastName,
+          role: member!.role,
+          restaurantGroupId: member!.restaurantGroupId,
+          mfaEnabled: member!.mfaEnabled,
+        },
+        restaurants,
+      });
+    } else {
+      // ---- Setup flow (Bearer token / cookie required) ----
+      const cookieToken = req.cookies?.os_auth as string | undefined;
+      const authHeader = req.headers.authorization;
+      const token = cookieToken ?? (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined);
+
+      if (!token) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const payload = authService.verifyToken(token);
+      if (!payload) {
+        res.status(401).json({ error: 'Invalid token' });
+        return;
+      }
+
+      const result = await mfaService.verifyOtp(payload.teamMemberId, code, { enableOnSuccess: true });
+      if (!result.success) {
+        res.status(400).json({ error: result.error });
+        return;
+      }
+
+      // Trust this device after MFA setup so user isn't immediately challenged
+      const setupDeviceInfoHeader = req.headers['x-device-info'] as string | undefined;
+      await authService.createTrust(
+        payload.teamMemberId,
+        req.headers['user-agent'] as string | undefined,
+        setupDeviceInfoHeader,
+        req.ip ?? undefined,
+      );
+
+      res.json({ success: true, message: 'MFA is now enabled.' });
+    }
   } catch (error) {
-    logger.error('MFA challenge error:', { error });
+    logger.error('MFA verify error:', { error });
     res.status(500).json({ error: 'MFA verification failed' });
   }
 });
@@ -1087,7 +1018,6 @@ router.post('/mfa/challenge', async (req: Request, res: Response) => {
 router.post('/mfa/disable', requireAuth, authRateLimiter, async (req: Request, res: Response) => {
   try {
     // Block MFA disable for roles that require it
-    const MFA_REQUIRED_ROLES = ['super_admin', 'owner', 'manager'];
     if (MFA_REQUIRED_ROLES.includes(req.user!.role)) {
       res.status(403).json({ error: 'MFA is required for your role and cannot be disabled.' });
       return;
@@ -1109,6 +1039,103 @@ router.get('/mfa/status', requireAuth, async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('MFA status error:', { error });
     res.status(500).json({ error: 'Failed to get MFA status' });
+  }
+});
+
+// ============ MFA Trusted Devices ============
+
+// List trusted devices — owner/super_admin see all users in their restaurant; others see only their own
+router.get('/mfa/trusted-devices', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.teamMemberId;
+    const role = req.user!.role;
+    const teamMemberFilter = req.query.teamMemberId as string | undefined;
+
+    if (['owner', 'super_admin'].includes(role)) {
+      // Owner/super_admin can see all trust records for their restaurant's team members
+      const restaurantId = req.query.restaurantId as string | undefined;
+      const where: Record<string, unknown> = {};
+
+      if (teamMemberFilter) {
+        where['teamMemberId'] = teamMemberFilter;
+      } else if (restaurantId) {
+        // Get all team members for this restaurant
+        const access = await prisma.userRestaurantAccess.findMany({
+          where: { restaurantId },
+          select: { teamMemberId: true },
+        });
+        where['teamMemberId'] = { in: access.map(a => a.teamMemberId) };
+      } else {
+        where['teamMemberId'] = userId;
+      }
+
+      const devices = await prisma.mfaTrustedDevice.findMany({
+        where,
+        include: { teamMember: { select: { email: true, firstName: true, lastName: true } } },
+        orderBy: { trustedAt: 'desc' },
+      });
+
+      res.json(devices);
+    } else {
+      // Non-privileged users see only their own
+      const devices = await prisma.mfaTrustedDevice.findMany({
+        where: { teamMemberId: userId },
+        orderBy: { trustedAt: 'desc' },
+      });
+      res.json(devices);
+    }
+  } catch (error) {
+    logger.error('List trusted devices error:', { error });
+    res.status(500).json({ error: 'Failed to list trusted devices' });
+  }
+});
+
+// Revoke all trust records for a user — owner/super_admin only
+router.post('/mfa/revoke-trust', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const role = req.user!.role;
+    if (!['owner', 'super_admin'].includes(role)) {
+      res.status(403).json({ error: 'Only owners and super admins can revoke trust' });
+      return;
+    }
+
+    const { teamMemberId } = req.body;
+    if (!teamMemberId) {
+      res.status(400).json({ error: 'teamMemberId is required' });
+      return;
+    }
+
+    await authService.revokeAllTrust(teamMemberId);
+    await auditLog('mfa_trust_all_revoked', { userId: req.user!.teamMemberId, ip: req.ip, metadata: { targetUserId: teamMemberId } });
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Revoke all trust error:', { error });
+    res.status(500).json({ error: 'Failed to revoke trust' });
+  }
+});
+
+// Revoke a specific trusted device — owner/super_admin only
+router.delete('/mfa/trusted-devices/:id', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const role = req.user!.role;
+    if (!['owner', 'super_admin'].includes(role)) {
+      res.status(403).json({ error: 'Only owners and super admins can revoke trust' });
+      return;
+    }
+
+    const { id } = req.params;
+    const device = await prisma.mfaTrustedDevice.findUnique({ where: { id } });
+    if (!device) {
+      res.status(404).json({ error: 'Trusted device not found' });
+      return;
+    }
+
+    await prisma.mfaTrustedDevice.delete({ where: { id } });
+    await auditLog('mfa_trust_revoked', { userId: req.user!.teamMemberId, ip: req.ip, metadata: { trustedDeviceId: id, targetUserId: device.teamMemberId } });
+    res.status(204).send();
+  } catch (error) {
+    logger.error('Revoke trusted device error:', { error });
+    res.status(500).json({ error: 'Failed to revoke trusted device' });
   }
 });
 

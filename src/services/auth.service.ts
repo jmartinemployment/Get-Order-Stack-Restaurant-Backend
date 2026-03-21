@@ -2,12 +2,46 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { randomBytes, createHash } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
+import { UAParser } from 'ua-parser-js';
 import { sendPasswordResetEmail } from './email.service';
 import { logger } from '../utils/logger';
 import { auditLog } from '../utils/audit';
 import { trackLoginFailed, trackAccountLocked, trackPasswordResetRequest, trackMfaFailed } from './security-alert.service';
 
 const prisma = new PrismaClient();
+
+// ============ Shared Constants & Helpers ============
+// Exported for use in auth.routes.ts — single source of truth.
+
+export const MFA_REQUIRED_ROLES: readonly string[] = ['super_admin', 'owner', 'manager'];
+
+export const RESTAURANT_SELECT = {
+  id: true, name: true, slug: true, merchantProfile: true,
+  trialEndsAt: true, trialExpiredAt: true,
+  subscription: { select: { status: true } },
+} as const;
+
+export interface RestaurantListItem {
+  id: string;
+  name: string;
+  slug: string;
+  role: string;
+  onboardingComplete: boolean;
+  subscriptionStatus: string;
+  trialEndsAt: string | null;
+}
+
+export function extractOnboardingComplete(merchantProfile: unknown): boolean {
+  if (!merchantProfile || typeof merchantProfile !== 'object') return false;
+  return (merchantProfile as Record<string, unknown>)['onboardingComplete'] === true;
+}
+
+export function deriveSubscriptionStatus(r: { trialEndsAt: Date | null; trialExpiredAt: Date | null; subscription: { status: string } | null }): string {
+  if (r.subscription?.status) return r.subscription.status;
+  const now = new Date();
+  if (r.trialEndsAt && r.trialEndsAt > now && r.trialExpiredAt === null) return 'trialing';
+  return 'suspended';
+}
 
 // JWT_SECRET is required — refuse to start if not configured
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -17,6 +51,8 @@ if (!JWT_SECRET) {
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h'; // Admin sessions: 8 hours
 const DEVICE_TOKEN_EXPIRES_IN = '24h'; // Device sessions: 24 hours
 const SALT_ROUNDS = 12;
+const TRUST_WINDOW_DAYS = 90;
+const MAX_TRUSTED_DEVICES = 10;
 
 export interface TokenPayload {
   teamMemberId: string;
@@ -183,7 +219,7 @@ class AuthService {
     return null;
   }
 
-  async loginUser(email: string, password: string, deviceInfo?: string, ipAddress?: string): Promise<AuthResult> {
+  async loginUser(email: string, password: string, deviceInfo?: string, ipAddress?: string, userAgent?: string, deviceInfoHeader?: string): Promise<AuthResult> {
     try {
       // Find team member by email (only those with passwordHash can do email/password login)
       const member = await prisma.teamMember.findUnique({
@@ -235,46 +271,53 @@ class AuthService {
       const validityError = this.checkPasswordValidity(member);
       if (validityError) return validityError;
 
-      // MFA check — if enabled, return partial auth (PCI DSS 8.4.2)
+      // MFA check — if enabled, check trusted device before requiring OTP (PCI DSS 8.4.2)
       if (member.mfaEnabled) {
-        // Create a short-lived MFA session (5 min) — not a full session
-        const mfaSession = await prisma.userSession.create({
-          data: {
-            userId: member.id,
-            token: this.generateSessionToken(),
-            deviceInfo: deviceInfo ?? 'MFA pending',
-            ipAddress,
-            expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
-          },
-        });
+        const fingerprint = this.computeUaFingerprint(userAgent, deviceInfoHeader);
+        const isTrusted = fingerprint && ipAddress
+          ? await this.checkTrust(member.id, fingerprint, ipAddress)
+          : false;
 
-        const mfaToken = this.generateToken(
-          { teamMemberId: member.id, email: member.email!, role: member.role, type: 'user' },
-          mfaSession.id,
-          '5m',
-        );
+        if (!isTrusted) {
+          // Not trusted — require MFA challenge
+          const mfaSession = await prisma.userSession.create({
+            data: {
+              userId: member.id,
+              token: this.generateSessionToken(),
+              deviceInfo: deviceInfo ?? 'MFA pending',
+              ipAddress,
+              expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
+            },
+          });
 
-        return {
-          success: true,
-          token: mfaToken,
-          user: {
-            id: member.id,
-            email: member.email!,
-            firstName: member.firstName,
-            lastName: member.lastName,
-            role: member.role,
-            restaurantGroupId: member.restaurantGroupId,
-            mfaEnabled: true,
-          },
-          mfaRequired: true,
-        };
+          const mfaToken = this.generateToken(
+            { teamMemberId: member.id, email: member.email!, role: member.role, type: 'user' },
+            mfaSession.id,
+            '5m',
+          );
+
+          return {
+            success: true,
+            token: mfaToken,
+            user: {
+              id: member.id,
+              email: member.email!,
+              firstName: member.firstName,
+              lastName: member.lastName,
+              role: member.role,
+              restaurantGroupId: member.restaurantGroupId,
+              mfaEnabled: true,
+            },
+            mfaRequired: true,
+          };
+        }
+        // Trusted device — skip MFA, fall through to create full session
       }
 
       // PCI DSS 8.4.2: MFA enrollment enforcement for privileged roles.
       // Admin/owner/manager accounts MUST enable MFA. A 7-day grace period is
       // granted on first login; after that, login is blocked until MFA is set up.
       // Skip for accounts with no restaurant access (still onboarding).
-      const MFA_REQUIRED_ROLES = ['super_admin', 'owner', 'manager'];
       const hasRestaurantAccess = member.restaurantAccess.length > 0 || !!member.restaurantGroupId || !!member.restaurantId;
       if (MFA_REQUIRED_ROLES.includes(member.role) && !member.mfaEnabled && hasRestaurantAccess) {
         const now = new Date();
@@ -354,69 +397,7 @@ class AuthService {
       });
 
       // Get accessible restaurants
-      let restaurants: Array<{ id: string; name: string; slug: string; role: string; onboardingComplete: boolean; subscriptionStatus: string; trialEndsAt: string | null }> = [];
-
-      const restaurantSelect = {
-        id: true, name: true, slug: true, merchantProfile: true,
-        trialEndsAt: true, trialExpiredAt: true,
-        subscription: { select: { status: true } },
-      } as const;
-
-      if (member.role === 'super_admin') {
-        const allRestaurants = await prisma.restaurant.findMany({
-          where: { active: true },
-          select: restaurantSelect,
-        });
-        restaurants = allRestaurants.map(r => ({
-          id: r.id,
-          name: r.name,
-          slug: r.slug,
-          role: 'super_admin',
-          onboardingComplete: this.extractOnboardingComplete(r.merchantProfile),
-          subscriptionStatus: this.deriveSubscriptionStatus(r),
-          trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
-        }));
-      } else if (member.restaurantAccess.length > 0) {
-        restaurants = member.restaurantAccess.map(access => ({
-          id: access.restaurant.id,
-          name: access.restaurant.name,
-          slug: access.restaurant.slug,
-          role: access.role,
-          onboardingComplete: this.extractOnboardingComplete(access.restaurant.merchantProfile),
-          subscriptionStatus: this.deriveSubscriptionStatus(access.restaurant),
-          trialEndsAt: access.restaurant.trialEndsAt?.toISOString() ?? null,
-        }));
-      } else if (member.restaurantGroupId) {
-        const groupRestaurants = await prisma.restaurant.findMany({
-          where: { restaurantGroupId: member.restaurantGroupId, active: true },
-          select: restaurantSelect,
-        });
-        restaurants = groupRestaurants.map(r => ({
-          id: r.id,
-          name: r.name,
-          slug: r.slug,
-          role: member.role,
-          onboardingComplete: this.extractOnboardingComplete(r.merchantProfile),
-          subscriptionStatus: this.deriveSubscriptionStatus(r),
-          trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
-        }));
-      } else if (member.restaurantId) {
-        const directRestaurant = await prisma.restaurant.findUnique({
-          where: { id: member.restaurantId },
-          select: { ...restaurantSelect, active: true },
-        });
-        if (directRestaurant?.active) {
-          restaurants = [{
-            id: directRestaurant.id,
-            name: directRestaurant.name,
-            slug: directRestaurant.slug,
-            role: member.role,
-            onboardingComplete: this.extractOnboardingComplete(directRestaurant.merchantProfile),
-            subscriptionStatus: this.deriveSubscriptionStatus(directRestaurant),
-            trialEndsAt: directRestaurant.trialEndsAt?.toISOString() ?? null,
-          }];
-        }
-      }
+      const restaurants = await this.buildRestaurantList(member);
 
       const result: AuthResult = {
         success: true,
@@ -730,9 +711,10 @@ class AuthService {
         data
       });
 
-      // If deactivated, invalidate all sessions and audit
+      // If deactivated, invalidate all sessions, revoke trust, and audit
       if (data.isActive === false) {
         await this.logoutAllSessions(teamMemberId);
+        await this.revokeAllTrust(teamMemberId);
         await auditLog('account_deactivated', { metadata: { targetUserId: teamMemberId } });
       }
 
@@ -772,6 +754,7 @@ class AuthService {
       });
 
       await this.recordPasswordHistory(teamMemberId, passwordHash);
+      await this.revokeAllTrust(teamMemberId);
       await auditLog('password_change', { userId: teamMemberId, metadata: { method: 'change_password' } });
 
       return { success: true };
@@ -861,8 +844,9 @@ class AuthService {
 
       await this.recordPasswordHistory(resetToken.teamMemberId, passwordHash);
 
-      // Invalidate all sessions for security after password reset
+      // Invalidate all sessions and revoke trust for security after password reset
       await this.logoutAllSessions(resetToken.teamMemberId);
+      await this.revokeAllTrust(resetToken.teamMemberId);
 
       await auditLog('password_change', { userId: resetToken.teamMemberId, metadata: { method: 'reset_token' } });
 
@@ -917,20 +901,186 @@ class AuthService {
     }
   }
 
+  // ============ Restaurant List Builder ============
+
+  async buildRestaurantList(member: {
+    role: string;
+    restaurantGroupId: string | null;
+    restaurantId?: string | null;
+    restaurantAccess: Array<{
+      role: string;
+      restaurant: {
+        id: string;
+        name: string;
+        slug: string;
+        merchantProfile: unknown;
+        trialEndsAt: Date | null;
+        trialExpiredAt: Date | null;
+        subscription: { status: string } | null;
+      };
+    }>;
+  }): Promise<RestaurantListItem[]> {
+    if (member.role === 'super_admin') {
+      const allRestaurants = await prisma.restaurant.findMany({
+        where: { active: true },
+        select: RESTAURANT_SELECT,
+      });
+      return allRestaurants.map(r => ({
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        role: 'super_admin',
+        onboardingComplete: extractOnboardingComplete(r.merchantProfile),
+        subscriptionStatus: deriveSubscriptionStatus(r),
+        trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
+      }));
+    }
+
+    if (member.restaurantAccess.length > 0) {
+      return member.restaurantAccess.map(access => ({
+        id: access.restaurant.id,
+        name: access.restaurant.name,
+        slug: access.restaurant.slug,
+        role: access.role,
+        onboardingComplete: extractOnboardingComplete(access.restaurant.merchantProfile),
+        subscriptionStatus: deriveSubscriptionStatus(access.restaurant),
+        trialEndsAt: access.restaurant.trialEndsAt?.toISOString() ?? null,
+      }));
+    }
+
+    if (member.restaurantGroupId) {
+      const groupRestaurants = await prisma.restaurant.findMany({
+        where: { restaurantGroupId: member.restaurantGroupId, active: true },
+        select: RESTAURANT_SELECT,
+      });
+      return groupRestaurants.map(r => ({
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        role: member.role,
+        onboardingComplete: extractOnboardingComplete(r.merchantProfile),
+        subscriptionStatus: deriveSubscriptionStatus(r),
+        trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
+      }));
+    }
+
+    if (member.restaurantId) {
+      const directRestaurant = await prisma.restaurant.findUnique({
+        where: { id: member.restaurantId },
+        select: { ...RESTAURANT_SELECT, active: true },
+      });
+      if (directRestaurant?.active) {
+        return [{
+          id: directRestaurant.id,
+          name: directRestaurant.name,
+          slug: directRestaurant.slug,
+          role: member.role,
+          onboardingComplete: extractOnboardingComplete(directRestaurant.merchantProfile),
+          subscriptionStatus: deriveSubscriptionStatus(directRestaurant),
+          trialEndsAt: directRestaurant.trialEndsAt?.toISOString() ?? null,
+        }];
+      }
+    }
+
+    return [];
+  }
+
+  // ============ MFA Trusted Devices ============
+
+  computeUaFingerprint(userAgent?: string, deviceInfoHeader?: string): string | null {
+    // Native app path — X-Device-Info header: "OrderStack-POS|iOS|iPad Pro"
+    if (deviceInfoHeader && deviceInfoHeader.startsWith('OrderStack') && deviceInfoHeader.split('|').length === 3) {
+      return createHash('sha256').update(deviceInfoHeader).digest('hex');
+    }
+
+    // Browser path — parse User-Agent with ua-parser-js
+    if (!userAgent) return null;
+    const parser = new UAParser(userAgent);
+    const browser = parser.getBrowser();
+    const os = parser.getOS();
+    if (!browser.name || !os.name) return null;
+    const deviceType = parser.getDevice().type ?? 'desktop';
+    const raw = `${browser.name}|${os.name}|${deviceType}`;
+    return createHash('sha256').update(raw).digest('hex');
+  }
+
+  buildDeviceInfoDisplay(userAgent?: string, deviceInfoHeader?: string): string | null {
+    if (deviceInfoHeader && deviceInfoHeader.startsWith('OrderStack') && deviceInfoHeader.split('|').length === 3) {
+      const [app, osName, model] = deviceInfoHeader.split('|');
+      return `${app} on ${osName} (${model})`;
+    }
+    if (!userAgent) return null;
+    const parser = new UAParser(userAgent);
+    const browser = parser.getBrowser();
+    const os = parser.getOS();
+    const deviceType = parser.getDevice().type ?? 'desktop';
+    if (!browser.name || !os.name) return null;
+    return `${browser.name} on ${os.name} (${deviceType})`;
+  }
+
+  async checkTrust(teamMemberId: string, fingerprint: string, ipAddress: string): Promise<boolean> {
+    const trust = await prisma.mfaTrustedDevice.findFirst({
+      where: { teamMemberId, uaFingerprint: fingerprint, ipAddress, expiresAt: { gt: new Date() } },
+    });
+    if (trust) {
+      await auditLog('mfa_trust_matched', { userId: teamMemberId, ip: ipAddress, metadata: { trustedDeviceId: trust.id } });
+      return true;
+    }
+
+    // Determine WHY trust was not found for audit granularity
+    const fallback = await prisma.mfaTrustedDevice.findFirst({
+      where: { teamMemberId, uaFingerprint: fingerprint },
+    });
+    if (fallback) {
+      if (fallback.ipAddress !== ipAddress) {
+        await auditLog('mfa_trust_ip_mismatch', { userId: teamMemberId, ip: ipAddress, metadata: { expectedIp: fallback.ipAddress } });
+      } else if (fallback.expiresAt <= new Date()) {
+        await auditLog('mfa_trust_expired', { userId: teamMemberId, ip: ipAddress });
+      }
+    }
+
+    return false;
+  }
+
+  async createTrust(teamMemberId: string, userAgent?: string, deviceInfoHeader?: string, ipAddress?: string): Promise<void> {
+    const fingerprint = this.computeUaFingerprint(userAgent, deviceInfoHeader);
+    if (!fingerprint || !ipAddress) return;
+
+    const deviceInfo = this.buildDeviceInfoDisplay(userAgent, deviceInfoHeader);
+    const expiresAt = new Date(Date.now() + TRUST_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+    await prisma.mfaTrustedDevice.upsert({
+      where: {
+        teamMemberId_uaFingerprint_ipAddress: { teamMemberId, uaFingerprint: fingerprint, ipAddress },
+      },
+      create: { teamMemberId, uaFingerprint: fingerprint, ipAddress, deviceInfo, expiresAt },
+      update: { trustedAt: new Date(), expiresAt, deviceInfo },
+    });
+
+    // Enforce cap
+    const all = await prisma.mfaTrustedDevice.findMany({
+      where: { teamMemberId },
+      orderBy: { trustedAt: 'desc' },
+    });
+    if (all.length > MAX_TRUSTED_DEVICES) {
+      const toDelete = all.slice(MAX_TRUSTED_DEVICES);
+      await prisma.mfaTrustedDevice.deleteMany({
+        where: { id: { in: toDelete.map(d => d.id) } },
+      });
+      await auditLog('mfa_trust_limit_reached', { userId: teamMemberId, metadata: { deleted: toDelete.length } });
+    }
+
+    await auditLog('mfa_trust_created', { userId: teamMemberId, ip: ipAddress, metadata: { deviceInfo } });
+  }
+
+  async revokeAllTrust(teamMemberId: string): Promise<void> {
+    const { count } = await prisma.mfaTrustedDevice.deleteMany({ where: { teamMemberId } });
+    if (count > 0) {
+      await auditLog('mfa_trust_all_revoked', { userId: teamMemberId, metadata: { deleted: count } });
+    }
+  }
+
   // ============ Helpers ============
-
-  private extractOnboardingComplete(merchantProfile: unknown): boolean {
-    if (!merchantProfile || typeof merchantProfile !== 'object') return false;
-    const profile = merchantProfile as Record<string, unknown>;
-    return profile['onboardingComplete'] === true;
-  }
-
-  private deriveSubscriptionStatus(r: { trialEndsAt: Date | null; trialExpiredAt: Date | null; subscription: { status: string } | null }): string {
-    if (r.subscription?.status) return r.subscription.status;
-    const now = new Date();
-    if (r.trialEndsAt && r.trialEndsAt > now && r.trialExpiredAt === null) return 'trialing';
-    return 'suspended';
-  }
 
   private generateSessionToken(): string {
     return randomBytes(32).toString('hex'); // 64 hex chars, cryptographically secure

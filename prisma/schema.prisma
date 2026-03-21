@@ -1918,6 +1918,7 @@ model TeamMember {
   passwordResetTokens PasswordResetToken[]
   passwordHistory     PasswordHistory[]
   mfaSecret           MfaSecret?
+  trustedDevices      MfaTrustedDevice[]
 
   @@index([restaurantId])
   @@index([restaurantGroupId])
@@ -2569,4 +2570,19 @@ model MfaSecret {
   teamMember     TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
 
   @@map("mfa_secrets")
+}
+
+model MfaTrustedDevice {
+  id            String   @id @default(uuid())
+  teamMemberId  String   @map("team_member_id")
+  uaFingerprint String   @map("ua_fingerprint")
+  ipAddress     String   @map("ip_address")
+  deviceInfo    String?  @map("device_info")
+  trustedAt     DateTime @default(now()) @map("trusted_at")
+  expiresAt     DateTime @map("expires_at")
+
+  teamMember    TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([teamMemberId, uaFingerprint, ipAddress])
+  @@map("mfa_trusted_devices")
 }

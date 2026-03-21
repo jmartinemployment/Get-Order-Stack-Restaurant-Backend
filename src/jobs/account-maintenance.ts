@@ -96,10 +96,24 @@ export async function purgeAbandonedSignups(): Promise<number> {
   return abandoned.length;
 }
 
+export async function purgeExpiredTrustedDevices(): Promise<number> {
+  const { count } = await prisma.mfaTrustedDevice.deleteMany({
+    where: { expiresAt: { lt: new Date() } },
+  });
+
+  if (count > 0) {
+    logger.info('[Cleanup] Purged expired trusted devices', { count });
+  }
+  return count;
+}
+
 export function startSignupCleanupJob(): void {
   setInterval(() => {
     purgeAbandonedSignups().catch(err => {
       logger.error('[Cleanup] Abandoned signup purge failed:', { error: err });
+    });
+    purgeExpiredTrustedDevices().catch(err => {
+      logger.error('[Cleanup] Expired trusted device purge failed:', { error: err });
     });
   }, CLEANUP_INTERVAL_MS);
   logger.info('[Cleanup] Abandoned signup purge job started (every 5m)');
