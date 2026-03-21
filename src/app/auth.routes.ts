@@ -102,8 +102,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
     });
 
     if (!createResult.success) {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      res.status(200).json({ message: 'If this email is not already registered, your account has been created.' });
+      res.status(409).json({ error: createResult.error ?? 'Email already registered' });
       return;
     }
 
