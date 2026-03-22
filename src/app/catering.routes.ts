@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import crypto from 'node:crypto';
 import { sendProposal } from '../services/email.service';
 import { toErrorMessage } from '../utils/errors';
@@ -10,7 +11,6 @@ import { auditCtx } from '../utils/audit-context';
 import { aiConfigService } from '../services/ai-config.service';
 import { generateProposalContent, type ProposalAiContent } from '../services/catering-proposal-ai.service';
 
-const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
 export const publicRouter = Router();
 

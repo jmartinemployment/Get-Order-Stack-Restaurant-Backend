@@ -2,7 +2,6 @@ import express from 'express';
 import crypto from 'node:crypto';
 import helmet from 'helmet';
 import cors from 'cors';
-import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { config } from './app.config';
 import menuRoutes from './app.routes';
@@ -47,7 +46,7 @@ import publicMenuRoutes from './public-menu.routes';
 import { requireAuth } from '../middleware/auth.middleware';
 import { globalErrorHandler } from '../middleware/error-handler';
 import { requestLogger } from '../middleware/request-logger';
-import { csrfProtection, csrfGenerateToken, requireJsonContentType } from '../middleware/csrf.middleware';
+import { requireJsonContentType } from '../middleware/csrf.middleware';
 import { logger } from '../utils/logger';
 
 const app = express();
@@ -84,7 +83,6 @@ app.use((_req, res, next) => {
 
 // Middleware
 app.use(cors({ origin: config.corsOrigins, credentials: true }));
-app.use(cookieParser());
 
 // General API rate limiter
 const apiRateLimiter = rateLimit({
@@ -341,15 +339,8 @@ app.post('/api/webhooks/grubhub', express.raw({ type: 'application/json' }), asy
 // JSON body parser for all other routes
 app.use(express.json());
 
-// CSRF protection — after JSON parser, before routes (PCI DSS 6.5.9)
+// Content-Type enforcement — after JSON parser, before routes (PCI DSS 6.5.9)
 app.use('/api/', requireJsonContentType);
-app.use('/api/', csrfProtection);
-
-// CSRF token endpoint — clients call this to get a token for state-changing requests
-app.get('/api/csrf-token', (req, res) => {
-  const token = csrfGenerateToken(req, res);
-  res.json({ csrfToken: token });
-});
 
 // Health check
 app.get('/health', (_req, res) => {

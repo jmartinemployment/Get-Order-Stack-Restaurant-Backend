@@ -3,12 +3,11 @@
  * DB lookup → AI fallback → 7% default
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { aiConfigService } from './ai-config.service';
 import { aiUsageService } from './ai-usage.service';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 
 const DEFAULT_RATE = 0.07; // Florida fallback
 

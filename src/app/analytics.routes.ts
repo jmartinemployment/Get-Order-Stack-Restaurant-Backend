@@ -4,7 +4,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { z } from 'zod';
 import { toErrorMessage } from '../utils/errors';
 import { logger } from '../utils/logger';
@@ -16,7 +16,6 @@ import { aiConfigService } from '../services/ai-config.service';
 import { aiUsageService } from '../services/ai-usage.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const RESTAURANT_NOT_FOUND = Symbol('RESTAURANT_NOT_FOUND');
 

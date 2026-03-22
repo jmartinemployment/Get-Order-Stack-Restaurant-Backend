@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { broadcastOrderEvent, broadcastToSourceAndKDS } from './socket.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
 import {
@@ -9,7 +9,6 @@ import {
 } from './delivery-credentials.service';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 
 /**
  * Generate a DoorDash Drive JWT per their spec:

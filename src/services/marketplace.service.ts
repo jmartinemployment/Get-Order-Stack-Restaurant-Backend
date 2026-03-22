@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { broadcastToSourceAndKDS } from './socket.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
 
-const prisma = new PrismaClient();
 
 const ENCRYPTION_KEY_ENV = 'DELIVERY_CREDENTIALS_ENCRYPTION_KEY';
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';

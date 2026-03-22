@@ -1,9 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { calculatePlatformFee } from '../config/platform-fees';
 import { getSecret } from '../utils/secrets';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 
 const PAYPAL_API_BASE = process.env.PAYPAL_MODE === 'live'
   ? 'https://api-m.paypal.com'

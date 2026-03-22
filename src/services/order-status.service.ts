@@ -1,8 +1,8 @@
-import { PrismaClient, Order } from '@prisma/client';
+import { Order } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { marketplaceService } from './marketplace.service';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 
 function queueMarketplaceStatusSync(orderId: string, restaurantId: string): void {
   marketplaceService.enqueueStatusSyncForOrder(orderId)

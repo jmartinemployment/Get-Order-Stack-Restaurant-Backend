@@ -1,14 +1,13 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { randomBytes, createHash } from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { UAParser } from 'ua-parser-js';
 import { sendPasswordResetEmail } from './email.service';
 import { logger } from '../utils/logger';
 import { auditLog } from '../utils/audit';
 import { trackLoginFailed, trackAccountLocked, trackPasswordResetRequest, trackMfaFailed } from './security-alert.service';
 
-const prisma = new PrismaClient();
 
 // ============ Shared Constants & Helpers ============
 // Exported for use in auth.routes.ts — single source of truth.
@@ -155,7 +154,7 @@ class AuthService {
 
   // ============ Password Policy ============
 
-  private validatePasswordStrength(password: string): { valid: boolean; error?: string } {
+  validatePasswordStrength(password: string): { valid: boolean; error?: string } {
     if (password.length < 12) return { valid: false, error: 'Password must be at least 12 characters' };
     if (!/[A-Z]/.exec(password)) return { valid: false, error: 'Password must contain an uppercase letter' };
     if (!/[a-z]/.exec(password)) return { valid: false, error: 'Password must contain a lowercase letter' };

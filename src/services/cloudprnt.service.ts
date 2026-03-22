@@ -1,11 +1,10 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { generateReceipt, generateTestReceipt } from '../utils/star-line-mode';
 import { PRINT_JOB_TIMEOUT_MS } from '../utils/constants';
 
 import { emitToPrinter } from './socket.service';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 
 export class CloudPrntService {
   /**

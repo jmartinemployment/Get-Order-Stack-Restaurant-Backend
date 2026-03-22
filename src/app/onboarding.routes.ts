@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { MENU_TEMPLATES, type MenuTemplate } from '../data/menu-templates';
 import { DEFAULT_PERMISSION_SETS } from '../data/default-permission-sets';
 import { authService } from '../services/auth.service';
@@ -10,7 +10,6 @@ import { auditCtx } from '../utils/audit-context';
 import { sendSignupNotification } from '../services/email.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Vertical -> enabled modules mapping (must match frontend BUSINESS_VERTICAL_CATALOG in platform.model.ts)
 const VERTICAL_MODULES: Record<string, string[]> = {

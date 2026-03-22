@@ -7,6 +7,7 @@ import { toErrorMessage } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { auditLog } from '../utils/audit';
 import { auditCtx } from '../utils/audit-context';
+import { prisma } from '../lib/prisma';
 
 const router = Router({ mergeParams: true });
 
@@ -344,9 +345,6 @@ router.get('/analytics', async (req: Request, res: Response) => {
     if (startDate && endDate) {
       where.createdAt = { gte: new Date(startDate as string), lte: new Date(endDate as string) };
     }
-
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
 
     const deliveryOrders = await prisma.order.findMany({
       where,

@@ -1,10 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { salesInsightsService } from './sales-insights.service';
 import { aiConfigService } from './ai-config.service';
 import { aiUsageService } from './ai-usage.service';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 
 function shiftDurationHours(startTime: string, endTime: string): number {
   const [startH, startM] = startTime.split(':').map(Number);

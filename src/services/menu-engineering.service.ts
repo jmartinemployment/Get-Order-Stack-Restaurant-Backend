@@ -7,12 +7,11 @@
  * - Dogs: Low profit, low sales (consider removing)
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { aiConfigService } from './ai-config.service';
 import { aiUsageService } from './ai-usage.service';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 
 export interface MenuItemAnalysis {
   id: string;

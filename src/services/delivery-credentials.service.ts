@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { providerProfileService } from './provider-profile.service';
 import {
   DeliveryCredentialMode,
@@ -7,7 +8,6 @@ import {
   ProviderSecurityProfileSummary,
 } from './provider-profile.types';
 
-const prisma = new PrismaClient();
 
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 const ENCRYPTION_VERSION = 'v1';

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { toErrorMessage } from '../utils/errors';
 import { loyaltyService } from '../services/loyalty.service';
 import {
@@ -13,7 +13,6 @@ import { auditLog } from '../utils/audit';
 import { auditCtx } from '../utils/audit-context';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // ============ Loyalty Config ============
 

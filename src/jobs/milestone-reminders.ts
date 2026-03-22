@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { sendMilestoneReminder } from '../services/email.service';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 interface MilestoneEntry {

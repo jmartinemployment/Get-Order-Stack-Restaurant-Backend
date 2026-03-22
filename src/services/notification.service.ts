@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { toErrorMessage } from '../utils/errors';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 
 interface NotificationSettings {
   smsEnabled: boolean;

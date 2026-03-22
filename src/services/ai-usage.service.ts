@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import type { AIFeatureKey } from './ai-config.service';
 
-const prisma = new PrismaClient();
 
 // Sonnet pricing: $3/MTok input, $15/MTok output
 const INPUT_COST_PER_MTOK_CENTS = 300;

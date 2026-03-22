@@ -1,12 +1,11 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { requireAuth } from '../middleware/auth.middleware';
 import { auditLog } from '../utils/audit';
 import { auditCtx } from '../utils/audit-context';
 import { logger } from '../utils/logger';
 import { PLAN_PRICE_CENTS } from '../config/platform-fees';
 
-const prisma = new PrismaClient();
 const router = Router();
 
 // GET /:merchantId/subscription — current subscription + trial status

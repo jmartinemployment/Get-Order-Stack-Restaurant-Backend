@@ -6,12 +6,11 @@
  * - Actionable recommendations
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { aiConfigService } from './ai-config.service';
 import { aiUsageService } from './ai-usage.service';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 
 export interface SalesSummary {
   period: string;

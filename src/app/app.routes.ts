@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { aiCostService } from '../services/ai-cost.service';
 import { taxService } from '../services/tax.service';
 import { updateOrderStatus, getOrderStatusHistory } from '../services/order-status.service';
@@ -20,7 +20,6 @@ import { toErrorMessage } from '../utils/errors';
 import { analyzeOrderSentiment } from '../services/sentiment-analysis.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 const ORDER_INCLUDE = {
   orderItems: { include: { modifiers: true } },
   checks: {

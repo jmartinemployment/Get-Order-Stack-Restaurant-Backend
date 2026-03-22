@@ -9,10 +9,9 @@
  * RETENTION: Rows must be retained for 12 months minimum, 3 months immediately
  * queryable (PCI DSS 10.5.1). Do NOT add any cleanup job for this table.
  */
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { logger } from './logger';
 
-const prisma = new PrismaClient();
 
 export async function auditLog(
   action: string,

@@ -1,12 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import crypto from 'node:crypto';
 import { logger } from '../utils/logger';
 import { auditLog } from '../utils/audit';
 import { auditCtx } from '../utils/audit-context';
 
-const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
 
 // --- Zod schemas ---

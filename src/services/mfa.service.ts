@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { randomInt } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { logger } from '../utils/logger';
@@ -6,7 +6,6 @@ import { auditLog } from '../utils/audit';
 import { sendMfaOtpEmail } from './email.service';
 import { authService } from './auth.service';
 
-const prisma = new PrismaClient();
 
 const OTP_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 

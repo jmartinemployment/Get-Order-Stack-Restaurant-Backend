@@ -1,10 +1,9 @@
 import { Router, type Request, type Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { cloudPrntService } from '../services/cloudprnt.service';
 import { logger } from '../utils/logger';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /**
  * GET /cloudprnt?mac=XX:XX:XX:XX:XX:XX

@@ -1,9 +1,8 @@
 import { Server as HttpServer } from 'node:http';
 import { Server, Socket } from 'socket.io';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 
 // Store connected sockets by restaurant
 const restaurantSockets: Map<string, Set<string>> = new Map();

@@ -1,8 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { aiCredentialsService } from './ai-credentials.service';
 
-const prisma = new PrismaClient();
 
 export type AIFeatureKey =
   | 'aiCostEstimation'

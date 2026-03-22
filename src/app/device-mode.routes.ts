@@ -1,9 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { handlePrismaError } from '../utils/prisma-errors';
 
-const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
 
 // --- Zod schemas ---

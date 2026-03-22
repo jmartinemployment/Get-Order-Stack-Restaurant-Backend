@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 
 export interface CoursePacingMetrics {
   lookbackDays: number;
@@ -27,7 +27,7 @@ function percentile(sortedValues: number[], p: number): number {
 }
 
 class CoursePacingService {
-  private readonly prisma = new PrismaClient();
+  private readonly prisma = prisma;
 
   async getRestaurantMetrics(restaurantId: string, lookbackDays = 30): Promise<CoursePacingMetrics> {
     const safeLookbackDays = clamp(Number.isFinite(lookbackDays) ? Math.round(lookbackDays) : 30, 1, 90);

@@ -1,11 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
 import multer from 'multer';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 

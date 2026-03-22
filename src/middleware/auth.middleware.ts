@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService, TokenPayload } from '../services/auth.service';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 
 // Extend Express Request to include user info
 declare global {
@@ -23,10 +22,8 @@ declare global {
 // Require valid JWT token
 export const requireAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    // Read token from HttpOnly cookie first (PCI DSS), fall back to Authorization header
-    const cookieToken = req.cookies?.os_auth as string | undefined;
     const authHeader = req.headers.authorization;
-    const token = cookieToken ?? (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined);
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
 
     if (!token) {
       res.status(401).json({ error: 'Authentication required' });
@@ -84,9 +81,8 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
 // Optional auth - attach user if token present, but don't require it
 export const optionalAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const cookieToken = req.cookies?.os_auth as string | undefined;
     const authHeader = req.headers.authorization;
-    const token = cookieToken ?? (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined);
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
 
     if (token) {
       const payload = authService.verifyToken(token);

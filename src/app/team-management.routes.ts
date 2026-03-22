@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { z } from 'zod';
 import { authService } from '../services/auth.service';
 import { DEFAULT_PERMISSION_SETS, LEGACY_SET_RENAME } from '../data/default-permission-sets';
@@ -9,7 +9,6 @@ import { auditLog } from '../utils/audit';
 import { auditCtx } from '../utils/audit-context';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // --- Zod Schemas ---
 

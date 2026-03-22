@@ -1,12 +1,11 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { broadcastToSourceAndKDS } from '../services/socket.service';
 import { enrichOrderResponse } from '../utils/order-enrichment';
 import { updateOrderStatus } from '../services/order-status.service';
 import { logger } from '../utils/logger';
 
 const router = Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 const DELIVERY_TRANSITIONS: Record<string, string[]> = {
   'PREPARING': ['OUT_FOR_DELIVERY'],

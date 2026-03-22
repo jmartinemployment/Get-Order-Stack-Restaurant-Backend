@@ -1,8 +1,7 @@
 import crypto from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { toErrorMessage } from '../utils/errors';
 
-const prisma = new PrismaClient();
 
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 const ENCRYPTION_VERSION = 'v1';

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { z } from 'zod';
 import { authService } from '../services/auth.service';
 import { broadcastToSourceAndKDS } from '../services/socket.service';
@@ -10,7 +10,6 @@ import { auditLog } from '../utils/audit';
 import { auditCtx } from '../utils/audit-context';
 
 const router = Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 // ============ Zod Schemas ============
 

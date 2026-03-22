@@ -1,8 +1,7 @@
 import crypto from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 
-const prisma = new PrismaClient();
 
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 

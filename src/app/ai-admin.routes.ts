@@ -1,11 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { aiCredentialsService } from '../services/ai-credentials.service';
 import { aiConfigService, isValidFeatureKey } from '../services/ai-config.service';
 import { aiUsageService } from '../services/ai-usage.service';
 
-const prisma = new PrismaClient();
 const router = Router({ mergeParams: true });
 
 const putApiKeySchema = z.object({

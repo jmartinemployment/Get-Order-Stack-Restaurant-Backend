@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { MAC_ADDRESS_REGEX, PRINTER_MODELS } from '../utils/constants';
 import type {
   CreatePrinterDto,
@@ -8,7 +8,6 @@ import type {
 } from '../models/printer.dto';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 
 export class PrinterService {
   private readonly baseUrl: string;

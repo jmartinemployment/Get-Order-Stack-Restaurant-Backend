@@ -3,9 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
 }
 
 model Restaurant {
@@ -38,6 +36,7 @@ model Restaurant {
   merchantProfile       Json?    @map("merchant_profile")
   businessHours         Json?    @map("business_hours")
   notificationSettings  Json?    @map("notification_settings")
+  networkIp        String?  @map("network_ip")
   active           Boolean  @default(true)
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
@@ -1880,7 +1879,7 @@ model PermissionSet {
 
 model TeamMember {
   id                  String           @id @default(uuid())
-  restaurantId        String?          @map("restaurant_id")
+  restaurantId        String           @map("restaurant_id")
   displayName         String           @map("display_name")
   email               String?          @unique
   phone               String?
@@ -1891,6 +1890,7 @@ model TeamMember {
   role                String           @default("staff") // super_admin, owner, manager, staff
   isActive            Boolean          @default(true) @map("is_active")
   lastLoginAt         DateTime?        @map("last_login_at")
+  workFromHome        Boolean          @default(false) @map("work_from_home")
   restaurantGroupId   String?          @map("restaurant_group_id")
   permissionSetId     String?          @map("permission_set_id")
   assignedLocationIds Json             @default("[]") @map("assigned_location_ids")
@@ -1906,7 +1906,7 @@ model TeamMember {
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
 
-  restaurant          Restaurant?      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurant          Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   restaurantGroup     RestaurantGroup? @relation(fields: [restaurantGroupId], references: [id], onDelete: SetNull)
   permissionSet       PermissionSet?   @relation(fields: [permissionSetId], references: [id], onDelete: SetNull)
   jobs                TeamMemberJob[]
@@ -2585,4 +2585,15 @@ model MfaTrustedDevice {
 
   @@unique([teamMemberId, uaFingerprint, ipAddress])
   @@map("mfa_trusted_devices")
+}
+
+model PendingVerification {
+  id        String   @id @default(uuid())
+  emailHash String   @unique @map("email_hash")
+  email     String
+  otpHash   String   @map("otp_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("pending_verifications")
 }

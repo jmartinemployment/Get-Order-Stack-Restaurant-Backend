@@ -1,11 +1,10 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { z } from 'zod';
 import { handlePrismaError } from '../utils/prisma-errors';
 import { generateDeviceCode } from '../utils/device-code';
 
 const router = Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 const HEARTBEAT_THRESHOLD_MS = 30_000;
 

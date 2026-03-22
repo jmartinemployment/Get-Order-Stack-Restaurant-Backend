@@ -1,10 +1,10 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { requireAuth } from '../middleware/auth.middleware';
 import { toErrorMessage } from '../utils/errors';
 import { logger } from '../utils/logger';
 
-const prisma = new PrismaClient();
 const router = Router();
 
 // GET /api/analytics/pinned-widgets?merchantId=xxx

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import {
   DeliveryCredentialMode,
   ProviderSecurityProfileSummary,
@@ -9,7 +9,6 @@ import {
   modeToKeyBackend,
 } from './provider-key-management.service';
 
-const prisma = new PrismaClient();
 
 const DELIVERY_SECURITY_PROVIDER = 'delivery_security';
 

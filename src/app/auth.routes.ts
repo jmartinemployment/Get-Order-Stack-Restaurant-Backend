@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { authService, MFA_REQUIRED_ROLES, RESTAURANT_SELECT } from '../services/auth.service';
 import { requireAuth, requireAdmin, requireSuperAdmin, requireMerchantManager } from '../middleware/auth.middleware';
@@ -9,32 +11,14 @@ import { logger } from '../utils/logger';
 import { disableInactiveAccounts } from '../jobs/account-maintenance';
 import { mfaService } from '../services/mfa.service';
 import { trackPasswordResetRequest, trackMfaFailed } from '../services/security-alert.service';
+import { sendMfaOtpEmail, sendSignupNotification } from '../services/email.service';
+import { prisma } from '../lib/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
-const IS_PRODUCTION = process.env.NODE_ENV === 'production';
-const COOKIE_MAX_AGE_MS = 8 * 60 * 60 * 1000; // 8 hours — matches JWT_EXPIRES_IN
-
-/** Set the HttpOnly auth cookie on the response. PCI DSS 3.4 / 6.5.10. */
-function setAuthCookie(res: Response, token: string): void {
-  res.cookie('os_auth', token, {
-    httpOnly: true,
-    secure: IS_PRODUCTION,
-    sameSite: IS_PRODUCTION ? 'none' : 'lax',
-    path: '/api',
-    maxAge: COOKIE_MAX_AGE_MS,
-  });
-}
-
-/** Clear the auth cookie on logout. */
-function clearAuthCookie(res: Response): void {
-  res.clearCookie('os_auth', {
-    httpOnly: true,
-    secure: IS_PRODUCTION,
-    sameSite: IS_PRODUCTION ? 'none' : 'lax',
-    path: '/api',
-  });
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is not set.');
 }
 
 // Rate limit auth endpoints to prevent brute-force attacks
@@ -61,105 +45,350 @@ const pinRateLimiter = rateLimit({
   keyGenerator: (req) => req.ip ?? 'unknown',
 });
 
-// ============ User Authentication ============
+// ============ Email Verification (shared by signup + login WFH) ============
 
-// Public signup — creates owner account + restaurant + auto-login
-router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
+const sendVerificationSchema = z.object({
+  email: z.string().email().transform(v => v.toLowerCase().trim()),
+});
+
+// Send a 6-digit OTP to verify email ownership — no account created yet
+router.post('/send-verification', authRateLimiter, async (req: Request, res: Response) => {
   try {
-    const { firstName, lastName, email, password, businessName } = req.body;
+    const parsed = sendVerificationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Valid email is required' });
+      return;
+    }
+    const { email } = parsed.data;
 
-    if (!email || !password) {
-      res.status(400).json({ error: 'Email and password are required' });
+    // Check if email is already registered
+    const existing = await prisma.teamMember.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (existing) {
+      res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
       return;
     }
 
-    if (!firstName || !lastName) {
-      res.status(400).json({ error: 'First name and last name are required' });
-      return;
-    }
+    // Generate 6-digit OTP
+    const code = String(randomBytes(3).readUIntBE(0, 3) % 1000000).padStart(6, '0');
+    const otpHash = await bcrypt.hash(code, 12);
+    const emailHash = createHash('sha256').update(email).digest('hex');
 
-    if (!businessName) {
-      res.status(400).json({ error: 'Business name is required' });
-      return;
-    }
-
-    // Password validation is handled by authService.createUser()
-    const createResult = await authService.createUser({
-      email,
-      password,
-      firstName,
-      lastName,
-      role: 'owner',
+    // Upsert PendingVerification — resend overwrites previous code
+    await prisma.pendingVerification.upsert({
+      where: { emailHash },
+      create: {
+        emailHash,
+        email,
+        otpHash,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+      },
+      update: {
+        otpHash,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      },
     });
 
-    if (!createResult.success) {
-      const status = createResult.error === 'Email already registered' ? 409 : 400;
-      res.status(status).json({ error: createResult.error });
+    // Send OTP email (reuse MFA OTP email template — same 6-digit code pattern)
+    await sendMfaOtpEmail(email, null, code);
+
+    // Mask email for frontend display
+    const [local, domain] = email.split('@');
+    const maskedEmail = `${local[0]}${'*'.repeat(Math.max(local.length - 2, 1))}${local.at(-1)}@${domain}`;
+
+    res.json({ sent: true, maskedEmail });
+  } catch (error) {
+    logger.error('Send verification error:', { error });
+    res.status(500).json({ error: 'Failed to send verification email' });
+  }
+});
+
+// Verify 6-digit OTP — returns a short-lived JWT proving email ownership
+router.post('/verify-email', authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      res.status(400).json({ error: 'Email and code are required' });
       return;
     }
 
-    const slug = businessName.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replaceAll(/^-|-$/g, '');
-    const teamMemberId = createResult.user!.id;
+    const normalizedEmail = email.toLowerCase().trim();
+    const emailHash = createHash('sha256').update(normalizedEmail).digest('hex');
 
-    const restaurant = await prisma.$transaction(async (tx) => {
-      const r = await tx.restaurant.create({
+    const pending = await prisma.pendingVerification.findUnique({ where: { emailHash } });
+    if (!pending) {
+      res.status(401).json({ error: 'No verification pending for this email. Please request a new code.' });
+      return;
+    }
+
+    if (pending.expiresAt < new Date()) {
+      await prisma.pendingVerification.delete({ where: { emailHash } });
+      res.status(401).json({ error: 'Code expired. Please request a new one.' });
+      return;
+    }
+
+    const isValid = await bcrypt.compare(code, pending.otpHash);
+    if (!isValid) {
+      res.status(401).json({ error: 'Invalid code. Please try again.' });
+      return;
+    }
+
+    // Delete the pending record — code is consumed
+    await prisma.pendingVerification.delete({ where: { emailHash } });
+
+    // Issue a short-lived JWT proving email ownership (30 minutes for signup form)
+    const verifiedEmailToken = jwt.sign(
+      { email: normalizedEmail, purpose: 'email_verification' },
+      JWT_SECRET,
+      { expiresIn: '30m' },
+    );
+
+    res.json({ verified: true, verifiedEmailToken });
+  } catch (error) {
+    logger.error('Verify email error:', { error });
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// ============ Signup ============
+
+const signupSchema = z.object({
+  verifiedEmailToken: z.string(),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  password: z.string().min(12),
+  businessPhone: z.string().regex(/^\d{10}$/, 'Business phone must be 10 digits'),
+  personalPhone: z.string().regex(/^\d{10}$/, 'Personal phone must be 10 digits'),
+  businessName: z.string().min(1),
+  address: z.string().min(1),
+  city: z.string().min(1),
+  state: z.string().min(1),
+  zip: z.string().min(1),
+  multipleLocations: z.boolean().default(false),
+});
+
+// Public signup — email verified first, then creates everything in one transaction
+router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const parsed = signupSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const firstError = parsed.error.issues[0];
+      res.status(400).json({ error: firstError?.message ?? 'Invalid signup data' });
+      return;
+    }
+
+    const {
+      verifiedEmailToken, firstName, lastName, password,
+      businessPhone, personalPhone, businessName,
+      address, city, state, zip, multipleLocations,
+    } = parsed.data;
+
+    // Verify the email token
+    let verifiedEmail: string;
+    try {
+      const payload = jwt.verify(verifiedEmailToken, JWT_SECRET) as { email: string; purpose: string };
+      if (payload.purpose !== 'email_verification') {
+        res.status(401).json({ error: 'Invalid verification token' });
+        return;
+      }
+      verifiedEmail = payload.email;
+    } catch {
+      res.status(401).json({ error: 'Your verification expired. Please verify your email again.' });
+      return;
+    }
+
+    // Check duplicate email (race condition guard — also checked in send-verification)
+    const existingMember = await prisma.teamMember.findUnique({
+      where: { email: verifiedEmail },
+      select: { id: true },
+    });
+    if (existingMember) {
+      res.status(409).json({ error: 'An account with this email already exists.' });
+      return;
+    }
+
+    // Validate password strength
+    const strengthCheck = authService.validatePasswordStrength(password);
+    if (!strengthCheck.valid) {
+      res.status(400).json({ error: strengthCheck.error });
+      return;
+    }
+
+    // Hash password
+    const passwordHash = await authService.hashPassword(password);
+
+    // Generate slug
+    const baseSlug = businessName.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replaceAll(/^-|-$/g, '');
+    const suffix = randomBytes(3).toString('hex'); // 6-char hex
+    let slug = `${baseSlug}-${suffix}`;
+
+    // Check slug uniqueness, retry once
+    const slugExists = await prisma.restaurant.findUnique({ where: { slug }, select: { id: true } });
+    if (slugExists) {
+      const suffix2 = randomBytes(3).toString('hex');
+      slug = `${baseSlug}-${suffix2}`;
+      const slugExists2 = await prisma.restaurant.findUnique({ where: { slug }, select: { id: true } });
+      if (slugExists2) {
+        res.status(500).json({ error: 'Failed to generate unique identifier. Please try again.' });
+        return;
+      }
+    }
+
+    // Create everything in one interactive transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Optional: RestaurantGroup (only if multipleLocations checked)
+      let restaurantGroupId: string | null = null;
+      if (multipleLocations) {
+        const group = await tx.restaurantGroup.create({
+          data: {
+            name: businessName,
+            slug,
+          },
+        });
+        restaurantGroupId = group.id;
+      }
+
+      // Create Restaurant — networkIp captured from req.ip
+      const restaurant = await tx.restaurant.create({
         data: {
           name: businessName,
-          slug: `${slug}-${Date.now()}`,
-          email,
-          address: '',
-          city: '',
-          state: '',
-          zip: '',
+          email: verifiedEmail,
+          phone: businessPhone,
+          address, city, state, zip,
+          slug,
+          networkIp: req.ip ?? null,
+          restaurantGroupId,
           merchantProfile: { onboardingComplete: false },
         },
       });
 
+      // Create TeamMember (owner)
+      const member = await tx.teamMember.create({
+        data: {
+          firstName,
+          lastName,
+          displayName: `${firstName} ${lastName}`,
+          email: verifiedEmail,
+          phone: personalPhone,
+          passwordHash,
+          role: 'owner',
+          restaurantId: restaurant.id,
+          restaurantGroupId,
+          workFromHome: true, // owner defaults to true
+        },
+      });
+
+      // Create UserRestaurantAccess
       await tx.userRestaurantAccess.create({
         data: {
-          teamMemberId,
-          restaurantId: r.id,
+          teamMemberId: member.id,
+          restaurantId: restaurant.id,
           role: 'owner',
         },
       });
 
-      await tx.teamMember.update({
-        where: { id: teamMemberId },
-        data: { restaurantId: r.id },
+      // Create Device
+      const device = await tx.device.create({
+        data: {
+          restaurantId: restaurant.id,
+          teamMemberId: member.id,
+          deviceName: `${firstName}'s Browser`,
+          deviceType: 'terminal',
+          status: 'active',
+          hardwareInfo: {
+            platform: 'Browser',
+            userAgent: req.headers['user-agent'],
+            ip: req.ip,
+          },
+        },
       });
 
-      return r;
+      // Record password history
+      await tx.passwordHistory.create({
+        data: { teamMemberId: member.id, passwordHash },
+      });
+
+      return { restaurant, member, device };
     });
 
     await auditLog('signup_with_restaurant', {
-      userId: teamMemberId,
-      metadata: { email, restaurantId: restaurant.id, businessName },
+      userId: result.member.id,
+      metadata: { email: verifiedEmail, restaurantId: result.restaurant.id, businessName },
     });
 
-    // Auto-login after signup
-    const deviceInfo = req.headers['user-agent'] || undefined;
-    const ipAddress = req.ip || req.socket.remoteAddress || undefined;
-    const loginResult = await authService.loginUser(email, password, deviceInfo, ipAddress);
+    // Auto-login — create session + token
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
 
-    if (!loginResult.success) {
-      res.status(201).json({
-        user: createResult.user,
-        restaurants: [{ id: restaurant.id, name: restaurant.name, slug: restaurant.slug, role: 'owner', onboardingComplete: false }],
-      });
-      return;
-    }
+    const session = await prisma.userSession.create({
+      data: {
+        userId: result.member.id,
+        token: randomBytes(32).toString('hex'),
+        deviceInfo: req.headers['user-agent'] ?? undefined,
+        ipAddress: req.ip ?? undefined,
+        expiresAt,
+      },
+    });
 
-    setAuthCookie(res, loginResult.token!);
+    const token = authService.generateToken(
+      {
+        teamMemberId: result.member.id,
+        email: verifiedEmail,
+        role: 'owner',
+        restaurantGroupId: result.member.restaurantGroupId ?? undefined,
+        type: 'user',
+      },
+      session.id,
+    );
+
+    // Send signup notification emails
+    sendSignupNotification(verifiedEmail, firstName, businessName).catch(err => {
+      logger.error('Signup notification email failed:', { error: err });
+    });
+
+    // Initialize trial
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + 30);
+    await prisma.restaurant.update({
+      where: { id: result.restaurant.id },
+      data: {
+        trialStartedAt: new Date(),
+        trialEndsAt,
+        hasUsedTrial: true,
+      },
+    });
+
     res.status(201).json({
-      token: loginResult.token,
-      user: loginResult.user,
-      restaurants: loginResult.restaurants,
+      token,
+      user: {
+        id: result.member.id,
+        email: verifiedEmail,
+        firstName,
+        lastName,
+        role: 'owner',
+        restaurantGroupId: result.member.restaurantGroupId,
+        mfaEnabled: false,
+      },
+      restaurants: [{
+        id: result.restaurant.id,
+        name: result.restaurant.name,
+        slug: result.restaurant.slug,
+        role: 'owner',
+        onboardingComplete: false,
+        subscriptionStatus: 'trialing',
+        trialEndsAt: trialEndsAt.toISOString(),
+      }],
+      deviceId: result.device.id,
     });
   } catch (error) {
     logger.error('Signup error:', { error });
     res.status(500).json({ error: 'Signup failed' });
   }
 });
+
+// ============ Login ============
 
 // Login with email/password
 router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
@@ -174,6 +403,29 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
     const deviceInfo = req.headers['user-agent'] || undefined;
     const ipAddress = req.ip || req.socket.remoteAddress || undefined;
     const deviceInfoHeader = req.headers['x-device-info'] as string | undefined;
+
+    // Look up member for workFromHome check before calling loginUser
+    const normalizedEmail = email.toLowerCase().trim();
+    const member = await prisma.teamMember.findUnique({
+      where: { email: normalizedEmail },
+      select: {
+        id: true,
+        workFromHome: true,
+        restaurantId: true,
+        restaurant: { select: { networkIp: true } },
+      },
+    });
+
+    // workFromHome access control — check IP before authenticating
+    if (member && !member.workFromHome && member.restaurant?.networkIp) {
+      const restaurantIp = member.restaurant.networkIp;
+      if (ipAddress !== restaurantIp) {
+        res.status(403).json({
+          error: 'Sign in is only available from your restaurant network. Contact your manager to enable remote access.',
+        });
+        return;
+      }
+    }
 
     const result = await authService.loginUser(email, password, deviceInfo, ipAddress, deviceInfo, deviceInfoHeader);
 
@@ -194,18 +446,82 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
       }
       res.json({
         mfaRequired: true,
-        mfaToken: result.token, // short-lived token for MFA verification only
+        mfaToken: result.token,
         maskedEmail: mfaMember?.email ? mfaService.maskEmail(mfaMember.email) : undefined,
         user: { id: result.user.id },
       });
       return;
     }
 
-    setAuthCookie(res, result.token!);
+    // workFromHome: true + unrecognized IP → email verification challenge
+    if (member?.workFromHome && member.restaurant?.networkIp && ipAddress !== member.restaurant.networkIp) {
+      // Check if this device+IP is already trusted
+      const fingerprint = authService.computeUaFingerprint(deviceInfo, deviceInfoHeader);
+      const isTrusted = fingerprint && ipAddress
+        ? await authService.checkTrust(member.id, fingerprint, ipAddress)
+        : false;
+
+      if (!isTrusted) {
+        // Send OTP for email verification (same flow as signup verification)
+        const wfhMember = await prisma.teamMember.findUnique({
+          where: { id: member.id },
+          select: { email: true, firstName: true },
+        });
+        if (wfhMember?.email) {
+          const code = String(randomBytes(3).readUIntBE(0, 3) % 1000000).padStart(6, '0');
+          const otpHash = await bcrypt.hash(code, 12);
+          const emailHash = createHash('sha256').update(wfhMember.email).digest('hex');
+
+          await prisma.pendingVerification.upsert({
+            where: { emailHash },
+            create: { emailHash, email: wfhMember.email, otpHash, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+            update: { otpHash, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+          });
+
+          await sendMfaOtpEmail(wfhMember.email, wfhMember.firstName, code);
+
+          const [local, domain] = wfhMember.email.split('@');
+          const maskedEmail = `${local[0]}${'*'.repeat(Math.max(local.length - 2, 1))}${local.at(-1)}@${domain}`;
+
+          res.json({
+            emailVerificationRequired: true,
+            maskedEmail,
+            // Store the login result token for after verification completes
+            loginToken: result.token,
+          });
+          return;
+        }
+      }
+    }
+
+    // Resolve device ID — match by teamMemberId + userAgent (+ IP if WFH)
+    let deviceId: string | null = null;
+    if (result.user) {
+      const deviceWhere: Record<string, unknown> = {
+        teamMemberId: result.user.id,
+        deviceType: 'terminal',
+        status: 'active',
+        hardwareInfo: { path: ['userAgent'], equals: req.headers['user-agent'] },
+      };
+
+      if (member?.workFromHome) {
+        deviceWhere.hardwareInfo = {
+          AND: [
+            { path: ['userAgent'], equals: req.headers['user-agent'] },
+            { path: ['ip'], equals: req.ip },
+          ],
+        };
+      }
+
+      const device = await prisma.device.findFirst({ where: deviceWhere });
+      deviceId = device?.id ?? null;
+    }
+
     res.json({
       token: result.token,
       user: result.user,
       restaurants: result.restaurants,
+      deviceId,
       ...(result.mfaEnrollmentRequired ? {
         mfaEnrollmentRequired: true,
         mfaGraceDeadline: result.mfaGraceDeadline,
@@ -217,7 +533,8 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
   }
 });
 
-// Request password reset — sends email with token link
+// ============ Password Reset ============
+
 router.post('/forgot-password', authRateLimiter, async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
@@ -227,7 +544,6 @@ router.post('/forgot-password', authRateLimiter, async (req: Request, res: Respo
       return;
     }
 
-    // Always returns success — anti-enumeration (never reveal if email exists)
     await authService.requestPasswordReset(email);
     trackPasswordResetRequest(req.ip ?? 'unknown', email);
     res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
@@ -237,7 +553,6 @@ router.post('/forgot-password', authRateLimiter, async (req: Request, res: Respo
   }
 });
 
-// Reset password using a token from the email link
 router.post('/reset-password', authRateLimiter, async (req: Request, res: Response) => {
   try {
     const { token, newPassword } = req.body;
@@ -261,13 +576,12 @@ router.post('/reset-password', authRateLimiter, async (req: Request, res: Respon
   }
 });
 
-// Logout (invalidate session)
+// ============ Logout ============
+
 router.post('/logout', async (req: Request, res: Response) => {
   try {
-    // Read token from cookie first (PCI DSS), fall back to Authorization header
-    const cookieToken = req.cookies?.os_auth as string | undefined;
     const authHeader = req.headers.authorization;
-    const token = cookieToken ?? (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined);
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
 
     if (!token) {
       res.status(401).json({ error: 'No token provided' });
@@ -286,7 +600,6 @@ router.post('/logout', async (req: Request, res: Response) => {
       res.status(500).json({ error: result.error });
       return;
     }
-    clearAuthCookie(res);
     res.json({ success: true, message: 'Logged out successfully' });
   } catch (error) {
     logger.error('Logout error:', { error });
@@ -294,13 +607,12 @@ router.post('/logout', async (req: Request, res: Response) => {
   }
 });
 
-// Validate token and get current user
+// ============ Current User ============
+
 router.get('/me', async (req: Request, res: Response) => {
   try {
-    // Read token from cookie first (PCI DSS), fall back to Authorization header
-    const cookieToken = req.cookies?.os_auth as string | undefined;
     const authHeader = req.headers.authorization;
-    const token = cookieToken ?? (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined);
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
 
     if (!token) {
       res.status(401).json({ error: 'No token provided' });
@@ -314,14 +626,12 @@ router.get('/me', async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate session is still active
     const isValid = await authService.validateSession(payload.sessionId);
     if (!isValid) {
       res.status(401).json({ error: 'Session expired' });
       return;
     }
 
-    // Get full team member info
     const member = await prisma.teamMember.findUnique({
       where: { id: payload.teamMemberId },
       include: {
@@ -364,7 +674,8 @@ router.get('/me', async (req: Request, res: Response) => {
   }
 });
 
-// Re-auth: verify current password (for sensitive settings access)
+// ============ Re-auth & Sessions ============
+
 router.post('/verify-password', requireAuth, authRateLimiter, async (req: Request, res: Response) => {
   try {
     const { password } = req.body;
@@ -397,7 +708,6 @@ router.post('/verify-password', requireAuth, authRateLimiter, async (req: Reques
   }
 });
 
-// List active sessions for current user
 router.get('/sessions', requireAuth, async (req: Request, res: Response) => {
   try {
     const sessions = await prisma.userSession.findMany({
@@ -413,11 +723,9 @@ router.get('/sessions', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// Revoke a specific session
 router.delete('/sessions/:sessionId', requireAuth, async (req: Request, res: Response) => {
   try {
     const { sessionId } = req.params;
-    // Verify session belongs to current user
     const session = await prisma.userSession.findFirst({
       where: { id: sessionId, userId: req.user!.teamMemberId },
     });
@@ -436,7 +744,6 @@ router.delete('/sessions/:sessionId', requireAuth, async (req: Request, res: Res
 
 // ============ Staff PIN Authentication ============
 
-// Verify staff PIN for a restaurant
 router.post('/:merchantId/pin/verify', pinRateLimiter, async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
@@ -454,7 +761,6 @@ router.post('/:merchantId/pin/verify', pinRateLimiter, async (req: Request, res:
       return;
     }
 
-    // Load permissions from linked TeamMember's PermissionSet
     let permissions: Record<string, boolean> = {};
     const staffPin = await prisma.staffPin.findUnique({
       where: { id: result.staffPin.id },
@@ -483,19 +789,13 @@ router.post('/:merchantId/pin/verify', pinRateLimiter, async (req: Request, res:
 
 // ============ Staff PIN Management (admin only) ============
 
-// List all staff PINs for a restaurant (without actual PIN values)
 router.get('/:merchantId/pins', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
 
     const pins = await prisma.staffPin.findMany({
       where: { restaurantId, isActive: true },
-      select: {
-        id: true,
-        name: true,
-        role: true,
-        createdAt: true
-      },
+      select: { id: true, name: true, role: true, createdAt: true },
       orderBy: { name: 'asc' }
     });
 
@@ -506,7 +806,6 @@ router.get('/:merchantId/pins', requireAuth, requireMerchantManager, async (req:
   }
 });
 
-// Create a new staff PIN
 router.post('/:merchantId/pins', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
     const restaurantId = req.params.merchantId;
@@ -531,7 +830,6 @@ router.post('/:merchantId/pins', requireAuth, requireMerchantManager, async (req
   }
 });
 
-// Update a staff PIN (including PIN value change)
 router.patch('/:merchantId/pins/:pinId', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
     const { restaurantId, pinId } = req.params;
@@ -549,7 +847,6 @@ router.patch('/:merchantId/pins/:pinId', requireAuth, requireMerchantManager, as
       return;
     }
 
-    // Return updated record
     const updated = await prisma.staffPin.findUnique({
       where: { id: pinId },
       select: { id: true, name: true, role: true, isActive: true }
@@ -562,7 +859,6 @@ router.patch('/:merchantId/pins/:pinId', requireAuth, requireMerchantManager, as
   }
 });
 
-// Delete (deactivate) a staff PIN
 router.delete('/:merchantId/pins/:pinId', requireAuth, requireMerchantManager, async (req: Request, res: Response) => {
   try {
     const { pinId } = req.params;
@@ -581,7 +877,6 @@ router.delete('/:merchantId/pins/:pinId', requireAuth, requireMerchantManager, a
 
 // ============ User Management ============
 
-// List all users (admin: owner or super_admin) — returns TeamMembers with passwordHash (dashboard accounts)
 router.get('/users', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const restaurantGroupId = req.query.restaurantGroupId as string | undefined;
@@ -593,7 +888,6 @@ router.get('/users', requireAuth, requireAdmin, async (req: Request, res: Respon
   }
 });
 
-// Get a single user with restaurant access
 router.get('/users/:userId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
@@ -603,9 +897,7 @@ router.get('/users/:userId', requireAuth, requireAdmin, async (req: Request, res
       include: {
         restaurantAccess: {
           include: {
-            restaurant: {
-              select: { id: true, name: true, slug: true }
-            }
+            restaurant: { select: { id: true, name: true, slug: true } }
           }
         }
       }
@@ -638,13 +930,11 @@ router.get('/users/:userId', requireAuth, requireAdmin, async (req: Request, res
   }
 });
 
-// Update a user (admin: owner or super_admin)
 router.patch('/users/:userId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     const { firstName, lastName, role, isActive } = req.body;
 
-    // Only super_admin can change roles to super_admin or owner
     if (role && ['super_admin', 'owner'].includes(role) && req.user?.role !== 'super_admin') {
       res.status(403).json({ error: 'Only super_admin can assign owner or super_admin roles' });
       return;
@@ -669,7 +959,6 @@ router.patch('/users/:userId', requireAuth, requireAdmin, async (req: Request, r
   }
 });
 
-// Change own password (any authenticated user)
 router.post('/change-password', requireAuth, async (req: Request, res: Response) => {
   try {
     const { oldPassword, newPassword } = req.body;
@@ -694,7 +983,6 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
   }
 });
 
-// Create a new user (super_admin only)
 router.post('/users', requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
   try {
     const { email, password, firstName, lastName, role, restaurantGroupId, restaurantId } = req.body;
@@ -726,7 +1014,6 @@ router.post('/users', requireAuth, requireSuperAdmin, async (req: Request, res: 
   }
 });
 
-// Grant user access to a restaurant
 router.post('/users/:userId/restaurants/:merchantId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { userId, restaurantId } = req.params;
@@ -736,14 +1023,8 @@ router.post('/users/:userId/restaurants/:merchantId', requireAuth, requireAdmin,
       where: {
         teamMemberId_restaurantId: { teamMemberId: userId, restaurantId }
       },
-      create: {
-        teamMemberId: userId,
-        restaurantId,
-        role
-      },
-      update: {
-        role
-      }
+      create: { teamMemberId: userId, restaurantId, role },
+      update: { role }
     });
     await auditLog('restaurant_access_granted', { userId: req.user!.teamMemberId, ip: req.ip, metadata: { targetUserId: userId, restaurantId, role } });
     res.json(access);
@@ -753,7 +1034,6 @@ router.post('/users/:userId/restaurants/:merchantId', requireAuth, requireAdmin,
   }
 });
 
-// Revoke user access to a restaurant
 router.delete('/users/:userId/restaurants/:merchantId', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { userId, restaurantId } = req.params;
@@ -773,7 +1053,6 @@ router.delete('/users/:userId/restaurants/:merchantId', requireAuth, requireAdmi
 
 // ============ Restaurant Group Management ============
 
-// Create a restaurant group
 router.post('/groups', requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
   try {
     const { name, slug, description, logo } = req.body;
@@ -794,15 +1073,12 @@ router.post('/groups', requireAuth, requireSuperAdmin, async (req: Request, res:
   }
 });
 
-// List restaurant groups
 router.get('/groups', requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
   try {
     const groups = await prisma.restaurantGroup.findMany({
       where: { active: true },
       include: {
-        _count: {
-          select: { restaurants: true, teamMembers: true }
-        }
+        _count: { select: { restaurants: true, teamMembers: true } }
       },
       orderBy: { name: 'asc' }
     });
@@ -816,7 +1092,6 @@ router.get('/groups', requireAuth, requireSuperAdmin, async (req: Request, res: 
 
 // ============ MFA (PCI DSS 8.4.2) ============
 
-// Setup MFA — sends a 6-digit OTP to the user's email address
 router.post('/mfa/setup', requireAuth, async (req: Request, res: Response) => {
   try {
     const member = await prisma.teamMember.findUnique({
@@ -842,7 +1117,6 @@ router.post('/mfa/setup', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// MFA challenge resend — send a fresh OTP to the user's email
 router.post('/mfa/challenge/resend', authRateLimiter, async (req: Request, res: Response) => {
   try {
     const { mfaToken } = req.body;
@@ -876,8 +1150,6 @@ router.post('/mfa/challenge/resend', authRateLimiter, async (req: Request, res: 
   }
 });
 
-// Unified MFA verify — handles both setup (Bearer token) and login challenge (mfaToken).
-// Discriminator: mfaToken in body → login challenge. Absent → setup verification.
 router.post('/mfa/verify', async (req: Request, res: Response) => {
   try {
     const { code, mfaToken } = req.body;
@@ -909,13 +1181,11 @@ router.post('/mfa/verify', async (req: Request, res: Response) => {
         return;
       }
 
-      // Invalidate the short-lived MFA session
       await prisma.userSession.update({
         where: { id: payload.sessionId },
         data: { isActive: false },
       });
 
-      // Create a full session
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
 
@@ -934,7 +1204,6 @@ router.post('/mfa/verify', async (req: Request, res: Response) => {
         session.id,
       );
 
-      // Get full user + restaurants via shared builder
       const member = await prisma.teamMember.findUnique({
         where: { id: payload.teamMemberId },
         include: {
@@ -948,10 +1217,8 @@ router.post('/mfa/verify', async (req: Request, res: Response) => {
 
       const restaurants = await authService.buildRestaurantList(member!);
 
-      setAuthCookie(res, fullToken);
       await auditLog('mfa_challenge_success', { userId: payload.teamMemberId, ip: req.ip });
 
-      // Create trusted device record so this browser/IP skips MFA for 90 days
       const challengeDeviceInfoHeader = req.headers['x-device-info'] as string | undefined;
       await authService.createTrust(
         payload.teamMemberId,
@@ -974,10 +1241,9 @@ router.post('/mfa/verify', async (req: Request, res: Response) => {
         restaurants,
       });
     } else {
-      // ---- Setup flow (Bearer token / cookie required) ----
-      const cookieToken = req.cookies?.os_auth as string | undefined;
+      // ---- Setup flow (Bearer token required) ----
       const authHeader = req.headers.authorization;
-      const token = cookieToken ?? (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined);
+      const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
 
       if (!token) {
         res.status(401).json({ error: 'Authentication required' });
@@ -996,7 +1262,6 @@ router.post('/mfa/verify', async (req: Request, res: Response) => {
         return;
       }
 
-      // Trust this device after MFA setup so user isn't immediately challenged
       const setupDeviceInfoHeader = req.headers['x-device-info'] as string | undefined;
       await authService.createTrust(
         payload.teamMemberId,
@@ -1013,11 +1278,8 @@ router.post('/mfa/verify', async (req: Request, res: Response) => {
   }
 });
 
-// Disable MFA
-// PCI DSS 8.4.2: Privileged roles (super_admin, owner, manager) cannot disable MFA.
 router.post('/mfa/disable', requireAuth, authRateLimiter, async (req: Request, res: Response) => {
   try {
-    // Block MFA disable for roles that require it
     if (MFA_REQUIRED_ROLES.includes(req.user!.role)) {
       res.status(403).json({ error: 'MFA is required for your role and cannot be disabled.' });
       return;
@@ -1031,7 +1293,6 @@ router.post('/mfa/disable', requireAuth, authRateLimiter, async (req: Request, r
   }
 });
 
-// Get MFA status for current user
 router.get('/mfa/status', requireAuth, async (req: Request, res: Response) => {
   try {
     const status = await mfaService.getStatus(req.user!.teamMemberId);
@@ -1044,7 +1305,6 @@ router.get('/mfa/status', requireAuth, async (req: Request, res: Response) => {
 
 // ============ MFA Trusted Devices ============
 
-// List trusted devices — owner/super_admin see all users in their restaurant; others see only their own
 router.get('/mfa/trusted-devices', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.teamMemberId;
@@ -1052,14 +1312,12 @@ router.get('/mfa/trusted-devices', requireAuth, async (req: Request, res: Respon
     const teamMemberFilter = req.query.teamMemberId as string | undefined;
 
     if (['owner', 'super_admin'].includes(role)) {
-      // Owner/super_admin can see all trust records for their restaurant's team members
       const restaurantId = req.query.restaurantId as string | undefined;
       const where: Record<string, unknown> = {};
 
       if (teamMemberFilter) {
         where['teamMemberId'] = teamMemberFilter;
       } else if (restaurantId) {
-        // Get all team members for this restaurant
         const access = await prisma.userRestaurantAccess.findMany({
           where: { restaurantId },
           select: { teamMemberId: true },
@@ -1077,7 +1335,6 @@ router.get('/mfa/trusted-devices', requireAuth, async (req: Request, res: Respon
 
       res.json(devices);
     } else {
-      // Non-privileged users see only their own
       const devices = await prisma.mfaTrustedDevice.findMany({
         where: { teamMemberId: userId },
         orderBy: { trustedAt: 'desc' },
@@ -1090,7 +1347,6 @@ router.get('/mfa/trusted-devices', requireAuth, async (req: Request, res: Respon
   }
 });
 
-// Revoke all trust records for a user — owner/super_admin only
 router.post('/mfa/revoke-trust', requireAuth, async (req: Request, res: Response) => {
   try {
     const role = req.user!.role;
@@ -1114,7 +1370,6 @@ router.post('/mfa/revoke-trust', requireAuth, async (req: Request, res: Response
   }
 });
 
-// Revoke a specific trusted device — owner/super_admin only
 router.delete('/mfa/trusted-devices/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const role = req.user!.role;

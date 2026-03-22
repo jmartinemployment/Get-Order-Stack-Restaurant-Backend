@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 
 export type OrderThrottleState = 'NONE' | 'HELD' | 'RELEASED';
 export type OrderThrottleSource = 'AUTO' | 'MANUAL';
@@ -72,7 +72,7 @@ function asRoundedNumber(raw: unknown, fallback: number): number {
 }
 
 class OrderThrottlingService {
-  private readonly prisma = new PrismaClient();
+  private readonly prisma = prisma;
 
   async getStatus(restaurantId: string): Promise<OrderThrottlingStatus> {
     const settings = await this.getSettings(restaurantId);

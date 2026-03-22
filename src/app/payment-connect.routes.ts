@@ -1,12 +1,11 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { getSecret } from '../utils/secrets';
 import { logger } from '../utils/logger';
 import { auditLog } from '../utils/audit';
 import { auditCtx } from '../utils/audit-context';
 
 const router = Router({ mergeParams: true });
-const prisma = new PrismaClient();
 
 const PAYPAL_API_BASE = process.env.PAYPAL_MODE === 'live'
   ? 'https://api-m.paypal.com'

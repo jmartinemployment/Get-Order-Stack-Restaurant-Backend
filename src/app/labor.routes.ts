@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { laborService } from '../services/labor.service';
 import {
   ShiftCreateSchema,
@@ -17,7 +17,6 @@ import {
 import { logger } from '../utils/logger';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // ============ Staff Pins ============
 

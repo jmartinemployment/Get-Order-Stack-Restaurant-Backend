@@ -1,9 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { toErrorMessage } from '../utils/errors';
 
-const prisma = new PrismaClient();
 
 export const sentimentRouter = Router({ mergeParams: true });
 
