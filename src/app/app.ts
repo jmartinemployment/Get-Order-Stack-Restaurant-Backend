@@ -82,7 +82,7 @@ app.use((_req, res, next) => {
 });
 
 // Middleware
-app.use(cors({ origin: config.corsOrigins, credentials: true }));
+app.use(cors({ origin: config.corsOrigins }));
 
 // General API rate limiter
 const apiRateLimiter = rateLimit({
