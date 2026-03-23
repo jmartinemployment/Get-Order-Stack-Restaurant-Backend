@@ -56,6 +56,7 @@ const updateTeamMemberSchema = z.object({
   assignedLocationIds: z.array(z.string()).optional(),
   hireDate: z.string().nullable().optional(),
   status: z.enum(['active', 'inactive', 'terminated']).optional(),
+  workFromHome: z.boolean().optional(),
   taxInfo: taxInfoSchema.nullable().optional(),
   jobs: z.array(jobSchema).optional(),
 });
@@ -93,6 +94,7 @@ interface FormattableMember {
   avatarUrl: string | null;
   hireDate: Date | null;
   status: string;
+  workFromHome: boolean;
   createdAt: Date;
   permissionSet: { name: string } | null;
   staffPin?: { id: string } | null;
@@ -135,6 +137,7 @@ function formatTeamMember(member: FormattableMember) {
     status: member.status,
     createdAt: member.createdAt.toISOString(),
     staffPinId: member.staffPin?.id ?? null,
+    workFromHome: member.workFromHome,
     taxInfo: member.taxInfo ? {
       filingStatus: member.taxInfo.filingStatus,
       multipleJobs: member.taxInfo.multipleJobs,
@@ -265,6 +268,7 @@ function buildScalarUpdates(d: UpdateTeamMemberInput): Record<string, unknown> {
   if (d.assignedLocationIds !== undefined) data.assignedLocationIds = d.assignedLocationIds;
   if (d.hireDate !== undefined) data.hireDate = d.hireDate ? new Date(d.hireDate) : null;
   if (d.status !== undefined) data.status = d.status;
+  if (d.workFromHome !== undefined) data.workFromHome = d.workFromHome;
   return data;
 }
 
@@ -376,6 +380,9 @@ router.patch('/:merchantId/team-members/:id', async (req: Request, res: Response
       });
     });
 
+    if (d.workFromHome === false) {
+      await prisma.mfaTrustedDevice.deleteMany({ where: { teamMemberId: id } });
+    }
     await auditLog('team_member_updated', { ...auditCtx(req), metadata: { teamMemberId: id, merchantId: req.params.merchantId } });
     res.json(formatTeamMember(member));
   } catch (error: unknown) {
