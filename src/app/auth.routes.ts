@@ -277,7 +277,6 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
           restaurantId: restaurant.id,
           restaurantGroupId,
           workFromHome: true, // owner defaults to true
-          mfaEnabled: false,
           passwordChangedAt: new Date(),
           lastLoginAt: new Date(),
           hireDate: new Date(),
@@ -320,6 +319,13 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
     await auditLog('signup_with_restaurant', {
       userId: result.member.id,
       metadata: { email: verifiedEmail, restaurantId: result.restaurant.id, businessName },
+    });
+
+    // Stamp device — email OTP at signup constitutes device verification (NIST 800-63B, 30 days)
+    const signupMfaExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await prisma.device.update({
+      where: { id: result.device.id },
+      data: { mfaVerifiedAt: new Date(), mfaExpiresAt: signupMfaExpiry },
     });
 
     // Auto-login — create session + token
@@ -373,7 +379,6 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
         lastName,
         role: 'owner',
         restaurantGroupId: result.member.restaurantGroupId,
-        mfaEnabled: false,
       },
       restaurants: [{
         id: result.restaurant.id,
@@ -385,6 +390,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
         trialEndsAt: trialEndsAt.toISOString(),
       }],
       deviceId: result.device.id,
+      deviceMfaExpiresAt: signupMfaExpiry.toISOString(),
     });
   } catch (error) {
     logger.error('Signup error:', { error });
@@ -526,10 +532,6 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
       user: result.user,
       restaurants: result.restaurants,
       deviceId,
-      ...(result.mfaEnrollmentRequired ? {
-        mfaEnrollmentRequired: true,
-        mfaGraceDeadline: result.mfaGraceDeadline,
-      } : {}),
     });
   } catch (error) {
     logger.error('Login error:', { error });
@@ -668,7 +670,6 @@ router.get('/me', async (req: Request, res: Response) => {
         lastName: member.lastName,
         role: member.role,
         restaurantGroupId: member.restaurantGroupId,
-        mfaEnabled: member.mfaEnabled,
       },
       restaurants
     });
@@ -1100,16 +1101,11 @@ router.post('/mfa/setup', requireAuth, async (req: Request, res: Response) => {
   try {
     const member = await prisma.teamMember.findUnique({
       where: { id: req.user!.teamMemberId },
-      select: { email: true, firstName: true, mfaEnabled: true },
+      select: { email: true, firstName: true },
     });
 
     if (!member?.email) {
       res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    if (member.mfaEnabled) {
-      res.status(400).json({ error: 'MFA is already enabled. Disable it first to reconfigure.' });
       return;
     }
 
@@ -1223,13 +1219,16 @@ router.post('/mfa/verify', async (req: Request, res: Response) => {
 
       await auditLog('mfa_challenge_success', { userId: payload.teamMemberId, ip: req.ip });
 
-      const challengeDeviceInfoHeader = req.headers['x-device-info'] as string | undefined;
-      await authService.createTrust(
-        payload.teamMemberId,
-        req.headers['user-agent'] as string | undefined,
-        challengeDeviceInfoHeader,
-        req.ip ?? undefined,
-      );
+      // Stamp device mfa verification (30-day window per NIST 800-63B)
+      const mfaExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await prisma.device.updateMany({
+        where: {
+          teamMemberId: payload.teamMemberId,
+          status: 'active',
+          hardwareInfo: { path: ['userAgent'], equals: req.headers['user-agent'] },
+        },
+        data: { mfaVerifiedAt: new Date(), mfaExpiresAt: mfaExpiry },
+      });
 
       res.json({
         token: fullToken,
@@ -1240,7 +1239,6 @@ router.post('/mfa/verify', async (req: Request, res: Response) => {
           lastName: member!.lastName,
           role: member!.role,
           restaurantGroupId: member!.restaurantGroupId,
-          mfaEnabled: member!.mfaEnabled,
         },
         restaurants,
       });
@@ -1266,15 +1264,18 @@ router.post('/mfa/verify', async (req: Request, res: Response) => {
         return;
       }
 
-      const setupDeviceInfoHeader = req.headers['x-device-info'] as string | undefined;
-      await authService.createTrust(
-        payload.teamMemberId,
-        req.headers['user-agent'] as string | undefined,
-        setupDeviceInfoHeader,
-        req.ip ?? undefined,
-      );
+      // Stamp device mfa verification (30-day window per NIST 800-63B)
+      const setupMfaExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await prisma.device.updateMany({
+        where: {
+          teamMemberId: payload.teamMemberId,
+          status: 'active',
+          hardwareInfo: { path: ['userAgent'], equals: req.headers['user-agent'] },
+        },
+        data: { mfaVerifiedAt: new Date(), mfaExpiresAt: setupMfaExpiry },
+      });
 
-      res.json({ success: true, message: 'MFA is now enabled.' });
+      res.json({ success: true, message: 'MFA verification recorded.' });
     }
   } catch (error) {
     logger.error('MFA verify error:', { error });

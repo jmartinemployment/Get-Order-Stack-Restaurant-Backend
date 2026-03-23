@@ -465,8 +465,6 @@ describe('loginUser — MFA enrollment enforcement for privileged roles', () => 
     mustChangePassword: false,
     passwordChangedAt: new Date(),
     tempPasswordExpiresAt: null,
-    mfaEnabled: false,
-    mfaGraceDeadline: null,
     role: 'owner',
     restaurantGroupId: null,
     restaurantGroup: null,
@@ -536,7 +534,7 @@ describe('loginUser — MFA enrollment enforcement for privileged roles', () => 
 
   it('does not require MFA enrollment for staff role', async () => {
     mockPrismaTeamMember.findUnique.mockResolvedValue(
-      baseMember({ role: 'staff', mfaEnabled: false, mfaGraceDeadline: null }),
+      baseMember({ role: 'staff' }),
     );
     mockPrismaUserSession.create.mockResolvedValue({
       id: 'sess-mfa-3', token: 'session-token', isActive: true, createdAt: new Date(),

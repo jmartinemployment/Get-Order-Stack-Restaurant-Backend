@@ -81,18 +81,12 @@ export const mfaService = {
     }
 
     if (options.enableOnSuccess) {
-      // Setup flow — mark MFA as enabled
-      await prisma.$transaction([
-        prisma.mfaSecret.update({
-          where: { teamMemberId },
-          data: { verified: true, emailOtpHash: null, emailOtpExpiry: null },
-        }),
-        prisma.teamMember.update({
-          where: { id: teamMemberId },
-          data: { mfaEnabled: true },
-        }),
-      ]);
-      await auditLog('mfa_enabled', { userId: teamMemberId });
+      // Setup flow — mark OTP as verified on MfaSecret
+      await prisma.mfaSecret.update({
+        where: { teamMemberId },
+        data: { verified: true, emailOtpHash: null, emailOtpExpiry: null },
+      });
+      await auditLog('mfa_verified', { userId: teamMemberId });
       logger.info('[MFA] Enabled for user', { userId: teamMemberId });
     } else {
       // Challenge flow — consume the OTP
@@ -110,13 +104,7 @@ export const mfaService = {
    * Disable MFA for a user.
    */
   async disableMfa(teamMemberId: string): Promise<void> {
-    await prisma.$transaction([
-      prisma.mfaSecret.deleteMany({ where: { teamMemberId } }),
-      prisma.teamMember.update({
-        where: { id: teamMemberId },
-        data: { mfaEnabled: false },
-      }),
-    ]);
+    await prisma.mfaSecret.deleteMany({ where: { teamMemberId } });
 
     await authService.revokeAllTrust(teamMemberId);
     await auditLog('mfa_disabled', { userId: teamMemberId });
@@ -127,13 +115,17 @@ export const mfaService = {
    * Get MFA status for a user.
    */
   async getStatus(teamMemberId: string): Promise<{ enabled: boolean; mfaType: 'email' }> {
-    const member = await prisma.teamMember.findUnique({
-      where: { id: teamMemberId },
-      select: { mfaEnabled: true },
+    const device = await prisma.device.findFirst({
+      where: {
+        teamMemberId,
+        status: 'active',
+        mfaExpiresAt: { gt: new Date() },
+      },
+      select: { id: true },
     });
 
     return {
-      enabled: member?.mfaEnabled ?? false,
+      enabled: device !== null,
       mfaType: 'email',
     };
   },

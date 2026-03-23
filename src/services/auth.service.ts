@@ -72,7 +72,6 @@ export interface AuthResult {
     lastName: string | null;
     role: string;
     restaurantGroupId: string | null;
-    mfaEnabled: boolean;
   };
   restaurants?: Array<{
     id: string;
@@ -84,8 +83,6 @@ export interface AuthResult {
   error?: string;
   requiresPasswordChange?: boolean;
   mfaRequired?: boolean;
-  mfaEnrollmentRequired?: boolean;
-  mfaGraceDeadline?: string;
 }
 
 export interface PinAuthResult {
@@ -270,75 +267,51 @@ class AuthService {
       const validityError = this.checkPasswordValidity(member);
       if (validityError) return validityError;
 
-      // MFA check — if enabled, check trusted device before requiring OTP (PCI DSS 8.4.2)
-      if (member.mfaEnabled) {
-        const fingerprint = this.computeUaFingerprint(userAgent, deviceInfoHeader);
-        const isTrusted = fingerprint && ipAddress
-          ? await this.checkTrust(member.id, fingerprint, ipAddress)
-          : false;
+      // Device MFA check — verify device has valid mfaExpiresAt before allowing login
+      const device = await prisma.device.findFirst({
+        where: {
+          teamMemberId: member.id,
+          status: 'active',
+          hardwareInfo: { path: ['userAgent'], equals: userAgent },
+        },
+        select: { id: true, mfaExpiresAt: true },
+      });
 
-        if (!isTrusted) {
-          // Not trusted — require MFA challenge
-          const mfaSession = await prisma.userSession.create({
-            data: {
-              userId: member.id,
-              token: this.generateSessionToken(),
-              deviceInfo: deviceInfo ?? 'MFA pending',
-              ipAddress,
-              expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
-            },
-          });
+      const deviceVerified = device?.mfaExpiresAt && device.mfaExpiresAt > new Date();
 
-          const mfaToken = this.generateToken(
-            { teamMemberId: member.id, email: member.email!, role: member.role, type: 'user' },
-            mfaSession.id,
-            '5m',
-          );
+      if (!deviceVerified) {
+        // Device not verified — require MFA challenge
+        const mfaSession = await prisma.userSession.create({
+          data: {
+            userId: member.id,
+            token: this.generateSessionToken(),
+            deviceInfo: deviceInfo ?? 'MFA pending',
+            ipAddress,
+            expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
+          },
+        });
 
-          return {
-            success: true,
-            token: mfaToken,
-            user: {
-              id: member.id,
-              email: member.email!,
-              firstName: member.firstName,
-              lastName: member.lastName,
-              role: member.role,
-              restaurantGroupId: member.restaurantGroupId,
-              mfaEnabled: true,
-            },
-            mfaRequired: true,
-          };
-        }
-        // Trusted device — skip MFA, fall through to create full session
+        const mfaToken = this.generateToken(
+          { teamMemberId: member.id, email: member.email!, role: member.role, type: 'user' },
+          mfaSession.id,
+          '5m',
+        );
+
+        return {
+          success: true,
+          token: mfaToken,
+          user: {
+            id: member.id,
+            email: member.email!,
+            firstName: member.firstName,
+            lastName: member.lastName,
+            role: member.role,
+            restaurantGroupId: member.restaurantGroupId,
+          },
+          mfaRequired: true,
+        };
       }
-
-      // PCI DSS 8.4.2: MFA enrollment enforcement for privileged roles.
-      // Admin/owner/manager accounts MUST enable MFA. A 7-day grace period is
-      // granted on first login; after that, login is blocked until MFA is set up.
-      // Skip for accounts with no restaurant access (still onboarding).
-      const hasRestaurantAccess = member.restaurantAccess.length > 0 || !!member.restaurantGroupId || !!member.restaurantId;
-      if (MFA_REQUIRED_ROLES.includes(member.role) && !member.mfaEnabled && hasRestaurantAccess) {
-        const now = new Date();
-
-        if (!member.mfaGraceDeadline) {
-          // First login without MFA — start 7-day grace period
-          const graceDeadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-          await prisma.teamMember.update({
-            where: { id: member.id },
-            data: { mfaGraceDeadline: graceDeadline },
-          });
-          await auditLog('mfa_grace_started', { userId: member.id, ip: ipAddress, metadata: { deadline: graceDeadline.toISOString() } });
-          // Allow login but signal that enrollment is required
-          // (handled below — mfaEnrollmentRequired is set on the result)
-          (member as { mfaGraceDeadline: Date }).mfaGraceDeadline = graceDeadline;
-        } else if (now > member.mfaGraceDeadline) {
-          // Grace period expired — block login
-          await auditLog('mfa_enrollment_blocked', { userId: member.id, ip: ipAddress });
-          return { success: false, error: 'MFA_ENROLLMENT_REQUIRED' };
-        }
-        // Within grace period — allow login, frontend shows enrollment banner
-      }
+      // Verified device — fall through to create full session
 
       // Create session
       const expiresAt = new Date();
@@ -408,16 +381,9 @@ class AuthService {
           lastName: member.lastName,
           role: member.role,
           restaurantGroupId: member.restaurantGroupId,
-          mfaEnabled: member.mfaEnabled,
         },
         restaurants,
       };
-
-      // Signal MFA enrollment requirement for privileged roles within grace period
-      if (member.mfaGraceDeadline && !member.mfaEnabled) {
-        result.mfaEnrollmentRequired = true;
-        result.mfaGraceDeadline = member.mfaGraceDeadline.toISOString();
-      }
 
       return result;
     } catch (error) {
@@ -580,7 +546,6 @@ class AuthService {
           firstName: member.firstName,
           lastName: member.lastName,
           role: member.role,
-          mfaEnabled: false,
         }
       };
     } catch (error) {

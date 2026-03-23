@@ -1228,6 +1228,8 @@ model Device {
   lastSeenAt     DateTime? @map("last_seen_at")
   pairedAt       DateTime? @map("paired_at")
   expiresAt      DateTime? @map("expires_at")
+  mfaVerifiedAt  DateTime? @map("mfa_verified_at")
+  mfaExpiresAt   DateTime? @map("mfa_expires_at")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
@@ -1901,8 +1903,6 @@ model TeamMember {
   tempPasswordSetBy   String?          @map("temp_password_set_by") // manager's teamMemberId
   passwordChangedAt   DateTime?        @map("password_changed_at")
   mustChangePassword  Boolean          @default(false) @map("must_change_password")
-  mfaEnabled          Boolean          @default(false) @map("mfa_enabled")
-  mfaGraceDeadline    DateTime?        @map("mfa_grace_deadline")
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
 
