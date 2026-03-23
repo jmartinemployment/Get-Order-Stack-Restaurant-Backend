@@ -82,7 +82,8 @@ app.use((_req, res, next) => {
 });
 
 // Middleware
-app.use(cors({ origin: config.corsOrigins }));
+// credentials: true kept until production frontend deploys without withCredentials
+app.use(cors({ origin: config.corsOrigins, credentials: true }));
 
 // General API rate limiter
 const apiRateLimiter = rateLimit({
