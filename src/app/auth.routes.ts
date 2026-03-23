@@ -277,7 +277,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
           restaurantId: restaurant.id,
           restaurantGroupId,
           workFromHome: true, // owner defaults to true
-          mfaEnabled: true, // email already verified via OTP during signup
+          mfaEnabled: false,
           passwordChangedAt: new Date(),
           lastLoginAt: new Date(),
           hireDate: new Date(),
@@ -373,7 +373,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
         lastName,
         role: 'owner',
         restaurantGroupId: result.member.restaurantGroupId,
-        mfaEnabled: true,
+        mfaEnabled: false,
       },
       restaurants: [{
         id: result.restaurant.id,
