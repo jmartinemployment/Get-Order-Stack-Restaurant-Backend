@@ -277,10 +277,13 @@ class AuthService {
         select: { id: true, mfaExpiresAt: true },
       });
 
-      const deviceVerified = device?.mfaExpiresAt && device.mfaExpiresAt > new Date();
+      // Only challenge if device has a stamp that has expired — not on first use
+      const deviceExpired = device?.mfaExpiresAt !== undefined
+        && device.mfaExpiresAt !== null
+        && device.mfaExpiresAt <= new Date();
 
-      if (!deviceVerified) {
-        // Device not verified — require MFA challenge
+      if (deviceExpired) {
+        // Device verification expired — require MFA challenge
         const mfaSession = await prisma.userSession.create({
           data: {
             userId: member.id,
