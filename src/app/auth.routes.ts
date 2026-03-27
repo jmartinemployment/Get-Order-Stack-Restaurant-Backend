@@ -156,16 +156,18 @@ router.post('/verify-email', authRateLimiter, async (req: Request, res: Response
 
 const signupSchema = z.object({
   verifiedEmailToken: z.string(),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  password: z.string().min(12),
-  businessPhone: z.string().regex(/^\d{10}$/, 'Business phone must be 10 digits'),
-  personalPhone: z.string().regex(/^\d{10}$/, 'Personal phone must be 10 digits'),
+  password: z.string().min(12, 'Password must be at least 12 characters'),
   businessName: z.string().min(1),
-  address: z.string().min(1),
-  city: z.string().min(1),
-  state: z.string().min(1),
-  zip: z.string().min(1),
+  // Collected during onboarding — optional at sign-up
+  businessType: z.string().optional(),
+  firstName: z.string().default(''),
+  lastName: z.string().default(''),
+  businessPhone: z.string().default(''),
+  personalPhone: z.string().default(''),
+  address: z.string().default(''),
+  city: z.string().default(''),
+  state: z.string().default(''),
+  zip: z.string().default(''),
   multipleLocations: z.boolean().default(false),
 });
 
@@ -181,9 +183,12 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
 
     const {
       verifiedEmailToken, firstName, lastName, password,
-      businessPhone, personalPhone, businessName,
+      businessPhone, personalPhone, businessName, businessType,
       address, city, state, zip, multipleLocations,
     } = parsed.data;
+
+    const biosUuid = req.headers['x-device-id'] as string | undefined;
+    const macAddress = req.headers['x-mac-address'] as string | undefined;
 
     // Verify the email token
     let verifiedEmail: string;
@@ -258,6 +263,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
           phone: businessPhone,
           address, city, state, zip,
           slug,
+          businessCategory: businessType ?? null,
           networkIp: req.ip ?? null,
           restaurantGroupId,
           merchantProfile: { onboardingComplete: false },
@@ -276,7 +282,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
           role: 'owner',
           restaurantId: restaurant.id,
           restaurantGroupId,
-          workFromHome: true, // owner defaults to true
+          workFromHome: false,
           passwordChangedAt: new Date(),
           lastLoginAt: new Date(),
           hireDate: new Date(),
@@ -292,18 +298,20 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
         },
       });
 
-      // Create Device
+      // Create Device — use hardware fingerprint from Electron if provided
       const device = await tx.device.create({
         data: {
           restaurantId: restaurant.id,
           teamMemberId: member.id,
-          deviceName: `${firstName}'s Browser`,
+          deviceName: firstName ? `${firstName}'s Desktop` : 'Owner\'s Desktop',
           deviceType: 'terminal',
           status: 'active',
           hardwareInfo: {
-            platform: 'Browser',
-            userAgent: req.headers['user-agent'],
-            ip: req.ip,
+            platform: biosUuid ? 'Electron' : 'Browser',
+            userAgent: req.headers['user-agent'] ?? null,
+            ip: req.ip ?? null,
+            biosUuid: biosUuid ?? null,
+            macAddress: macAddress ?? null,
           },
         },
       });
@@ -378,6 +386,8 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
         firstName,
         lastName,
         role: 'owner',
+        businessName,
+        businessType: businessType ?? null,
         restaurantGroupId: result.member.restaurantGroupId,
       },
       restaurants: [{
@@ -395,6 +405,29 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('Signup error:', { error });
     res.status(500).json({ error: 'Signup failed' });
+  }
+});
+
+// ============ Sign-In Email Check ============
+
+router.post('/sign-in/email', authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const parsed = sendVerificationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Valid email is required' });
+      return;
+    }
+    const member = await prisma.teamMember.findUnique({
+      where: { email: parsed.data.email },
+      select: { isActive: true, status: true },
+    });
+    res.json({
+      exists: member !== null,
+      status: member === null ? 'not_found' : (member.isActive ? member.status : 'deactivated'),
+    });
+  } catch (error) {
+    logger.error('Sign-in email check error:', { error });
+    res.status(500).json({ error: 'Failed to check email' });
   }
 });
 
@@ -463,8 +496,10 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    // workFromHome: true + unrecognized IP → email verification challenge
-    if (member?.workFromHome && member.restaurant?.networkIp && ipAddress !== member.restaurant.networkIp) {
+    // workFromHome: true + unrecognized IP → email verification challenge (owners exempt)
+    const memberRole = result.user?.role;
+    if (member?.workFromHome && member.restaurant?.networkIp && ipAddress !== member.restaurant.networkIp
+      && memberRole !== 'owner' && memberRole !== 'super_admin') {
       // Check if this device+IP is already trusted
       const fingerprint = authService.computeUaFingerprint(deviceInfo, deviceInfoHeader);
       const isTrusted = fingerprint && ipAddress
@@ -504,26 +539,35 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
       }
     }
 
-    // Resolve device ID — match by teamMemberId + userAgent (+ IP if WFH)
+    // Resolve device ID — prefer X-Device-Id fingerprint (Electron), fallback to userAgent
+    const loginFingerprint = req.headers['x-device-id'] as string | undefined;
     let deviceId: string | null = null;
     if (result.user) {
-      const deviceWhere: Record<string, unknown> = {
-        teamMemberId: result.user.id,
-        deviceType: 'terminal',
-        status: 'active',
-        hardwareInfo: { path: ['userAgent'], equals: req.headers['user-agent'] },
-      };
+      let device: { id: string } | null = null;
 
-      if (member?.workFromHome) {
-        deviceWhere.hardwareInfo = {
-          AND: [
-            { path: ['userAgent'], equals: req.headers['user-agent'] },
-            { path: ['ip'], equals: req.ip },
-          ],
-        };
+      if (loginFingerprint) {
+        device = await prisma.device.findFirst({
+          where: {
+            teamMemberId: result.user.id,
+            status: 'active',
+            hardwareInfo: { path: ['biosUuid'], equals: loginFingerprint },
+          },
+          select: { id: true },
+        });
       }
 
-      const device = await prisma.device.findFirst({ where: deviceWhere });
+      if (!device) {
+        device = await prisma.device.findFirst({
+          where: {
+            teamMemberId: result.user.id,
+            deviceType: 'terminal',
+            status: 'active',
+            hardwareInfo: { path: ['userAgent'], equals: req.headers['user-agent'] },
+          },
+          select: { id: true },
+        });
+      }
+
       deviceId = device?.id ?? null;
     }
 
