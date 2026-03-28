@@ -208,6 +208,37 @@ export async function sendMfaOtpEmail(
   await sendEmail(toEmail, 'Your OrderStack verification code', html);
 }
 
+export async function sendContactInquiry(
+  name: string,
+  email: string,
+  message: string,
+  phone?: string,
+  company?: string,
+): Promise<void> {
+  const optionalRows = [
+    phone   ? `<tr><td style="padding:8px 0;color:#71717a;">Phone</td><td style="padding:8px 0;color:#18181b;">${phone}</td></tr>` : '',
+    company ? `<tr><td style="padding:8px 0;color:#71717a;">Company</td><td style="padding:8px 0;color:#18181b;">${company}</td></tr>` : '',
+  ].join('');
+
+  const timestamp = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+
+  const content = `
+    <h2 style="font-size:18px;font-weight:700;color:#111827;margin:0 0 16px;">New Contact Form Submission</h2>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+      <tr><td style="padding:8px 0;color:#71717a;">Name</td><td style="padding:8px 0;color:#18181b;font-weight:500;">${name}</td></tr>
+      <tr><td style="padding:8px 0;color:#71717a;">Email</td><td style="padding:8px 0;color:#18181b;">${email}</td></tr>
+      ${optionalRows}
+      <tr>
+        <td style="padding:8px 0;color:#71717a;vertical-align:top;">Message</td>
+        <td style="padding:8px 0;color:#18181b;white-space:pre-wrap;">${message}</td>
+      </tr>
+    </table>
+    <p style="color:#9ca3af;font-size:12px;margin-top:24px;">Submitted at ${timestamp}</p>`;
+
+  const html = emailWrapper('#006aff', content);
+  await sendEmail('jmartinpersonal@yahoo.com', `New Contact Form Submission from ${name}`, html);
+}
+
 export async function sendSignupNotification(
   ownerEmail: string,
   firstName: string | null,

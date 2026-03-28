@@ -43,6 +43,7 @@ import { paypalService } from '../services/paypal.service';
 import { deliveryService } from '../services/delivery.service';
 import { marketplaceService } from '../services/marketplace.service';
 import publicMenuRoutes from './public-menu.routes';
+import contactRoutes from './contact.routes';
 import { requireAuth } from '../middleware/auth.middleware';
 import { globalErrorHandler } from '../middleware/error-handler';
 import { requestLogger } from '../middleware/request-logger';
@@ -356,6 +357,7 @@ app.use('/api/devices', devicePairingRoutes);  // Device pairing (POST /pair) + 
 app.use('/api/platform', onboardingRoutes);    // Menu templates + tax rate lookup (public)
 app.use('/api/onboarding', onboardingRoutes);  // Create new merchant (public)
 app.use('/api/public', publicMenuRoutes);      // Public menu for online ordering (no auth)
+app.use('/api/contact', contactRoutes);        // Contact form (public, rate-limited)
 
 // --- Authenticated routes (requireAuth) ---
 app.use('/api/merchant', requireAuth, laborRoutes);  // Labor/scheduling endpoints
