@@ -222,20 +222,34 @@ export async function sendContactInquiry(
 
   const timestamp = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
 
-  const content = `
-    <h2 style="font-size:18px;font-weight:700;color:#111827;margin:0 0 16px;">New Contact Form Submission</h2>
-    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-      <tr><td style="padding:8px 0;color:#71717a;">Name</td><td style="padding:8px 0;color:#18181b;font-weight:500;">${name}</td></tr>
-      <tr><td style="padding:8px 0;color:#71717a;">Email</td><td style="padding:8px 0;color:#18181b;">${email}</td></tr>
-      ${optionalRows}
-      <tr>
-        <td style="padding:8px 0;color:#71717a;vertical-align:top;">Message</td>
-        <td style="padding:8px 0;color:#18181b;white-space:pre-wrap;">${message}</td>
-      </tr>
-    </table>
-    <p style="color:#9ca3af;font-size:12px;margin-top:24px;">Submitted at ${timestamp}</p>`;
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f5;">
+  <div style="max-width:600px;margin:0 auto;background:#fff;">
+    <div style="background:#6a4ed6;padding:24px 32px;">
+      <h1 style="margin:0;color:#fff;font-size:20px;font-weight:600;">Geek At Your Spot</h1>
+    </div>
+    <div style="padding:32px;">
+      <h2 style="font-size:18px;font-weight:700;color:#111827;margin:0 0 16px;">New Contact Form Submission</h2>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+        <tr><td style="padding:8px 0;color:#71717a;">Name</td><td style="padding:8px 0;color:#18181b;font-weight:500;">${name}</td></tr>
+        <tr><td style="padding:8px 0;color:#71717a;">Email</td><td style="padding:8px 0;color:#18181b;">${email}</td></tr>
+        ${optionalRows}
+        <tr>
+          <td style="padding:8px 0;color:#71717a;vertical-align:top;">Message</td>
+          <td style="padding:8px 0;color:#18181b;white-space:pre-wrap;">${message}</td>
+        </tr>
+      </table>
+      <p style="color:#9ca3af;font-size:12px;margin-top:24px;">Submitted at ${timestamp}</p>
+    </div>
+    <div style="padding:16px 32px;background:#f4f4f5;text-align:center;font-size:12px;color:#71717a;">
+      Sent via geekatyourspot.com
+    </div>
+  </div>
+</body>
+</html>`;
 
-  const html = emailWrapper('#006aff', content);
   await sendEmail('jmartinpersonal@yahoo.com', `New Contact Form Submission from ${name}`, html);
 }
 
