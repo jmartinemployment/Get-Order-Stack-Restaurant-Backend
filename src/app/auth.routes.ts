@@ -255,7 +255,7 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
         restaurantGroupId = group.id;
       }
 
-      // Create Restaurant — networkIp captured from req.ip
+      // Create Restaurant
       const restaurant = await tx.restaurant.create({
         data: {
           name: businessName,
@@ -264,7 +264,6 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
           address, city, state, zip,
           slug,
           businessCategory: businessType ?? null,
-          networkIp: req.ip ?? null,
           restaurantGroupId,
           merchantProfile: { onboardingComplete: false },
         },
@@ -345,7 +344,6 @@ router.post('/signup', authRateLimiter, async (req: Request, res: Response) => {
         userId: result.member.id,
         token: randomBytes(32).toString('hex'),
         deviceInfo: req.headers['user-agent'] ?? undefined,
-        ipAddress: req.ip ?? undefined,
         expiresAt,
       },
     });
@@ -444,33 +442,8 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
     }
 
     const deviceInfo = req.headers['user-agent'] || undefined;
-    const ipAddress = req.ip || req.socket.remoteAddress || undefined;
-    const deviceInfoHeader = req.headers['x-device-info'] as string | undefined;
 
-    // Look up member for workFromHome check before calling loginUser
-    const normalizedEmail = email.toLowerCase().trim();
-    const member = await prisma.teamMember.findUnique({
-      where: { email: normalizedEmail },
-      select: {
-        id: true,
-        workFromHome: true,
-        restaurantId: true,
-        restaurant: { select: { networkIp: true } },
-      },
-    });
-
-    // workFromHome access control — check IP before authenticating
-    if (member && !member.workFromHome && member.restaurant?.networkIp) {
-      const restaurantIp = member.restaurant.networkIp;
-      if (ipAddress !== restaurantIp) {
-        res.status(403).json({
-          error: 'Sign in is only available from your restaurant network. Contact your manager to enable remote access.',
-        });
-        return;
-      }
-    }
-
-    const result = await authService.loginUser(email, password, deviceInfo, ipAddress, deviceInfo, deviceInfoHeader);
+    const result = await authService.loginUser(email, password, deviceInfo, undefined, deviceInfo, undefined);
 
     if (!result.success) {
       res.status(401).json({ error: result.error, requiresPasswordChange: result.requiresPasswordChange });
@@ -496,80 +469,47 @@ router.post('/login', authRateLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    // workFromHome: true + unrecognized IP → email verification challenge (owners exempt)
-    const memberRole = result.user?.role;
-    if (member?.workFromHome && member.restaurant?.networkIp && ipAddress !== member.restaurant.networkIp
-      && memberRole !== 'owner' && memberRole !== 'super_admin') {
-      // Check if this device+IP is already trusted
-      const fingerprint = authService.computeUaFingerprint(deviceInfo, deviceInfoHeader);
-      const isTrusted = fingerprint && ipAddress
-        ? await authService.checkTrust(member.id, fingerprint, ipAddress)
-        : false;
-
-      if (!isTrusted) {
-        // Send OTP for email verification (same flow as signup verification)
-        const wfhMember = await prisma.teamMember.findUnique({
-          where: { id: member.id },
-          select: { email: true, firstName: true },
-        });
-        if (wfhMember?.email) {
-          const code = String(randomBytes(3).readUIntBE(0, 3) % 1000000).padStart(6, '0');
-          const otpHash = await bcrypt.hash(code, 12);
-          const emailHash = createHash('sha256').update(wfhMember.email).digest('hex');
-
-          await prisma.pendingVerification.upsert({
-            where: { emailHash },
-            create: { emailHash, email: wfhMember.email, otpHash, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
-            update: { otpHash, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
-          });
-
-          await sendMfaOtpEmail(wfhMember.email, wfhMember.firstName, code);
-
-          const [local, domain] = wfhMember.email.split('@');
-          const maskedEmail = `${local[0]}${'*'.repeat(Math.max(local.length - 2, 1))}${local.at(-1)}@${domain}`;
-
-          res.json({
-            emailVerificationRequired: true,
-            maskedEmail,
-            // Store the login result token for after verification completes
-            loginToken: result.token,
-          });
-          return;
-        }
-      }
+    // Resolve device by BIOS UUID — permanent trust, no expiry
+    const biosUuid = req.headers['x-device-id'] as string | undefined;
+    let trustedDevice: { id: string } | null = null;
+    if (result.user && biosUuid) {
+      trustedDevice = await prisma.device.findFirst({
+        where: {
+          teamMemberId: result.user.id,
+          status: 'active',
+          hardwareInfo: { path: ['biosUuid'], equals: biosUuid },
+        },
+        select: { id: true },
+      });
     }
 
-    // Resolve device ID — prefer X-Device-Id fingerprint (Electron), fallback to userAgent
-    const loginFingerprint = req.headers['x-device-id'] as string | undefined;
-    let deviceId: string | null = null;
-    if (result.user) {
-      let device: { id: string } | null = null;
+    // UUID not recognized — check workFromHome
+    if (!trustedDevice && result.user) {
+      const member = await prisma.teamMember.findUnique({
+        where: { id: result.user.id },
+        select: { workFromHome: true, email: true, firstName: true },
+      });
 
-      if (loginFingerprint) {
-        device = await prisma.device.findFirst({
-          where: {
-            teamMemberId: result.user.id,
-            status: 'active',
-            hardwareInfo: { path: ['biosUuid'], equals: loginFingerprint },
-          },
-          select: { id: true },
-        });
+      if (!member?.workFromHome) {
+        res.status(403).json({ error: 'Sign in is not authorized from this device. Contact your manager.' });
+        return;
       }
 
-      if (!device) {
-        device = await prisma.device.findFirst({
-          where: {
-            teamMemberId: result.user.id,
-            deviceType: 'terminal',
-            status: 'active',
-            hardwareInfo: { path: ['userAgent'], equals: req.headers['user-agent'] },
-          },
-          select: { id: true },
-        });
+      // workFromHome = true — send MFA challenge via existing mfaRequired flow
+      if (member.email) {
+        await mfaService.sendOtp(result.user.id, member.email, member.firstName);
       }
-
-      deviceId = device?.id ?? null;
+      res.json({
+        mfaRequired: true,
+        mfaToken: result.token,
+        maskedEmail: member.email ? mfaService.maskEmail(member.email) : undefined,
+        user: { id: result.user.id },
+      });
+      return;
     }
+
+    // trustedDevice is non-null at this point — BIOS UUID matched
+    const deviceId: string = trustedDevice!.id;
 
     res.json({
       token: result.token,
@@ -761,7 +701,7 @@ router.get('/sessions', requireAuth, async (req: Request, res: Response) => {
   try {
     const sessions = await prisma.userSession.findMany({
       where: { userId: req.user!.teamMemberId, isActive: true },
-      select: { id: true, deviceInfo: true, ipAddress: true, createdAt: true, expiresAt: true },
+      select: { id: true, deviceInfo: true, createdAt: true, expiresAt: true },
       orderBy: { createdAt: 'desc' },
     });
     await auditLog('sessions_viewed', { userId: req.user!.teamMemberId, ip: req.ip });
@@ -1238,7 +1178,6 @@ router.post('/mfa/verify', async (req: Request, res: Response) => {
           userId: payload.teamMemberId,
           token: randomBytes(32).toString('hex'),
           deviceInfo: req.headers['user-agent'] ?? undefined,
-          ipAddress: req.ip ?? undefined,
           expiresAt,
         },
       });

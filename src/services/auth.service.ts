@@ -289,7 +289,6 @@ class AuthService {
             userId: member.id,
             token: this.generateSessionToken(),
             deviceInfo: deviceInfo ?? 'MFA pending',
-            ipAddress,
             expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
           },
         });
@@ -325,7 +324,6 @@ class AuthService {
           userId: member.id,
           token: this.generateSessionToken(),
           deviceInfo,
-          ipAddress,
           expiresAt
         }
       });
@@ -985,42 +983,37 @@ class AuthService {
     return `${browser.name} on ${os.name} (${deviceType})`;
   }
 
-  async checkTrust(teamMemberId: string, fingerprint: string, ipAddress: string): Promise<boolean> {
+  async checkTrust(teamMemberId: string, fingerprint: string): Promise<boolean> {
     const trust = await prisma.mfaTrustedDevice.findFirst({
-      where: { teamMemberId, uaFingerprint: fingerprint, ipAddress, expiresAt: { gt: new Date() } },
+      where: { teamMemberId, uaFingerprint: fingerprint, expiresAt: { gt: new Date() } },
     });
     if (trust) {
-      await auditLog('mfa_trust_matched', { userId: teamMemberId, ip: ipAddress, metadata: { trustedDeviceId: trust.id } });
+      await auditLog('mfa_trust_matched', { userId: teamMemberId, metadata: { trustedDeviceId: trust.id } });
       return true;
     }
 
-    // Determine WHY trust was not found for audit granularity
     const fallback = await prisma.mfaTrustedDevice.findFirst({
       where: { teamMemberId, uaFingerprint: fingerprint },
     });
-    if (fallback) {
-      if (fallback.ipAddress !== ipAddress) {
-        await auditLog('mfa_trust_ip_mismatch', { userId: teamMemberId, ip: ipAddress, metadata: { expectedIp: fallback.ipAddress } });
-      } else if (fallback.expiresAt <= new Date()) {
-        await auditLog('mfa_trust_expired', { userId: teamMemberId, ip: ipAddress });
-      }
+    if (fallback?.expiresAt <= new Date()) {
+      await auditLog('mfa_trust_expired', { userId: teamMemberId });
     }
 
     return false;
   }
 
-  async createTrust(teamMemberId: string, userAgent?: string, deviceInfoHeader?: string, ipAddress?: string): Promise<void> {
+  async createTrust(teamMemberId: string, userAgent?: string, deviceInfoHeader?: string): Promise<void> {
     const fingerprint = this.computeUaFingerprint(userAgent, deviceInfoHeader);
-    if (!fingerprint || !ipAddress) return;
+    if (!fingerprint) return;
 
     const deviceInfo = this.buildDeviceInfoDisplay(userAgent, deviceInfoHeader);
     const expiresAt = new Date(Date.now() + TRUST_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
     await prisma.mfaTrustedDevice.upsert({
       where: {
-        teamMemberId_uaFingerprint_ipAddress: { teamMemberId, uaFingerprint: fingerprint, ipAddress },
+        teamMemberId_uaFingerprint: { teamMemberId, uaFingerprint: fingerprint },
       },
-      create: { teamMemberId, uaFingerprint: fingerprint, ipAddress, deviceInfo, expiresAt },
+      create: { teamMemberId, uaFingerprint: fingerprint, deviceInfo, expiresAt },
       update: { trustedAt: new Date(), expiresAt, deviceInfo },
     });
 
@@ -1037,7 +1030,7 @@ class AuthService {
       await auditLog('mfa_trust_limit_reached', { userId: teamMemberId, metadata: { deleted: toDelete.length } });
     }
 
-    await auditLog('mfa_trust_created', { userId: teamMemberId, ip: ipAddress, metadata: { deviceInfo } });
+    await auditLog('mfa_trust_created', { userId: teamMemberId, metadata: { deviceInfo } });
   }
 
   async revokeAllTrust(teamMemberId: string): Promise<void> {

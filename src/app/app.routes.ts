@@ -511,23 +511,6 @@ router.patch('/:merchantId', async (req: Request, res: Response) => {
   }
 });
 
-// Update restaurant network IP — owner clicks from restaurant location
-// Captures req.ip and stores as Restaurant.networkIp for WFH access control
-router.post('/:merchantId/update-network-ip', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = req.params.merchantId;
-    const networkIp = req.ip ?? null;
-    await prisma.restaurant.update({
-      where: { id: restaurantId },
-      data: { networkIp },
-    });
-    await auditLog('network_ip_updated', { ...auditCtx(req), metadata: { restaurantId, networkIp } });
-    res.json({ success: true, networkIp });
-  } catch (error) {
-    logger.error('Error updating network IP:', error);
-    res.status(500).json({ error: 'Failed to update network IP' });
-  }
-});
 
 // ============ Full Menu (with modifiers) ============
 
